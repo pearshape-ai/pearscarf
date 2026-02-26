@@ -1,0 +1,17 @@
+[project]
+name = "pearscaff"
+version = "0.1.0"
+description = "Operational infrastructure that grows itself"
+requires-python = ">=3.12"
+dependencies = [
+    "click",
+    "python-dotenv",
+]
+
+[project.scripts]
+pearscaff = "pearscaff.cli:cli"
+ps = "pearscaff.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
