@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Operational infrastructure that grows itself"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic",
     "click",
+    "httpx",
     "python-dotenv",
 ]
 
