@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 import anthropic
 
 from pearscaff.config import ANTHROPIC_API_KEY, MAX_TURNS, MODEL
@@ -7,10 +10,15 @@ from pearscaff.tools import ToolRegistry
 
 
 class Agent:
-    def __init__(self, tool_registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        tool_registry: ToolRegistry,
+        on_tool_call: Callable[[str, dict[str, Any]], None] | None = None,
+    ) -> None:
         self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         self._registry = tool_registry
         self._messages: list[dict] = []
+        self._on_tool_call = on_tool_call
 
     def run(self, user_message: str) -> str:
         self._messages.append({"role": "user", "content": user_message})
@@ -35,7 +43,8 @@ class Agent:
                 for block in response.content:
                     if block.type != "tool_use":
                         continue
-                    print(f"  -> {block.name}({block.input})")
+                    if self._on_tool_call:
+                        self._on_tool_call(block.name, block.input)
                     try:
                         result = self._registry.get(block.name).execute(
                             **block.input

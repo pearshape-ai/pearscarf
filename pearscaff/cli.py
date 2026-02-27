@@ -15,7 +15,10 @@ def cli() -> None:
 @cli.command()
 def chat() -> None:
     """Start an interactive chat session with the agent."""
-    agent = Agent(tool_registry=registry)
+    agent = Agent(
+        tool_registry=registry,
+        on_tool_call=lambda name, args: click.echo(f"  -> {name}({args})"),
+    )
     click.echo("pearscaff chat (type 'exit' or Ctrl+C to quit)\n")
 
     try:
@@ -27,6 +30,14 @@ def chat() -> None:
             click.echo(f"\nagent > {response}\n")
     except (KeyboardInterrupt, EOFError):
         click.echo("\nbye.")
+
+
+@cli.command()
+def discord() -> None:
+    """Run the agent as a Discord bot."""
+    from pearscaff.discord_bot import run_bot
+
+    run_bot()
 
 
 if __name__ == "__main__":
