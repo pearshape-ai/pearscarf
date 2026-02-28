@@ -17,3 +17,6 @@ uv.lock
 
 ai-work/specs/
 ai-work/plans/
+
+storage_state.json
+pearscaff/knowledge/gmail/*.md

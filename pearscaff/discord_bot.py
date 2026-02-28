@@ -5,7 +5,7 @@ import functools
 
 import discord
 
-from pearscaff.agent import Agent
+from pearscaff.agents.worker import WorkerAgent
 from pearscaff.config import DISCORD_BOT_TOKEN
 from pearscaff.tools import registry
 
@@ -15,11 +15,11 @@ class PearscaffBot(discord.Client):
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents)
-        self._agents: dict[int, Agent] = {}
+        self._agents: dict[int, WorkerAgent] = {}
 
     def _get_agent(self, channel_id: int) -> Agent:
         if channel_id not in self._agents:
-            self._agents[channel_id] = Agent(tool_registry=registry)
+            self._agents[channel_id] = WorkerAgent(tool_registry=registry)
         return self._agents[channel_id]
 
     async def on_ready(self) -> None:

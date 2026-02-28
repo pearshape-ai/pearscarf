@@ -9,31 +9,49 @@ from pearscaff.config import ANTHROPIC_API_KEY, MAX_TURNS, MODEL
 from pearscaff.tools import ToolRegistry
 
 
-class Agent:
+class BaseAgent:
     def __init__(
         self,
         tool_registry: ToolRegistry,
+        system_prompt: str = "",
         on_tool_call: Callable[[str, dict[str, Any]], None] | None = None,
+        on_text: Callable[[str], None] | None = None,
+        on_tool_result: Callable[[str, str], None] | None = None,
     ) -> None:
-        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self._client = anthropic.Anthropic(
+            api_key=ANTHROPIC_API_KEY or None
+        )
         self._registry = tool_registry
         self._messages: list[dict] = []
+        self._system_prompt = system_prompt
         self._on_tool_call = on_tool_call
+        self._on_text = on_text
+        self._on_tool_result = on_tool_result
 
     def run(self, user_message: str) -> str:
         self._messages.append({"role": "user", "content": user_message})
 
+        kwargs: dict[str, Any] = {
+            "model": MODEL,
+            "max_tokens": 4096,
+            "messages": self._messages,
+        }
+        if self._registry.all_schemas():
+            kwargs["tools"] = self._registry.all_schemas()
+        if self._system_prompt:
+            kwargs["system"] = self._system_prompt
+
         for _ in range(MAX_TURNS):
-            response = self._client.messages.create(
-                model=MODEL,
-                max_tokens=4096,
-                tools=self._registry.all_schemas(),
-                messages=self._messages,
-            )
+            response = self._client.messages.create(**kwargs)
 
             self._messages.append(
                 {"role": "assistant", "content": response.content}
             )
+
+            # Emit any text blocks as they come
+            for block in response.content:
+                if block.type == "text" and self._on_text:
+                    self._on_text(block.text)
 
             if response.stop_reason == "end_turn":
                 return self._extract_text(response)
@@ -51,6 +69,8 @@ class Agent:
                         )
                     except Exception as exc:
                         result = f"Tool error: {exc}"
+                    if self._on_tool_result:
+                        self._on_tool_result(block.name, result)
                     tool_results.append(
                         {
                             "type": "tool_result",

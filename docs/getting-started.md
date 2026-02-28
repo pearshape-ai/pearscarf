@@ -13,6 +13,7 @@ git clone <repo-url>
 cd pearscaff
 uv sync
 source .venv/bin/activate
+playwright install chromium
 ```
 
 ## Configuration
@@ -30,7 +31,7 @@ DISCORD_BOT_TOKEN=          # only needed for discord mode
 
 ## Usage
 
-### CLI Chat
+### CLI Chat (Worker Agent)
 
 ```bash
 pearscaff chat
@@ -38,9 +39,9 @@ pearscaff chat
 ps chat
 ```
 
-Interactive REPL. Type your message, get a response. The agent can use tools (math, web search) automatically. Type `exit` or Ctrl+C to quit.
+Interactive REPL with the worker agent. It can use tools (math, web search) automatically. Type `exit` or Ctrl+C to quit.
 
-### Discord Bot
+### Discord Bot (Worker Agent)
 
 ```bash
 pearscaff discord
@@ -48,7 +49,7 @@ pearscaff discord
 ps discord
 ```
 
-Requires `DISCORD_BOT_TOKEN` set in `.env`. The bot responds to @mentions in server channels and to DMs. Each channel gets its own conversation history.
+Requires `DISCORD_BOT_TOKEN` in `.env`. Responds to @mentions and DMs.
 
 #### Discord Setup
 
@@ -59,3 +60,23 @@ Requires `DISCORD_BOT_TOKEN` set in `.env`. The bot responds to @mentions in ser
 5. Copy the bot token to your `.env`
 6. Go to OAuth2 > URL Generator, select `bot` scope with `Send Messages` and `Read Message History` permissions
 7. Use the generated URL to invite the bot to your server
+
+### Gmail Expert
+
+First, log into Gmail (opens a visible browser):
+
+```bash
+pearscaff expert gmail --login
+```
+
+Log in to your Google account in the browser that opens, then press Enter in the terminal. Your session is saved for future use.
+
+Then run the expert:
+
+```bash
+pearscaff expert gmail
+# or
+ps expert gmail
+```
+
+Ask the expert to read your emails, summarize your inbox, or mark emails as read. It operates Gmail through a headless browser and prints results to the terminal.

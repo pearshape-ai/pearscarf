@@ -4,16 +4,20 @@
 
 | Command | Description |
 |---|---|
-| `pearscaff chat` | Interactive terminal chat with the agent |
-| `pearscaff discord` | Run as a Discord bot |
+| `pearscaff chat` | Interactive chat with the worker agent |
+| `pearscaff discord` | Run worker agent as a Discord bot |
+| `pearscaff expert gmail` | Run the Gmail expert agent |
+| `pearscaff expert gmail --login` | Log into Gmail (first-time setup) |
 
-Both commands are also available as `ps chat` and `ps discord`.
+All commands are also available via `ps` (e.g. `ps chat`, `ps expert gmail`).
 
-## Built-in Tools
+## Worker Agent
 
-The agent has access to the following tools:
+The worker agent is the general-purpose user-facing agent with tool access.
 
-### math
+### Built-in Tools
+
+#### math
 
 Safe mathematical expression evaluator. Supports:
 - Arithmetic: `+`, `-`, `*`, `/`, `//`, `**`, `%`
@@ -22,13 +26,13 @@ Safe mathematical expression evaluator. Supports:
 
 Example prompt: *"What is sqrt(144) + 15 * 3?"*
 
-### web_search
+#### web_search
 
 Web search via DuckDuckGo API. Returns summaries and related topics.
 
 Example prompt: *"Search for the latest Python release"*
 
-## Adding Custom Tools
+### Adding Custom Worker Tools
 
 Create a new file in `pearscaff/tools/` with a `BaseTool` subclass:
 
@@ -56,6 +60,38 @@ class MyTool(BaseTool):
 ```
 
 The tool is auto-discovered at startup — no registration needed.
+
+## Gmail Expert
+
+The Gmail expert operates Gmail through a headless Chromium browser. It can read emails, summarize your inbox, and mark emails as read.
+
+### Setup
+
+Run `pearscaff expert gmail --login` to open a visible browser. Log into your Gmail account and press Enter in the terminal. Your session is saved to `storage_state.json`.
+
+### Usage
+
+```bash
+pearscaff expert gmail
+```
+
+The expert prints detailed output as it works:
+- **[thinking]** — the agent's reasoning
+- **[tool]** — tool calls being made (browser actions)
+- **[result]** — tool results
+- **expert >** — the agent's final response with email contents
+
+### Available Tools
+
+**Browser tools:** `browser_navigate`, `browser_click`, `browser_type`, `browser_get_text`, `browser_get_html`, `browser_screenshot`, `browser_wait`
+
+**Gmail tools:** `gmail_get_unread`, `gmail_read_latest`, `gmail_mark_as_read`
+
+**Knowledge:** `save_knowledge` — the expert stores what it learns about operating Gmail so it gets better over time
+
+### Knowledge System
+
+The Gmail expert accumulates knowledge in `pearscaff/knowledge/gmail/` as markdown files. This includes CSS selectors, navigation patterns, timing info, and workarounds. Knowledge is loaded into the expert's system prompt on startup.
 
 ## Environment Variables
 

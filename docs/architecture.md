@@ -4,52 +4,86 @@
 
 ```
 pearscaff/
-├── agent.py          # Agentic loop on raw Anthropic SDK
-├── cli.py            # Click CLI — chat REPL + discord bot launcher
-├── config.py         # Environment-based configuration
-├── discord_bot.py    # Discord bot client
-└── tools/
-    ├── __init__.py   # BaseTool + ToolRegistry with auto-discovery
-    ├── math.py       # Safe math expression evaluator
-    └── web_search.py # DuckDuckGo web search
+├── agents/
+│   ├── base.py           # BaseAgent — agentic loop on raw Anthropic SDK
+│   ├── worker.py          # WorkerAgent — user-facing agent (chat, discord)
+│   └── expert.py          # ExpertAgent — domain-specialized, knowledge-collecting
+├── experts/
+│   ├── __init__.py        # Expert registry
+│   └── gmail.py           # Gmail expert — headless browser automation
+├── knowledge/
+│   ├── __init__.py        # KnowledgeStore — file-based markdown storage
+│   └── gmail/             # Gmail expert's accumulated knowledge
+├── tools/
+│   ├── __init__.py        # BaseTool + ToolRegistry with auto-discovery
+│   ├── math.py            # Safe math expression evaluator
+│   └── web_search.py      # DuckDuckGo web search
+├── cli.py                 # Click CLI — chat, discord, expert commands
+├── config.py              # Environment-based configuration
+└── discord_bot.py         # Discord bot client
 ```
 
-## Agentic Loop
+## Agent Types
 
-The core loop in `agent.py` is built directly on the Anthropic Messages API with no framework:
+### BaseAgent (`agents/base.py`)
+
+The core agentic loop built directly on the Anthropic Messages API:
 
 1. Append user message to conversation history
-2. Call `client.messages.create()` with tools and full message history
+2. Call `client.messages.create()` with tools, system prompt, and message history
 3. If `stop_reason == "end_turn"` — return the text response
 4. If `stop_reason == "tool_use"` — execute each tool, append results, go to step 2
 5. Safety: loop exits after `MAX_TURNS` iterations
 
-The Agent class holds per-session conversation history in memory. Each Agent instance is a separate conversation.
+Supports callbacks: `on_tool_call`, `on_text`, `on_tool_result` for verbose output.
+
+### WorkerAgent (`agents/worker.py`)
+
+The user-facing agent. Uses auto-discovered tools from `tools/` (math, web search). Accessed via `pearscaff chat` and `pearscaff discord`.
+
+### ExpertAgent (`agents/expert.py`)
+
+Domain-specialized agent that accumulates knowledge over time. Each expert has:
+- A domain-specific system prompt
+- A `KnowledgeStore` that persists learned information as markdown files
+- A built-in `save_knowledge` tool to record operational insights
+- Knowledge is loaded into the system prompt on startup, so the expert gets better with use
 
 ## Tool System
 
-Tools are defined as subclasses of `BaseTool`:
+Tools are `BaseTool` subclasses with `name`, `description`, `input_schema`, and `execute()`. The `ToolRegistry` handles registration and auto-discovery.
 
-- `name` — identifier registered with the Anthropic API
-- `description` — what the LLM sees
-- `input_schema` — JSON Schema for parameters
-- `execute(**kwargs) -> str` — runs the tool, returns text
+Worker tools (math, web search) are auto-discovered from `tools/`. Expert tools are registered directly per-expert.
 
-The `ToolRegistry` auto-discovers tools at startup by scanning the `pearscaff/tools/` package for `BaseTool` subclasses using `pkgutil.iter_modules`. To add a new tool, drop a file in `tools/` with a `BaseTool` subclass — no manual registration needed.
+## Gmail Expert
+
+Uses **Playwright** to control a headless Chromium browser to operate Gmail's web UI.
+
+**Browser tools:** navigate, click, type, get_text, get_html, screenshot, wait — give the agent full browser control.
+
+**Gmail tools:** get_unread, read_latest, mark_as_read — encode known-good Gmail workflows.
+
+**Auth:** Uses Playwright's persistent browser context (`storage_state.json`). First login via `--login` flag opens a visible browser for the user to log in manually. Session is saved and reused.
+
+**Knowledge:** The expert stores what it learns about navigating Gmail (selectors, timing, patterns) in `knowledge/gmail/`. This knowledge is loaded into the system prompt on future runs.
+
+**Output:** Emails are printed to the terminal. Reasoning, tool calls, and results are also printed for visibility.
 
 ## Interfaces
 
-### CLI (`pearscaff chat` / `ps chat`)
+### CLI Chat (`pearscaff chat`)
 
-Interactive terminal REPL. One Agent instance per session. Tool calls are printed to stdout via the `on_tool_call` callback.
+Interactive terminal REPL with the WorkerAgent.
 
-### Discord (`pearscaff discord` / `ps discord`)
+### Discord (`pearscaff discord`)
 
-Discord bot that responds to @mentions and DMs. Maintains a separate Agent per channel (per-channel conversation history). The sync Anthropic client runs in an executor thread to avoid blocking the async Discord event loop.
+Discord bot using the WorkerAgent. Per-channel conversation history. Responds to @mentions and DMs.
+
+### Expert (`pearscaff expert gmail`)
+
+Interactive terminal REPL with the Gmail ExpertAgent. Verbose output shows tool calls, reasoning, and results as the expert operates.
 
 ## Configuration
-
-All config is via environment variables (loaded from `.env` by python-dotenv):
 
 | Variable | Default | Description |
 |---|---|---|

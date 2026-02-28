@@ -2,13 +2,14 @@
 
 Operational infrastructure that grows itself.
 
-An AI agent with tool access, usable from the terminal or as a Discord bot.
+AI agents with tool access — a worker agent for general tasks (terminal + Discord) and expert agents for domain-specific operations.
 
 ## Quick Start
 
 ```bash
 uv sync
 source .venv/bin/activate
+playwright install chromium
 cp .env.example .env   # add your ANTHROPIC_API_KEY
 pearscaff chat
 ```
@@ -16,16 +17,20 @@ pearscaff chat
 ## Commands
 
 ```bash
-pearscaff chat      # interactive terminal REPL
-pearscaff discord   # run as a Discord bot
+pearscaff chat                    # worker agent REPL
+pearscaff discord                 # worker agent as Discord bot
+pearscaff expert gmail --login    # log into Gmail (first time)
+pearscaff expert gmail            # Gmail expert REPL
 ```
 
-Also available as `ps chat` and `ps discord`.
+Also available as `ps chat`, `ps discord`, `ps expert gmail`.
 
-## Built-in Tools
+## Architecture
 
-- **math** — safe expression evaluator (arithmetic, trig, logarithms)
-- **web_search** — DuckDuckGo web search
+**Worker Agent** — general-purpose, user-facing. Tools: math, web search. Interfaces: terminal REPL, Discord bot.
+
+**Expert Agents** — domain-specialized, operate via CLI, accumulate knowledge over time.
+- **Gmail Expert** — operates Gmail through a headless browser. Reads emails, summarizes inbox, marks as read. Stores navigation knowledge for future sessions.
 
 ## Docs
 
