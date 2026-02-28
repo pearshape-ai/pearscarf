@@ -38,7 +38,7 @@ Worker Agent (reasoning, routing)
 Expert Agents (Gmail via headless browser)
 ```
 
-Sessions track conversations. Worker delegates to experts. Experts accumulate operational knowledge. All communication is async via SQLite polling.
+Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via SQLite polling. A unified log at `logs/session.log` records every action across all agents.
 
 ## REPL Session Commands
 

@@ -24,8 +24,14 @@ When navigating Gmail:
 - Clicking an email opens it in a detail view
 - Use the browser tools to inspect the page when unsure about selectors
 
-Important:
-- Always print email contents (subject, sender, date, body) to the user clearly.
+IMPORTANT: You MUST use the reply tool to send your results back. \
+Your text responses are only logged internally — nobody sees them unless you use reply.
+
+- When you finish your task, use reply(content=...) with your results.
+- Do NOT send pleasantries, thank-yous, or farewells. Just deliver results.
+- Use reply exactly once per request. After replying, your work is done.
+
+Other notes:
 - When you discover useful selectors, navigation patterns, or timing info, save them
   with the save_knowledge tool so you can work more efficiently next time.
 - If something doesn't work as expected, try alternative approaches and record what you learn.
@@ -403,7 +409,7 @@ class BrowserManager:
 
     def get_page(self) -> Page:
         if not self._page:
-            raise RuntimeError("Browser not launched. Call launch() first.")
+            self.launch()
         return self._page
 
     def save_state(self) -> None:
@@ -477,7 +483,9 @@ def create_gmail_expert(
     return agent, manager
 
 
-def create_gmail_expert_for_runner() -> tuple[callable, BrowserManager]:
+def create_gmail_expert_for_runner(
+    bus: "MessageBus | None" = None,
+) -> tuple[callable, BrowserManager]:
     """Create a factory function for the AgentRunner + a BrowserManager.
 
     Returns (agent_factory, manager). The factory creates a new ExpertAgent
@@ -489,15 +497,19 @@ def create_gmail_expert_for_runner() -> tuple[callable, BrowserManager]:
         )
 
     manager = BrowserManager(headed=False)
-    manager.launch()
+    # Don't launch here — launch lazily on the runner thread
+    # to avoid Playwright's greenlet thread-affinity error.
 
     def factory(session_id: str) -> ExpertAgent:
         registry = ToolRegistry()
         _register_gmail_tools(registry, manager.get_page)
-        return ExpertAgent(
+        agent = ExpertAgent(
             domain="gmail",
             domain_prompt=GMAIL_SYSTEM_PROMPT,
             tool_registry=registry,
+            bus=bus,
+            agent_name="gmail_expert",
         )
+        return agent
 
     return factory, manager

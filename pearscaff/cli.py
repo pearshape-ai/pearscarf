@@ -20,7 +20,7 @@ def run() -> None:
     bus = MessageBus()
 
     # Start Gmail expert runner
-    gmail_factory, gmail_manager = create_gmail_expert_for_runner()
+    gmail_factory, gmail_manager = create_gmail_expert_for_runner(bus=bus)
     gmail_runner = AgentRunner("gmail_expert", gmail_factory, bus)
     gmail_runner.start()
     click.echo(click.style("Gmail expert started.", fg="green"))

@@ -20,6 +20,7 @@ pearscaff/
 │   └── web_search.py      # DuckDuckGo web search
 ├── db.py                  # SQLite schema + queries (sessions, messages)
 ├── bus.py                 # MessageBus — send/receive/poll over SQLite
+├── log.py                 # Shared session logger — unified timeline
 ├── repl.py                # Session-aware REPL
 ├── cli.py                 # Click CLI — run, discord, chat, expert commands
 ├── config.py              # Environment-based configuration
@@ -37,6 +38,15 @@ Expert Agents (headless browser UI operators)
 ```
 
 All agent-to-agent communication goes through SQLite. There is no direct function calling between agents. Each agent runs in its own thread, polling the database for unread messages.
+
+### Explicit Communication Model
+
+Agents communicate **only through explicit tool calls** — the runner never auto-replies. This prevents infinite ping-pong loops between agents.
+
+- **Worker** uses the `send_message` tool to send messages to humans or experts
+- **Experts** use the `reply` tool to send results back to whoever requested work
+- If an agent has nothing meaningful to send, it simply doesn't call a send tool, and no message goes out
+- The runner's job is: receive message → run the agent → done. All outbound routing is the agent's decision.
 
 ## Sessions
 
@@ -80,15 +90,15 @@ Core agentic loop on the Anthropic Messages API. Callbacks: `on_tool_call`, `on_
 
 ### WorkerAgent (`agents/worker.py`)
 
-User-facing agent with a `delegate_to_expert` tool. Auto-discovers worker tools (math, web search). Knows about available experts and routes tasks accordingly.
+User-facing agent with a `send_message` tool for all outbound communication. Auto-discovers worker tools (math, web search). Knows about available experts and routes tasks accordingly. Uses `send_message(to="human", ...)` to reply to users and `send_message(to="gmail_expert", ...)` to delegate to experts.
 
 ### ExpertAgent (`agents/expert.py`)
 
-Domain-specialized with knowledge accumulation. Built-in `save_knowledge` tool. System prompt includes all previously stored knowledge.
+Domain-specialized with knowledge accumulation. Built-in `save_knowledge` tool and `reply` tool for sending results back. System prompt includes all previously stored knowledge.
 
 ### AgentRunner (`agents/runner.py`)
 
-Polling loop that runs in a background thread. Polls the bus every 1 second, dispatches messages to agents, sends responses back. Caches one agent instance per session.
+Polling loop that runs in a background thread. Polls the bus every 1 second, dispatches messages to agents. The runner does **not** auto-reply — agents use their own tools (`send_message`, `reply`) to communicate. Caches one agent instance per session.
 
 ## Interfaces
 
@@ -107,6 +117,22 @@ Simple direct mode without the session bus. Useful for quick testing.
 ### Standalone Expert (`pearscaff expert gmail`)
 
 Direct interaction with the Gmail expert without the bus. Useful for debugging.
+
+## Logging
+
+All agents write to a single shared log file: `logs/session.log`. The log is a unified timeline of everything happening across all agents — every tool call, every thought, every message sent and received.
+
+Entry format:
+```
+[2026-02-27T10:30:01Z] [gmail_expert] [ses_001] [tool] gmail_get_unread({})
+[2026-02-27T10:30:02Z] [gmail_expert] [ses_001] [result] gmail_get_unread: Found 3 unread emails
+[2026-02-27T10:30:02Z] [gmail_expert] [ses_001] [thinking] 3 unread emails found...
+[2026-02-27T10:30:03Z] [worker] [--] [action] polling, none found
+```
+
+Entry types: `action`, `message_sent`, `message_received`, `reasoning`, `thinking`, `tool`, `result`, `error`
+
+The log is append-only and thread-safe. Entries without a session use `[--]`.
 
 ## Configuration
 

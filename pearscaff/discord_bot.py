@@ -5,7 +5,7 @@ import threading
 
 import discord
 
-from pearscaff import db
+from pearscaff import db, log
 from pearscaff.agents.runner import AgentRunner
 from pearscaff.agents.worker import create_worker_agent
 from pearscaff.bus import MessageBus
@@ -68,6 +68,7 @@ class PearscaffBot(discord.Client):
             db.save_thread_mapping(session_id, thread.id, message.channel.id)
 
             # Send to worker via bus
+            log.write("human", session_id, "message_sent", f"to=worker: {content[:200]}")
             self._bus.send(
                 session_id=session_id,
                 from_agent="human",
@@ -78,6 +79,7 @@ class PearscaffBot(discord.Client):
             return
 
         # In a thread — send to worker
+        log.write("human", session_id, "message_sent", f"to=worker: {content[:200]}")
         self._bus.send(
             session_id=session_id,
             from_agent="human",
@@ -97,6 +99,11 @@ class PearscaffBot(discord.Client):
                     session_id = msg["session_id"]
                     content = msg["content"]
                     from_agent = msg["from_agent"]
+
+                    log.write(
+                        "human", session_id, "message_received",
+                        f"from={from_agent}: {content[:200]}",
+                    )
 
                     thread_id = db.get_thread_by_session(session_id)
                     if thread_id:
@@ -137,7 +144,7 @@ def run_bot() -> None:
     bus = MessageBus()
 
     # Start Gmail expert runner
-    gmail_factory, gmail_manager = create_gmail_expert_for_runner()
+    gmail_factory, gmail_manager = create_gmail_expert_for_runner(bus=bus)
     gmail_runner = AgentRunner("gmail_expert", gmail_factory, bus)
     gmail_runner.start()
     print("Gmail expert started.")

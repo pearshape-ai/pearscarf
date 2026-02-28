@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from pearscaff import log
 from pearscaff.agents.base import BaseAgent
 from pearscaff.bus import MessageBus
 from pearscaff.tools import BaseTool, ToolRegistry
@@ -13,56 +14,74 @@ between the human user and expert agents.
 
 Your responsibilities:
 - Understand what the human is asking for
-- If the request involves email/Gmail operations, delegate to the gmail_expert using the delegate_to_expert tool
-- If you can answer directly (general questions, reasoning), do so without delegating
-- When you receive results back from an expert, summarize and present them clearly to the human
+- If the request involves email/Gmail operations, delegate to the gmail_expert \
+using the send_message tool
+- If you can answer directly (general questions, reasoning), do so and send the \
+answer to the human using send_message
+- When you receive results back from an expert, summarize and present them clearly \
+to the human using send_message
 
 Available experts:
 - gmail_expert: Operates Gmail through a headless browser. Can read emails, \
 list unread messages, mark as read, and perform other Gmail operations.
 
-When delegating, be specific about what the expert should do. \
-Include your reasoning about why you're delegating.
+IMPORTANT: You MUST use the send_message tool to communicate. Your text responses \
+are only logged internally — nobody sees them unless you use send_message.
+
+- Use send_message(to="human", ...) to respond to the user.
+- Use send_message(to="gmail_expert", ...) to delegate tasks to experts.
+- Do NOT send thank-you or farewell messages to experts. When you receive results \
+from an expert, process them and send_message to human. That's it.
 """
 
 
-class DelegateToExpertTool(BaseTool):
-    name = "delegate_to_expert"
+class SendMessageTool(BaseTool):
+    """Worker uses this to send messages to any agent or to the human."""
+
+    name = "send_message"
     description = (
-        "Send a task to an expert agent. The expert will process it asynchronously "
-        "and send the result back. Use this for domain-specific operations like "
-        "reading emails (gmail_expert)."
+        "Send a message to another agent or to the human user. "
+        "You MUST use this tool for all communication — your text output "
+        "is only logged internally and nobody sees it unless you use send_message."
     )
     input_schema = {
         "type": "object",
         "properties": {
-            "expert_name": {
+            "to": {
                 "type": "string",
-                "description": "The expert to delegate to, e.g. 'gmail_expert'",
+                "description": "Recipient: 'human', or an expert name like 'gmail_expert'",
             },
-            "task": {
+            "content": {
                 "type": "string",
-                "description": "Clear description of what the expert should do",
+                "description": "The message content to send",
             },
         },
-        "required": ["expert_name", "task"],
+        "required": ["to", "content"],
     }
 
-    def __init__(self, bus: MessageBus, session_id: str) -> None:
+    def __init__(self, bus: MessageBus) -> None:
         self._bus = bus
-        self._session_id = session_id
+        self._session_id: str | None = None
 
     def execute(self, **kwargs: Any) -> str:
-        expert_name = kwargs["expert_name"]
-        task = kwargs["task"]
+        to = kwargs["to"]
+        content = kwargs["content"]
+        if not self._session_id:
+            return "Error: no active session set."
         self._bus.send(
             session_id=self._session_id,
             from_agent="worker",
-            to_agent=expert_name,
-            content=task,
-            reasoning=f"Delegating to {expert_name}: {task[:100]}",
+            to_agent=to,
+            content=content,
+            reasoning=f"Worker message to {to}",
         )
-        return f"Task delegated to {expert_name}. The expert will process it and respond."
+        log.write(
+            "worker",
+            self._session_id,
+            "message_sent",
+            f"to={to}: {content[:200]}",
+        )
+        return f"Message sent to {to}."
 
 
 def create_worker_agent(
@@ -75,12 +94,16 @@ def create_worker_agent(
     """Create a WorkerAgent configured for a specific session."""
     registry = ToolRegistry()
     registry.discover()
-    registry.register(DelegateToExpertTool(bus, session_id))
+    send_tool = SendMessageTool(bus)
+    send_tool._session_id = session_id
+    registry.register(send_tool)
 
-    return BaseAgent(
+    agent = BaseAgent(
         tool_registry=registry,
         system_prompt=WORKER_SYSTEM_PROMPT,
         on_tool_call=on_tool_call,
         on_text=on_text,
         on_tool_result=on_tool_result,
     )
+    agent._send_tool = send_tool
+    return agent

@@ -5,6 +5,7 @@ import time
 
 import click
 
+from pearscaff import log
 from pearscaff.bus import MessageBus
 
 
@@ -29,6 +30,13 @@ class SessionRepl:
                     session_id = msg["session_id"]
                     from_agent = msg["from_agent"]
                     content = msg["content"]
+
+                    log.write(
+                        "human",
+                        session_id,
+                        "message_received",
+                        f"from={from_agent}: {content[:200]}",
+                    )
 
                     if session_id == self._active_session:
                         click.echo(
@@ -136,6 +144,7 @@ class SessionRepl:
 
                 # Send message to worker
                 session = self._ensure_session()
+                log.write("human", session, "message_sent", f"to=worker: {text[:200]}")
                 self._bus.send(
                     session_id=session,
                     from_agent="human",
