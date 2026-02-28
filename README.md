@@ -2,7 +2,7 @@
 
 Operational infrastructure that grows itself.
 
-AI agents with tool access — a worker agent for general tasks (terminal + Discord) and expert agents for domain-specific operations.
+Multi-agent system with async communication over SQLite. A worker agent handles reasoning and routing, expert agents operate domain-specific UIs through headless browsers.
 
 ## Quick Start
 
@@ -10,27 +10,45 @@ AI agents with tool access — a worker agent for general tasks (terminal + Disc
 uv sync
 source .venv/bin/activate
 playwright install chromium
-cp .env.example .env   # add your ANTHROPIC_API_KEY
-pearscaff chat
+cp .env.example .env          # add ANTHROPIC_API_KEY
+
+pearscaff expert gmail --login  # first-time Gmail login
+pearscaff run                   # start the full system
 ```
 
 ## Commands
 
 ```bash
-pearscaff chat                    # worker agent REPL
-pearscaff discord                 # worker agent as Discord bot
-pearscaff expert gmail --login    # log into Gmail (first time)
-pearscaff expert gmail            # Gmail expert REPL
+pearscaff run                     # worker + experts + session REPL
+pearscaff discord                 # worker + experts + Discord bot
+pearscaff chat                    # direct chat (no session bus)
+pearscaff expert gmail --login    # Gmail login
+pearscaff expert gmail            # standalone Gmail expert
 ```
 
-Also available as `ps chat`, `ps discord`, `ps expert gmail`.
+Also available as `ps run`, `ps discord`, etc.
 
 ## Architecture
 
-**Worker Agent** — general-purpose, user-facing. Tools: math, web search. Interfaces: terminal REPL, Discord bot.
+```
+REPL / Discord (human)
+    ↓ SQLite messages
+Worker Agent (reasoning, routing)
+    ↓ SQLite messages
+Expert Agents (Gmail via headless browser)
+```
 
-**Expert Agents** — domain-specialized, operate via CLI, accumulate knowledge over time.
-- **Gmail Expert** — operates Gmail through a headless browser. Reads emails, summarizes inbox, marks as read. Stores navigation knowledge for future sessions.
+Sessions track conversations. Worker delegates to experts. Experts accumulate operational knowledge. All communication is async via SQLite polling.
+
+## REPL Session Commands
+
+```
+[ses_001] > Read my latest emails
+[ses_001] > /sessions
+[ses_001] > /switch ses_002
+[ses_002] > /history
+[ses_002] > /new
+```
 
 ## Docs
 

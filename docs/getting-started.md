@@ -18,8 +18,6 @@ playwright install chromium
 
 ## Configuration
 
-Copy the example env file and fill in your keys:
-
 ```bash
 cp .env.example .env
 ```
@@ -29,54 +27,61 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here
 DISCORD_BOT_TOKEN=          # only needed for discord mode
 ```
 
-## Usage
+## Gmail Setup
 
-### CLI Chat (Worker Agent)
-
-```bash
-pearscaff chat
-# or
-ps chat
-```
-
-Interactive REPL with the worker agent. It can use tools (math, web search) automatically. Type `exit` or Ctrl+C to quit.
-
-### Discord Bot (Worker Agent)
-
-```bash
-pearscaff discord
-# or
-ps discord
-```
-
-Requires `DISCORD_BOT_TOKEN` in `.env`. Responds to @mentions and DMs.
-
-#### Discord Setup
-
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application
-3. Go to Bot settings, create a bot
-4. Enable **Message Content Intent** under Privileged Gateway Intents
-5. Copy the bot token to your `.env`
-6. Go to OAuth2 > URL Generator, select `bot` scope with `Send Messages` and `Read Message History` permissions
-7. Use the generated URL to invite the bot to your server
-
-### Gmail Expert
-
-First, log into Gmail (opens a visible browser):
+Log into Gmail (opens a visible browser):
 
 ```bash
 pearscaff expert gmail --login
 ```
 
-Log in to your Google account in the browser that opens, then press Enter in the terminal. Your session is saved for future use.
+Log in, complete 2FA, then press Enter in the terminal. Session saved for reuse.
 
-Then run the expert:
+## Usage
+
+### Full System (recommended)
+
+```bash
+pearscaff run
+```
+
+Starts worker agent + Gmail expert + session-aware REPL. All communication goes through SQLite.
+
+```
+[ses_001] > Read my latest emails
+[ses_001] > /sessions
+[ses_001] > /switch ses_002
+[ses_002] > /history
+```
+
+### Discord Mode
+
+```bash
+pearscaff discord
+```
+
+Same system but with Discord as the frontend. Each session maps to a Discord thread.
+
+### Direct Chat (no bus)
+
+```bash
+pearscaff chat
+```
+
+Simple direct mode without sessions or agent routing. Good for quick testing.
+
+### Standalone Gmail Expert
 
 ```bash
 pearscaff expert gmail
-# or
-ps expert gmail
 ```
 
-Ask the expert to read your emails, summarize your inbox, or mark emails as read. It operates Gmail through a headless browser and prints results to the terminal.
+Direct interaction with the Gmail expert. Useful for debugging browser tools.
+
+## Discord Bot Setup
+
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application → Bot → enable **Message Content Intent**
+3. Copy bot token to `.env`
+4. OAuth2 → URL Generator → `bot` scope → `Send Messages`, `Read Message History`, `Create Public Threads`, `Send Messages in Threads`
+5. Invite bot to your server

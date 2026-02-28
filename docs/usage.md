@@ -4,37 +4,78 @@
 
 | Command | Description |
 |---|---|
-| `pearscaff chat` | Interactive chat with the worker agent |
-| `pearscaff discord` | Run worker agent as a Discord bot |
-| `pearscaff expert gmail` | Run the Gmail expert agent |
+| `pearscaff run` | Full system: worker + experts + session REPL |
+| `pearscaff discord` | Full system with Discord frontend |
+| `pearscaff chat` | Direct chat (no session bus) |
+| `pearscaff expert gmail` | Standalone Gmail expert |
 | `pearscaff expert gmail --login` | Log into Gmail (first-time setup) |
 
-All commands are also available via `ps` (e.g. `ps chat`, `ps expert gmail`).
+All commands also available via `ps`.
 
-## Worker Agent
+## Session REPL (`pearscaff run`)
 
-The worker agent is the general-purpose user-facing agent with tool access.
+The REPL shows the active session in the prompt:
 
-### Built-in Tools
+```
+[ses_001] > Read my latest emails
+```
 
-#### math
+### REPL Commands
 
-Safe mathematical expression evaluator. Supports:
-- Arithmetic: `+`, `-`, `*`, `/`, `//`, `**`, `%`
-- Functions: `sqrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `abs`, `round`
-- Constants: `pi`, `e`
+| Command | Description |
+|---|---|
+| `/sessions` | List all sessions (id, initiated_by, summary) |
+| `/switch <id>` | Switch to a different session |
+| `/new` | Create a new session |
+| `/history` | Print messages in current session |
+| `/history <id>` | Print messages in a specific session |
 
-Example prompt: *"What is sqrt(144) + 15 * 3?"*
+### Message Flow
 
-#### web_search
+When you type a message:
+1. It's sent to the **worker agent** via SQLite
+2. Worker reasons about it — may delegate to an **expert agent**
+3. Expert processes (e.g. reads Gmail via headless browser)
+4. Result flows back: expert → worker → you
 
-Web search via DuckDuckGo API. Returns summaries and related topics.
+### Notifications
 
-Example prompt: *"Search for the latest Python release"*
+When an expert creates a new session (e.g. urgent email detected):
+```
+--- NEW MESSAGE ses_003: worker — Urgent email from investor@acme.com ---
+```
 
-### Adding Custom Worker Tools
+Use `/switch ses_003` to interact with that session.
 
-Create a new file in `pearscaff/tools/` with a `BaseTool` subclass:
+## Discord (`pearscaff discord`)
+
+- New message in a channel → creates a new session + Discord thread
+- All follow-up in the thread stays in the same session
+- Expert-initiated events auto-create threads
+- Sessions persist — resume by posting in the thread
+
+## Worker Agent Tools
+
+### math
+Safe expression evaluator: `+`, `-`, `*`, `/`, `**`, `sqrt`, `log`, `sin`, `cos`, `pi`, `e`
+
+### web_search
+DuckDuckGo web search
+
+### delegate_to_expert
+Routes tasks to expert agents (e.g. `gmail_expert` for email operations)
+
+## Gmail Expert Tools
+
+**Browser:** `browser_navigate`, `browser_click`, `browser_type`, `browser_get_text`, `browser_get_html`, `browser_screenshot`, `browser_wait`
+
+**Gmail:** `gmail_get_unread`, `gmail_read_latest`, `gmail_mark_as_read`
+
+**Knowledge:** `save_knowledge` — stores operational knowledge for future sessions
+
+## Adding Custom Worker Tools
+
+Drop a `BaseTool` subclass in `pearscaff/tools/`:
 
 ```python
 from typing import Any
@@ -42,56 +83,20 @@ from pearscaff.tools import BaseTool
 
 class MyTool(BaseTool):
     name = "my_tool"
-    description = "What the LLM sees when deciding to use this tool"
+    description = "Description for the LLM"
     input_schema = {
         "type": "object",
         "properties": {
-            "param": {
-                "type": "string",
-                "description": "Description for the LLM",
-            }
+            "param": {"type": "string", "description": "..."}
         },
         "required": ["param"],
     }
 
     def execute(self, **kwargs: Any) -> str:
-        param = kwargs["param"]
-        return f"Result for {param}"
+        return f"Result for {kwargs['param']}"
 ```
 
-The tool is auto-discovered at startup — no registration needed.
-
-## Gmail Expert
-
-The Gmail expert operates Gmail through a headless Chromium browser. It can read emails, summarize your inbox, and mark emails as read.
-
-### Setup
-
-Run `pearscaff expert gmail --login` to open a visible browser. Log into your Gmail account and press Enter in the terminal. Your session is saved to `storage_state.json`.
-
-### Usage
-
-```bash
-pearscaff expert gmail
-```
-
-The expert prints detailed output as it works:
-- **[thinking]** — the agent's reasoning
-- **[tool]** — tool calls being made (browser actions)
-- **[result]** — tool results
-- **expert >** — the agent's final response with email contents
-
-### Available Tools
-
-**Browser tools:** `browser_navigate`, `browser_click`, `browser_type`, `browser_get_text`, `browser_get_html`, `browser_screenshot`, `browser_wait`
-
-**Gmail tools:** `gmail_get_unread`, `gmail_read_latest`, `gmail_mark_as_read`
-
-**Knowledge:** `save_knowledge` — the expert stores what it learns about operating Gmail so it gets better over time
-
-### Knowledge System
-
-The Gmail expert accumulates knowledge in `pearscaff/knowledge/gmail/` as markdown files. This includes CSS selectors, navigation patterns, timing info, and workarounds. Knowledge is loaded into the expert's system prompt on startup.
+Auto-discovered at startup.
 
 ## Environment Variables
 
@@ -99,5 +104,6 @@ The Gmail expert accumulates knowledge in `pearscaff/knowledge/gmail/` as markdo
 |---|---|---|
 | `ANTHROPIC_API_KEY` | (required) | Anthropic API key |
 | `MODEL` | `claude-sonnet-4-5-20250929` | Model identifier |
-| `MAX_TURNS` | `10` | Max tool-call loop iterations per message |
+| `MAX_TURNS` | `10` | Max tool-call loop iterations |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
+| `DB_PATH` | `pearscaff.db` | SQLite database path |

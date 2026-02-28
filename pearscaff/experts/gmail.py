@@ -434,22 +434,7 @@ def login(headed: bool = True) -> None:
     print(f"Session saved to {STORAGE_STATE_PATH}")
 
 
-def create_gmail_expert(
-    on_tool_call=None, on_text=None, on_tool_result=None
-) -> tuple[ExpertAgent, BrowserManager]:
-    """Create a GmailExpert agent with browser tools."""
-    if not STORAGE_STATE_PATH.exists():
-        raise SystemExit(
-            "No saved Gmail session. Run 'pearscaff expert gmail --login' first."
-        )
-
-    manager = BrowserManager(headed=False)
-    manager.launch()
-
-    registry = ToolRegistry()
-
-    # Register browser tools
-    get_page = manager.get_page
+def _register_gmail_tools(registry: ToolRegistry, get_page: callable) -> None:
     for tool_cls in [
         BrowserNavigateTool,
         BrowserClickTool,
@@ -464,6 +449,22 @@ def create_gmail_expert(
     ]:
         registry.register(tool_cls(get_page))
 
+
+def create_gmail_expert(
+    on_tool_call=None, on_text=None, on_tool_result=None
+) -> tuple[ExpertAgent, BrowserManager]:
+    """Create a GmailExpert agent with browser tools (for direct/standalone use)."""
+    if not STORAGE_STATE_PATH.exists():
+        raise SystemExit(
+            "No saved Gmail session. Run 'pearscaff expert gmail --login' first."
+        )
+
+    manager = BrowserManager(headed=False)
+    manager.launch()
+
+    registry = ToolRegistry()
+    _register_gmail_tools(registry, manager.get_page)
+
     agent = ExpertAgent(
         domain="gmail",
         domain_prompt=GMAIL_SYSTEM_PROMPT,
@@ -474,3 +475,29 @@ def create_gmail_expert(
     )
 
     return agent, manager
+
+
+def create_gmail_expert_for_runner() -> tuple[callable, BrowserManager]:
+    """Create a factory function for the AgentRunner + a BrowserManager.
+
+    Returns (agent_factory, manager). The factory creates a new ExpertAgent
+    per session, all sharing the same browser.
+    """
+    if not STORAGE_STATE_PATH.exists():
+        raise SystemExit(
+            "No saved Gmail session. Run 'pearscaff expert gmail --login' first."
+        )
+
+    manager = BrowserManager(headed=False)
+    manager.launch()
+
+    def factory(session_id: str) -> ExpertAgent:
+        registry = ToolRegistry()
+        _register_gmail_tools(registry, manager.get_page)
+        return ExpertAgent(
+            domain="gmail",
+            domain_prompt=GMAIL_SYSTEM_PROMPT,
+            tool_registry=registry,
+        )
+
+    return factory, manager
