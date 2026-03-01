@@ -19,6 +19,10 @@ def run() -> None:
     from pearscaff.bus import MessageBus
     from pearscaff.experts.gmail import create_gmail_expert_for_runner
     from pearscaff.repl import SessionRepl
+    from pearscaff.terminal import _restore_terminal
+
+    # Restore terminal in case a previous session left it in raw mode
+    _restore_terminal()
 
     bus = MessageBus()
 

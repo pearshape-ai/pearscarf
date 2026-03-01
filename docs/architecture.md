@@ -21,7 +21,9 @@ pearscaff/
 ├── db.py                  # SQLite schema + queries (sessions, messages)
 ├── bus.py                 # MessageBus — send/receive/poll over SQLite
 ├── log.py                 # Shared session logger — unified timeline
-├── repl.py                # Session-aware REPL
+├── status.py              # In-memory agent activity registry
+├── terminal.py            # Raw terminal I/O for non-blocking REPL
+├── repl.py                # Non-blocking session-aware REPL
 ├── cli.py                 # Click CLI — run, discord, chat, expert commands
 ├── config.py              # Environment-based configuration
 └── discord_bot.py         # Discord bot with thread-per-session
@@ -104,7 +106,12 @@ Polling loop that runs in a background thread. Polls the bus every 1 second, dis
 
 ### REPL (`pearscaff run`)
 
-Session-aware prompt: `[ses_001] >`. Commands: `/sessions`, `/switch <id>`, `/new`, `/history [id]`. Background thread polls for responses and notifications.
+Non-blocking session-aware prompt: `[ses_001] you >`. Uses raw terminal I/O so agent responses stream in above the prompt while the user types. Three background threads:
+
+- **Poll thread**: polls bus for messages, prints them above the prompt with `[session] agent >` attribution
+- **Status thread**: updates a live activity indicator showing which agent is working and elapsed time (`[ses_001] gmail_expert working... (5s)`)
+
+Commands: `/sessions`, `/switch <id>`, `/new`, `/history [id]`.
 
 ### Discord (`pearscaff discord`)
 

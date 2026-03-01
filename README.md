@@ -41,15 +41,20 @@ Expert Agents (Gmail via headless browser)
 
 Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via SQLite polling. A unified log at `logs/session.log` records every action across all agents.
 
-## REPL Session Commands
+## REPL
+
+Non-blocking prompt with message attribution and live activity indicator:
 
 ```
-[ses_001] > Read my latest emails
-[ses_001] > /sessions
-[ses_001] > /switch ses_002
-[ses_002] > /history
-[ses_002] > /new
+[ses_001] you > read my latest emails
+[ses_001] worker working... (2s)
+[ses_001] worker > Looking into your emails...
+[ses_001] gmail_expert working... (5s)
+[ses_001] worker > You have 3 unread emails: ...
+[ses_001] you >
 ```
+
+Commands: `/sessions`, `/switch <id>`, `/new`, `/history [id]`
 
 ## Docs
 

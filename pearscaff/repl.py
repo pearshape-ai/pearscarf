@@ -1,12 +1,25 @@
 from __future__ import annotations
 
+import re
 import threading
-import time
 
 import click
 
-from pearscaff import __version__, log
+from pearscaff import __version__, log, status
 from pearscaff.bus import MessageBus
+from pearscaff.terminal import TerminalUI
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _color(text: str, fg: str) -> str:
+    """Apply click-style ANSI color without a trailing reset quirk."""
+    return click.style(text, fg=fg)
+
+
+def _visible_len(text: str) -> int:
+    """Length of text with ANSI escape codes stripped."""
+    return len(_ANSI_RE.sub("", text))
 
 
 class SessionRepl:
@@ -14,12 +27,18 @@ class SessionRepl:
         self._bus = bus
         self._active_session: str | None = None
         self._stop = threading.Event()
-        self._poll_thread: threading.Thread | None = None
+        self._ui = TerminalUI()
 
     def _ensure_session(self) -> str:
         if not self._active_session:
             self._active_session = self._bus.create_session("human", "New session")
         return self._active_session
+
+    def _prompt_str(self) -> str:
+        session_id = self._active_session or "none"
+        return _color(f"[{session_id}]", "blue") + " you > "
+
+    # --- Background threads ---
 
     def _poll_responses(self) -> None:
         """Background thread: polls for messages addressed to human."""
@@ -39,20 +58,51 @@ class SessionRepl:
                     )
 
                     if session_id == self._active_session:
-                        click.echo(
-                            f"\n{click.style(from_agent, fg='magenta')} > {content}\n"
+                        prefix = (
+                            _color(f"[{session_id}]", "blue")
+                            + " "
+                            + _color(from_agent, "magenta")
+                            + " > "
                         )
+                        indent = " " * _visible_len(prefix)
+                        lines = content.split("\n")
+                        formatted = prefix + lines[0]
+                        for continuation in lines[1:]:
+                            formatted += "\n" + indent + continuation
+                        self._ui.print_above(formatted)
                     else:
-                        # Notification for a different session
-                        click.echo(
-                            click.style(
-                                f"\n--- NEW MESSAGE {session_id}: {from_agent} — {content[:80]} ---\n",
-                                fg="yellow",
-                            )
+                        line = _color(
+                            f"--- [{session_id}] {from_agent}: {content[:80]} ---",
+                            "yellow",
                         )
+                        self._ui.print_above(line)
             except Exception:
                 pass
             self._stop.wait(1)
+
+    def _poll_status(self) -> None:
+        """Background thread: updates the status line with agent activity."""
+        while not self._stop.is_set():
+            try:
+                session = self._active_session
+                if session:
+                    activity = status.get_activity(session)
+                    if activity:
+                        agent, text, elapsed = activity
+                        secs = int(elapsed)
+                        status_text = (
+                            _color(f"[{session}]", "blue")
+                            + " "
+                            + _color(f"{agent} {text}... ({secs}s)", "yellow")
+                        )
+                        self._ui.set_status(status_text)
+                    else:
+                        self._ui.clear_status()
+            except Exception:
+                pass
+            self._stop.wait(1)
+
+    # --- Commands ---
 
     def _handle_command(self, text: str) -> bool:
         """Handle REPL commands. Returns True if handled."""
@@ -62,76 +112,77 @@ class SessionRepl:
         if cmd == "/sessions":
             sessions = self._bus.list_sessions()
             if not sessions:
-                click.echo("No sessions.")
+                self._ui.print_above("No sessions.")
             else:
                 for s in sessions:
                     marker = " *" if s["id"] == self._active_session else ""
-                    click.echo(
+                    self._ui.print_above(
                         f"  {s['id']}{marker}  initiated_by={s['initiated_by']}  {s['summary']}"
                     )
             return True
 
         if cmd == "/switch":
             if len(parts) < 2:
-                click.echo("Usage: /switch <session_id>")
+                self._ui.print_above("Usage: /switch <session_id>")
                 return True
             target = parts[1]
             session = self._bus.get_session(target)
             if not session:
-                click.echo(f"Session {target} not found.")
+                self._ui.print_above(f"Session {target} not found.")
             else:
                 self._active_session = target
-                click.echo(f"Switched to {target}")
+                self._ui.print_above(f"Switched to {target}")
             return True
 
         if cmd == "/new":
             self._active_session = self._bus.create_session("human", "New session")
-            click.echo(f"Created {self._active_session}")
+            self._ui.print_above(f"Created {self._active_session}")
             return True
 
         if cmd == "/history":
             target = parts[1] if len(parts) > 1 else self._active_session
             if not target:
-                click.echo("No active session.")
+                self._ui.print_above("No active session.")
                 return True
             history = self._bus.get_history(target)
             if not history:
-                click.echo("No messages.")
+                self._ui.print_above("No messages.")
             else:
                 for msg in history:
-                    direction = click.style(msg["from_agent"], fg="cyan")
-                    arrow = click.style(" → ", fg="white")
-                    to = click.style(msg["to_agent"], fg="green")
-                    click.echo(f"  {direction}{arrow}{to}: {msg['content'][:120]}")
-                    if msg["reasoning"]:
-                        click.echo(
-                            click.style(f"    reasoning: {msg['reasoning']}", fg="yellow")
-                        )
+                    direction = _color(msg["from_agent"], "cyan")
+                    arrow = " -> "
+                    to = _color(msg["to_agent"], "green")
+                    self._ui.print_above(
+                        f"  {direction}{arrow}{to}: {msg['content'][:120]}"
+                    )
             return True
 
         return False
 
+    # --- Main loop ---
+
     def run(self) -> None:
         self._ensure_session()
 
-        # Start background polling
-        self._poll_thread = threading.Thread(
+        # Start background threads
+        poll_thread = threading.Thread(
             target=self._poll_responses, name="repl-poll", daemon=True
         )
-        self._poll_thread.start()
+        poll_thread.start()
+
+        status_thread = threading.Thread(
+            target=self._poll_status, name="repl-status", daemon=True
+        )
+        status_thread.start()
 
         click.echo(f"PearScaff v{__version__} (type 'exit' or Ctrl+C to quit)")
         click.echo("Commands: /sessions, /switch <id>, /new, /history [id]\n")
 
         try:
             while True:
-                session_id = self._active_session or "none"
-                user_input = click.prompt(
-                    click.style(f"[{session_id}]", fg="blue"),
-                    prompt_suffix=" > ",
-                )
+                text = self._ui.read_line(self._prompt_str())
 
-                text = user_input.strip()
+                text = text.strip()
                 if not text:
                     continue
 

@@ -6,7 +6,7 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-from pearscaff import log
+from pearscaff import log, status
 from pearscaff.agents.base import BaseAgent
 from pearscaff.bus import MessageBus
 
@@ -80,6 +80,7 @@ class AgentRunner:
 
         agent = self._get_agent(session_id)
 
+        status.set_status(self._agent_name, session_id, "working")
         try:
             # Set session context so agent tools know where to send messages
             if hasattr(agent, "_send_tool") and agent._send_tool:
@@ -126,6 +127,8 @@ class AgentRunner:
                 self._on_error(session_id, exc)
             else:
                 traceback.print_exc()
+        finally:
+            status.clear_status(self._agent_name, session_id)
 
     def _loop(self) -> None:
         while not self._stop.is_set():

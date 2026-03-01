@@ -418,26 +418,77 @@ class BrowserManager:
 
     def close(self) -> None:
         if self._context:
-            self.save_state()
-            self._context.close()
+            try:
+                self.save_state()
+            except Exception:
+                # save_state may fail if called from a different thread
+                # than the one that created the browser (greenlet error).
+                # State was already saved during normal operation.
+                pass
+            try:
+                self._context.close()
+            except Exception:
+                pass
         if self._browser:
-            self._browser.close()
+            try:
+                self._browser.close()
+            except Exception:
+                pass
         if self._pw:
-            self._pw.stop()
+            try:
+                self._pw.stop()
+            except Exception:
+                pass
 
 
 def login(headed: bool = True) -> None:
-    """Open a visible browser for the user to log into Gmail."""
-    manager = BrowserManager(headed=headed)
-    manager.launch()
-    page = manager.get_page()
-    page.goto("https://mail.google.com")
-    print("Browser opened. Please log into Gmail.")
-    print("Press Enter here once you're logged in...")
-    input()
-    manager.save_state()
-    manager.close()
-    print(f"Session saved to {STORAGE_STATE_PATH}")
+    """Open a browser for the user to log into Google.
+
+    Uses accounts.google.com to avoid Gmail chat popups.
+    After login, Google redirects to Gmail and we save the session.
+    """
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(headless=False)
+    context = browser.new_context()
+    page = context.new_page()
+
+    # Start at Google Accounts login with Gmail as the redirect target.
+    # This avoids loading Gmail's UI (and its chat popups) until after login.
+    page.goto(
+        "https://accounts.google.com/ServiceLogin"
+        "?continue=https://mail.google.com/mail/",
+        wait_until="domcontentloaded",
+        timeout=30000,
+    )
+    print("Browser opened. Log into your Google account.")
+    print("Session saves automatically once login completes.")
+    print("Press Ctrl+C to cancel.\n")
+
+    try:
+        if "/mail/" not in page.url:
+            print("Waiting for login...")
+            page.wait_for_url("**/mail/**", timeout=300_000)
+
+        print("Login detected! Saving session...")
+        context.storage_state(path=str(STORAGE_STATE_PATH))
+        print(f"Session saved to {STORAGE_STATE_PATH}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Error: {exc}")
+    finally:
+        try:
+            context.close()
+        except Exception:
+            pass
+        try:
+            browser.close()
+        except Exception:
+            pass
+        try:
+            pw.stop()
+        except Exception:
+            pass
 
 
 def _register_gmail_tools(registry: ToolRegistry, get_page: callable) -> None:
