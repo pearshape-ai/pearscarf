@@ -58,6 +58,8 @@ class TerminalUI:
         self._lock = threading.Lock()
 
     def _write(self, text: str) -> None:
+        # In raw mode, \n doesn't return to column 0. Use \r\n.
+        text = text.replace("\r\n", "\n").replace("\n", "\r\n")
         sys.stdout.write(text)
         sys.stdout.flush()
 

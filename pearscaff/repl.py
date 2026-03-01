@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import threading
 
 import click
@@ -9,17 +8,9 @@ from pearscaff import __version__, log, status
 from pearscaff.bus import MessageBus
 from pearscaff.terminal import TerminalUI
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-
-
 def _color(text: str, fg: str) -> str:
     """Apply click-style ANSI color without a trailing reset quirk."""
     return click.style(text, fg=fg)
-
-
-def _visible_len(text: str) -> int:
-    """Length of text with ANSI escape codes stripped."""
-    return len(_ANSI_RE.sub("", text))
 
 
 class SessionRepl:
@@ -64,11 +55,7 @@ class SessionRepl:
                             + _color(from_agent, "magenta")
                             + " > "
                         )
-                        indent = " " * _visible_len(prefix)
-                        lines = content.split("\n")
-                        formatted = prefix + lines[0]
-                        for continuation in lines[1:]:
-                            formatted += "\n" + indent + continuation
+                        formatted = prefix + content
                         self._ui.print_above(formatted)
                     else:
                         line = _color(
