@@ -162,8 +162,9 @@ class SessionRepl:
         )
         status_thread.start()
 
-        click.echo(f"PearScaff v{__version__} (type 'exit' or Ctrl+C to quit)")
-        click.echo("Commands: /sessions, /switch <id>, /new, /history [id]\n")
+        self._ui.println(f"PearScaff v{__version__} (type 'exit' or Ctrl+C to quit)")
+        self._ui.println("Commands: /sessions, /switch <id>, /new, /history [id]")
+        self._ui.println("")
 
         try:
             while True:

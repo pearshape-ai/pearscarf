@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import click
 
 from pearscaff import __version__
@@ -30,7 +32,8 @@ def run() -> None:
     gmail_factory, gmail_manager = create_gmail_expert_for_runner(bus=bus)
     gmail_runner = AgentRunner("gmail_expert", gmail_factory, bus)
     gmail_runner.start()
-    click.echo(click.style("Gmail expert started.", fg="green"))
+    sys.stdout.write("Gmail expert started.\r\n")
+    sys.stdout.flush()
 
     # Start Worker runner
     def worker_factory(session_id: str):
@@ -38,7 +41,8 @@ def run() -> None:
 
     worker_runner = AgentRunner("worker", worker_factory, bus)
     worker_runner.start()
-    click.echo(click.style("Worker agent started.", fg="green"))
+    sys.stdout.write("Worker agent started.\r\n")
+    sys.stdout.flush()
 
     # Run REPL in main thread
     repl = SessionRepl(bus)

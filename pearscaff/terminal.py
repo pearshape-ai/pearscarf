@@ -13,13 +13,10 @@ import termios
 import threading
 import tty
 
-# Save the original terminal settings at import time so we can
-# always restore them, even after a crash or unexpected exit.
+# Terminal settings saved from inside read_line() before entering raw mode.
+# This ensures we capture a known-good cooked-mode state, not a broken one
+# left over from a previous crash.
 _original_termios: list | None = None
-try:
-    _original_termios = termios.tcgetattr(sys.stdin.fileno())
-except Exception:
-    pass
 
 
 def _restore_terminal() -> None:
@@ -62,6 +59,10 @@ class TerminalUI:
         text = text.replace("\r\n", "\n").replace("\n", "\r\n")
         sys.stdout.write(text)
         sys.stdout.flush()
+
+    def println(self, text: str) -> None:
+        """Print a line of text. Safe in both raw and cooked mode."""
+        self._write(text + "\n")
 
     def _redraw(self) -> None:
         """Redraw status line (if any) and prompt + input buffer."""
@@ -121,6 +122,11 @@ class TerminalUI:
 
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
+
+        # Save known-good cooked-mode state for atexit/signal restoration
+        global _original_termios
+        _original_termios = old_settings
+
         try:
             tty.setraw(fd)
             while True:
