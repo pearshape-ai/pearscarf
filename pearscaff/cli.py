@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import click
 
+from pearscaff import __version__
+
 
 @click.group()
+@click.version_option(version=__version__, prog_name="PearScaff")
 def cli() -> None:
     """pearscaff: Operational infrastructure that grows itself."""
 

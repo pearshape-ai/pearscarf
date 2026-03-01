@@ -134,6 +134,10 @@ Entry types: `action`, `message_sent`, `message_received`, `reasoning`, `thinkin
 
 The log is append-only and thread-safe. Entries without a session use `[--]`.
 
+## Versioning
+
+The version string lives in `pearscaff/__init__.py` as `__version__`. `pyproject.toml` reads it dynamically via hatchling. Available via `pearscaff --version` / `ps --version` and printed in the REPL on startup.
+
 ## Configuration
 
 | Variable | Default | Description |

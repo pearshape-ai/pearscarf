@@ -19,14 +19,15 @@ pearscaff run                   # start the full system
 ## Commands
 
 ```bash
-pearscaff run                     # worker + experts + session REPL
-pearscaff discord                 # worker + experts + Discord bot
-pearscaff chat                    # direct chat (no session bus)
-pearscaff expert gmail --login    # Gmail login
-pearscaff expert gmail            # standalone Gmail expert
+pearscaff --version                # print version
+pearscaff run                      # worker + experts + session REPL
+pearscaff discord                  # worker + experts + Discord bot
+pearscaff chat                     # direct chat (no session bus)
+pearscaff expert gmail --login     # Gmail login
+pearscaff expert gmail             # standalone Gmail expert
 ```
 
-Also available as `ps run`, `ps discord`, etc.
+Also available as `ps --version`, `ps run`, `ps discord`, etc.
 
 ## Architecture
 

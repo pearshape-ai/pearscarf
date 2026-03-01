@@ -5,7 +5,7 @@ import time
 
 import click
 
-from pearscaff import log
+from pearscaff import __version__, log
 from pearscaff.bus import MessageBus
 
 
@@ -120,7 +120,7 @@ class SessionRepl:
         )
         self._poll_thread.start()
 
-        click.echo("pearscaff (type 'exit' or Ctrl+C to quit)")
+        click.echo(f"PearScaff v{__version__} (type 'exit' or Ctrl+C to quit)")
         click.echo("Commands: /sessions, /switch <id>, /new, /history [id]\n")
 
         try:
