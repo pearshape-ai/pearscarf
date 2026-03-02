@@ -5,11 +5,13 @@ description = "Operational infrastructure that grows itself"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic",
+    "chromadb",
     "click",
     "discord.py",
     "httpx",
     "playwright",
     "python-dotenv",
+    "sentence-transformers",
 ]
 
 [project.scripts]

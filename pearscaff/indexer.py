@@ -12,7 +12,7 @@ import traceback
 
 import anthropic
 
-from pearscaff import graph, log
+from pearscaff import graph, log, store, vectorstore
 from pearscaff.config import ANTHROPIC_API_KEY, MODEL
 from pearscaff.db import _get_conn, init_db
 
@@ -211,6 +211,24 @@ class Indexer:
             "indexer", "--", "action",
             f"wrote {edges_created} edges, {facts_written} facts for {record_id}",
         )
+
+        # Step 2: Embed into ChromaDB
+        try:
+            content = self._build_content(record)
+            metadata = {
+                "type": record["type"],
+                "source": record["source"],
+                "created_at": record["created_at"],
+            }
+            if record["type"] == "email":
+                email = store.get_email(record_id)
+                if email:
+                    metadata["sender"] = email.get("sender", "")
+                    metadata["subject"] = email.get("subject", "")
+            vectorstore.add_record(record_id, content, metadata)
+            log.write("indexer", "--", "action", f"embedded {record_id} in ChromaDB")
+        except Exception as exc:
+            log.write("indexer", "--", "error", f"embedding failed for {record_id}: {exc}")
 
         self._mark_indexed(record_id)
         log.write("indexer", "--", "action", f"marked {record_id} as indexed")

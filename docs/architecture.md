@@ -23,6 +23,7 @@ pearscaff/
 ├── store.py               # System of Record — structured email/record storage
 ├── graph.py               # Knowledge graph CRUD — entities, edges, facts
 ├── indexer.py             # Indexer — background LLM extraction into knowledge graph
+├── vectorstore.py         # ChromaDB vector storage — embeddings for semantic search
 ├── log.py                 # Shared session logger — unified timeline
 ├── status.py              # In-memory agent activity registry
 ├── terminal.py            # Raw terminal I/O for non-blocking REPL
@@ -129,9 +130,19 @@ Background daemon thread that polls `records WHERE indexed = 0` every 5 seconds.
 3. Calls LLM for structured JSON extraction
 4. Resolves entities against existing graph (exact name + metadata match)
 5. Creates edges and upserts facts
-6. Marks record as indexed
+6. Embeds record content into ChromaDB for semantic search
+7. Marks record as indexed
 
 Logs to `session.log` as `[indexer]`.
+
+### Vector Storage (`vectorstore.py`)
+
+ChromaDB with `all-MiniLM-L6-v2` sentence-transformer embeddings. Runs embedded (no server), persists to `chroma_data/`.
+
+- Single `records` collection — all record types, filterable by metadata (`type`, `source`, `sender`, etc.)
+- Lazy-initialized — model and client only load on first use
+- `add_record()` — upsert a record's embedding
+- `query()` — semantic similarity search with optional metadata filters
 
 ## Agent Types
 

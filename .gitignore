@@ -24,3 +24,4 @@ pearscaff.db-shm
 pearscaff.db-wal
 pearscaff/knowledge/gmail/*.md
 logs/
+chroma_data/
