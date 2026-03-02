@@ -87,7 +87,7 @@ messages(id, session_id, from_agent, to_agent, content, reasoning, data, read, c
 discord_threads(session_id, thread_id, channel_id)
 
 -- System of Record
-records(id, type, source, created_at, raw, indexed)
+records(id, type, source, created_at, raw, indexed, classification, classification_reason, human_context)
 emails(record_id, message_id, sender, recipient, subject, body, received_at)
 
 -- Knowledge Graph
@@ -103,13 +103,24 @@ SQLite with WAL mode for concurrent reads/writes across threads.
 
 Persistent structured storage for all domain data. Each expert owns writing to its tables; the worker reads.
 
-- **`records`** — Base table shared across all data types. Every record has an `id` (e.g. `email_001`), `type`, and `source` agent. The `indexed` flag tracks whether the Indexer has processed it.
+- **`records`** — Base table shared across all data types. Every record has an `id` (e.g. `email_001`), `type`, and `source` agent. The `indexed` flag tracks whether the Indexer has processed it. The `classification` field (`relevant`/`noise`/NULL) tracks triage status.
 - **`emails`** — Gmail-specific table. Deduplication via `message_id` UNIQUE constraint.
-- **`store.py`** — CRUD module: `save_email()`, `get_email()`, `list_emails()`.
+- **`store.py`** — CRUD module: `save_email()`, `get_email()`, `list_emails()`, `classify_record()`, `get_pending_records()`.
 
 ### Ownership
 - **Gmail expert writes**: after reading an email via browser, calls `save_email` tool to persist it.
+- **Worker triages**: classifies records as relevant/noise via `classify_record` tool. Checks sender against knowledge graph via `search_entities` tool. Asks human when uncertain.
 - **Worker reads**: can look up stored emails via `lookup_email` tool for context.
+
+### Email Triage
+
+When the worker receives an email from the gmail expert, it classifies it before the Indexer processes it:
+
+1. **Known entity** (sender found in graph) → auto-classify as relevant
+2. **Obvious noise** (no-reply, promotional, unsubscribe) → auto-classify as noise
+3. **Uncertain** → ask the human "Is this relevant and why?"
+
+Human responses are captured as `human_context` on the record. The Indexer appends this context to the extraction prompt, enriching entity extraction. The Indexer only processes records with `classification = 'relevant'`.
 
 ## Knowledge Graph
 

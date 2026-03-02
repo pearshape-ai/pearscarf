@@ -105,6 +105,42 @@ def get_entity(entity_id: str) -> dict | None:
     return d
 
 
+def search_entities(
+    query: str,
+    entity_type: str | None = None,
+    limit: int = 5,
+) -> list[dict]:
+    """Search entities by name or metadata content.
+
+    Matches exact name or LIKE on name and metadata fields.
+    """
+    init_db()
+    conn = _get_conn()
+
+    conditions = ["(name = ? OR name LIKE ? OR metadata LIKE ?)"]
+    params: list = [query, f"%{query}%", f"%{query}%"]
+
+    if entity_type:
+        conditions.append("type = ?")
+        params.append(entity_type)
+
+    params.append(limit)
+
+    where = " AND ".join(conditions)
+    rows = conn.execute(
+        f"SELECT id, type, name, metadata, created_at FROM entities "
+        f"WHERE {where} ORDER BY created_at DESC LIMIT ?",
+        params,
+    ).fetchall()
+
+    result = []
+    for row in rows:
+        d = dict(row)
+        d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
+        result.append(d)
+    return result
+
+
 # --- Edges ---
 
 

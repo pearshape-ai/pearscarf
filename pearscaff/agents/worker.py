@@ -29,6 +29,19 @@ System of Record:
 - Emails read by the gmail_expert are stored with a record_id (e.g. "email_001").
 - You can look up previously stored emails using the lookup_email tool.
 
+Email Triage:
+When you receive an email from the gmail_expert (containing a record_id), classify it:
+
+1. Use search_entities to check if the sender is a known entity in the graph.
+2. If sender is a known entity -> auto-classify as "relevant" using classify_record. \
+Tell the human: "Relevant: Email from X 'Subject' -- reason"
+3. If the email has obvious noise signals (no-reply address, unsubscribe, promotional \
+keywords) -> auto-classify as "noise". Tell the human: "Noise: Email from X 'Subject' -- reason"
+4. If uncertain -> present the email snippet to the human and ask "Is this relevant and why?"
+5. When the human responds to a classification question, use classify_record with their \
+reasoning and any additional context they provide.
+6. If the human disagrees with an auto-classification, reclassify with classify_record.
+
 IMPORTANT: You MUST use the send_message tool to communicate. Your text responses \
 are only logged internally — nobody sees them unless you use send_message.
 
@@ -124,6 +137,91 @@ class LookupEmailTool(BaseTool):
         return "\n".join(parts)
 
 
+class ClassifyRecordTool(BaseTool):
+    """Worker uses this to classify a record as relevant or noise."""
+
+    name = "classify_record"
+    description = (
+        "Classify a record as 'relevant' or 'noise'. "
+        "Use after triaging an email. Include reasoning and any human context."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "record_id": {
+                "type": "string",
+                "description": "The record ID to classify, e.g. 'email_001'",
+            },
+            "classification": {
+                "type": "string",
+                "enum": ["relevant", "noise"],
+                "description": "Classification: 'relevant' or 'noise'",
+            },
+            "reason": {
+                "type": "string",
+                "description": "Why this classification was chosen",
+            },
+            "human_context": {
+                "type": "string",
+                "description": "Additional context from human response, if any",
+            },
+        },
+        "required": ["record_id", "classification", "reason"],
+    }
+
+    def execute(self, **kwargs: Any) -> str:
+        from pearscaff import store
+
+        ok = store.classify_record(
+            record_id=kwargs["record_id"],
+            classification=kwargs["classification"],
+            reason=kwargs["reason"],
+            human_context=kwargs.get("human_context", ""),
+        )
+        if not ok:
+            return f"Failed to classify {kwargs['record_id']} — record not found."
+        return f"Record {kwargs['record_id']} classified as {kwargs['classification']}."
+
+
+class SearchEntitiesTool(BaseTool):
+    """Worker uses this to search the knowledge graph for known entities."""
+
+    name = "search_entities"
+    description = (
+        "Search the knowledge graph for entities by name, email, or domain. "
+        "Use this to check if an email sender is a known person or company."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Name, email address, or domain to search for",
+            },
+            "entity_type": {
+                "type": "string",
+                "description": "Optional filter: 'person' or 'company'",
+            },
+        },
+        "required": ["query"],
+    }
+
+    def execute(self, **kwargs: Any) -> str:
+        from pearscaff import graph
+
+        results = graph.search_entities(
+            query=kwargs["query"],
+            entity_type=kwargs.get("entity_type"),
+        )
+        if not results:
+            return f"No entities found matching '{kwargs['query']}'."
+        lines = []
+        for ent in results:
+            meta = ", ".join(f"{k}={v}" for k, v in ent["metadata"].items()) if ent["metadata"] else ""
+            lines.append(f"{ent['id']} ({ent['type']}): {ent['name']}" + (f" [{meta}]" if meta else ""))
+        return "\n".join(lines)
+
+
 def create_worker_agent(
     bus: MessageBus,
     session_id: str,
@@ -138,6 +236,8 @@ def create_worker_agent(
     send_tool._session_id = session_id
     registry.register(send_tool)
     registry.register(LookupEmailTool())
+    registry.register(ClassifyRecordTool())
+    registry.register(SearchEntitiesTool())
 
     agent = BaseAgent(
         tool_registry=registry,

@@ -98,3 +98,36 @@ def list_emails(limit: int = 20) -> list[dict]:
         (limit,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def classify_record(
+    record_id: str,
+    classification: str,
+    reason: str = "",
+    human_context: str = "",
+) -> bool:
+    """Set classification on a record. Returns True if updated."""
+    init_db()
+    conn = _get_conn()
+    cur = conn.execute(
+        "UPDATE records SET classification = ?, classification_reason = ?, human_context = ? "
+        "WHERE id = ?",
+        (classification, reason, human_context, record_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def get_pending_records(limit: int = 10) -> list[dict]:
+    """Get unclassified records (classification IS NULL)."""
+    init_db()
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT r.id, r.type, r.source, r.created_at, "
+        "e.sender, e.subject, e.body "
+        "FROM records r LEFT JOIN emails e ON r.id = e.record_id "
+        "WHERE r.classification IS NULL "
+        "ORDER BY r.created_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]

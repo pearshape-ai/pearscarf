@@ -120,11 +120,17 @@ def init_db() -> None:
         """
     )
 
-    # Add indexed column to records if not present (safe migration)
-    try:
-        conn.execute("ALTER TABLE records ADD COLUMN indexed INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    # Safe migrations — add columns if not present
+    for col_sql in [
+        "ALTER TABLE records ADD COLUMN indexed INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE records ADD COLUMN classification TEXT",
+        "ALTER TABLE records ADD COLUMN classification_reason TEXT",
+        "ALTER TABLE records ADD COLUMN human_context TEXT",
+    ]:
+        try:
+            conn.execute(col_sql)
+        except sqlite3.OperationalError:
+            pass  # Column already exists
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_records_indexed ON records(indexed)"
     )

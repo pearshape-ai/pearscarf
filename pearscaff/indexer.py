@@ -96,6 +96,11 @@ class Indexer:
         entity_types_block = self._build_entity_types_block()
         content = self._build_content(record)
 
+        # Append human context if available (enriches extraction)
+        human_context = record.get("human_context")
+        if human_context:
+            content += f"\n\nAdditional context from human:\n{human_context}"
+
         prompt = EXTRACTION_TEMPLATE.format(
             record_type=record["type"],
             entity_types_block=entity_types_block,
@@ -246,8 +251,10 @@ class Indexer:
             try:
                 conn = _get_conn()
                 rows = conn.execute(
-                    "SELECT id, type, source, created_at, raw FROM records "
-                    "WHERE indexed = 0 ORDER BY created_at"
+                    "SELECT id, type, source, created_at, raw, human_context "
+                    "FROM records "
+                    "WHERE indexed = 0 AND classification = 'relevant' "
+                    "ORDER BY created_at"
                 ).fetchall()
 
                 if rows:
