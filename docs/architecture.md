@@ -18,8 +18,9 @@ pearscaff/
 │   ├── __init__.py        # BaseTool + ToolRegistry with auto-discovery
 │   ├── math.py            # Safe math expression evaluator
 │   └── web_search.py      # DuckDuckGo web search
-├── db.py                  # SQLite schema + queries (sessions, messages)
+├── db.py                  # SQLite schema + queries (sessions, messages, records)
 ├── bus.py                 # MessageBus — send/receive/poll over SQLite
+├── store.py               # System of Record — structured email/record storage
 ├── log.py                 # Shared session logger — unified timeline
 ├── status.py              # In-memory agent activity registry
 ├── terminal.py            # Raw terminal I/O for non-blocking REPL
@@ -77,12 +78,29 @@ Sessions are never closed. They persist and can be resumed at any time.
 ## Database Schema
 
 ```sql
+-- Communication
 sessions(id, initiated_by, summary, created_at)
 messages(id, session_id, from_agent, to_agent, content, reasoning, data, read, created_at)
 discord_threads(session_id, thread_id, channel_id)
+
+-- System of Record
+records(id, type, source, created_at, raw)
+emails(record_id, message_id, sender, recipient, subject, body, received_at)
 ```
 
 SQLite with WAL mode for concurrent reads/writes across threads.
+
+## System of Record
+
+Persistent structured storage for all domain data. Each expert owns writing to its tables; the worker reads.
+
+- **`records`** — Base table shared across all data types. Every record has an `id` (e.g. `email_001`), `type`, and `source` agent.
+- **`emails`** — Gmail-specific table. Deduplication via `message_id` UNIQUE constraint.
+- **`store.py`** — CRUD module: `save_email()`, `get_email()`, `list_emails()`.
+
+### Ownership
+- **Gmail expert writes**: after reading an email via browser, calls `save_email` tool to persist it.
+- **Worker reads**: can look up stored emails via `lookup_email` tool for context.
 
 ## Agent Types
 

@@ -52,6 +52,30 @@ def init_db() -> None:
             thread_id INTEGER NOT NULL,
             channel_id INTEGER NOT NULL
         );
+
+        -- System of Record
+        CREATE TABLE IF NOT EXISTS records (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            source TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            raw TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS emails (
+            record_id TEXT PRIMARY KEY REFERENCES records(id),
+            message_id TEXT UNIQUE,
+            sender TEXT,
+            recipient TEXT,
+            subject TEXT,
+            body TEXT,
+            received_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_emails_message_id
+            ON emails(message_id);
+        CREATE INDEX IF NOT EXISTS idx_records_type
+            ON records(type);
         """
     )
     conn.commit()

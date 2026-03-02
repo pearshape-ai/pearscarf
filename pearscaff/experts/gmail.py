@@ -24,6 +24,11 @@ When navigating Gmail:
 - Clicking an email opens it in a detail view
 - Use the browser tools to inspect the page when unsure about selectors
 
+System of Record:
+- After reading an email, ALWAYS save it using the save_email tool before replying.
+- Include the record_id from save_email in your reply so the worker can reference it.
+- If save_email returns that the email is a duplicate, note the existing record.
+
 IMPORTANT: You MUST use the reply tool to send your results back. \
 Your text responses are only logged internally — nobody sees them unless you use reply.
 
@@ -491,6 +496,61 @@ def login(headed: bool = True) -> None:
             pass
 
 
+class SaveEmailTool(BaseTool):
+    name = "save_email"
+    description = (
+        "Save an email to the system of record for future reference and deduplication. "
+        "Call this after reading an email. Returns the record_id (e.g. 'email_001') "
+        "or indicates the email is a duplicate."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "sender": {
+                "type": "string",
+                "description": "Sender name and email, e.g. 'John <john@example.com>'",
+            },
+            "subject": {
+                "type": "string",
+                "description": "Email subject line",
+            },
+            "body": {
+                "type": "string",
+                "description": "Email body text",
+            },
+            "message_id": {
+                "type": "string",
+                "description": "Gmail's unique message ID (from URL hash or headers), used for deduplication",
+            },
+            "received_at": {
+                "type": "string",
+                "description": "Date the email was received",
+            },
+            "recipient": {
+                "type": "string",
+                "description": "Recipient email address",
+            },
+        },
+        "required": ["sender", "subject", "body"],
+    }
+
+    def execute(self, **kwargs: Any) -> str:
+        from pearscaff import store
+
+        record_id = store.save_email(
+            source="gmail_expert",
+            sender=kwargs["sender"],
+            subject=kwargs["subject"],
+            body=kwargs["body"],
+            message_id=kwargs.get("message_id"),
+            recipient=kwargs.get("recipient", ""),
+            received_at=kwargs.get("received_at", ""),
+        )
+        if record_id is None:
+            return "Duplicate email — already stored in the system of record."
+        return f"Email saved as {record_id}."
+
+
 def _register_gmail_tools(registry: ToolRegistry, get_page: callable) -> None:
     for tool_cls in [
         BrowserNavigateTool,
@@ -505,6 +565,7 @@ def _register_gmail_tools(registry: ToolRegistry, get_page: callable) -> None:
         GmailMarkAsReadTool,
     ]:
         registry.register(tool_cls(get_page))
+    registry.register(SaveEmailTool())
 
 
 def create_gmail_expert(

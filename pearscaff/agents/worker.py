@@ -25,6 +25,10 @@ Available experts:
 - gmail_expert: Operates Gmail through a headless browser. Can read emails, \
 list unread messages, mark as read, and perform other Gmail operations.
 
+System of Record:
+- Emails read by the gmail_expert are stored with a record_id (e.g. "email_001").
+- You can look up previously stored emails using the lookup_email tool.
+
 IMPORTANT: You MUST use the send_message tool to communicate. Your text responses \
 are only logged internally — nobody sees them unless you use send_message.
 
@@ -84,6 +88,42 @@ class SendMessageTool(BaseTool):
         return f"Message sent to {to}."
 
 
+class LookupEmailTool(BaseTool):
+    """Worker uses this to look up previously stored emails."""
+
+    name = "lookup_email"
+    description = (
+        "Look up a previously stored email by its record ID. "
+        "Returns the full email details (sender, subject, body, date)."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "record_id": {
+                "type": "string",
+                "description": "The email record ID, e.g. 'email_001'",
+            },
+        },
+        "required": ["record_id"],
+    }
+
+    def execute(self, **kwargs: Any) -> str:
+        from pearscaff import store
+
+        record_id = kwargs["record_id"]
+        email = store.get_email(record_id)
+        if not email:
+            return f"No email found with record_id '{record_id}'."
+        parts = [
+            f"Record: {email['record_id']}",
+            f"From: {email['sender']}",
+            f"Subject: {email['subject']}",
+            f"Date: {email['received_at']}",
+            f"\nBody:\n{email['body']}",
+        ]
+        return "\n".join(parts)
+
+
 def create_worker_agent(
     bus: MessageBus,
     session_id: str,
@@ -97,6 +137,7 @@ def create_worker_agent(
     send_tool = SendMessageTool(bus)
     send_tool._session_id = session_id
     registry.register(send_tool)
+    registry.register(LookupEmailTool())
 
     agent = BaseAgent(
         tool_registry=registry,
