@@ -141,6 +141,8 @@ def run_bot() -> None:
     if not DISCORD_BOT_TOKEN:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 
+    from pearscaff.indexer import Indexer
+
     bus = MessageBus()
 
     # Start Gmail expert runner
@@ -157,11 +159,17 @@ def run_bot() -> None:
     worker_runner.start()
     print("Worker agent started.")
 
+    # Start Indexer
+    indexer = Indexer()
+    indexer.start()
+    print("Indexer started.")
+
     # Run Discord bot
     bot = PearscaffBot(bus)
     try:
         bot.run(DISCORD_BOT_TOKEN)
     finally:
+        indexer.stop()
         worker_runner.stop()
         gmail_runner.stop()
         gmail_manager.close()

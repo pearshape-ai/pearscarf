@@ -18,9 +18,11 @@ pearscaff/
 │   ├── __init__.py        # BaseTool + ToolRegistry with auto-discovery
 │   ├── math.py            # Safe math expression evaluator
 │   └── web_search.py      # DuckDuckGo web search
-├── db.py                  # SQLite schema + queries (sessions, messages, records)
+├── db.py                  # SQLite schema + queries (sessions, messages, records, graph)
 ├── bus.py                 # MessageBus — send/receive/poll over SQLite
 ├── store.py               # System of Record — structured email/record storage
+├── graph.py               # Knowledge graph CRUD — entities, edges, facts
+├── indexer.py             # Indexer — background LLM extraction into knowledge graph
 ├── log.py                 # Shared session logger — unified timeline
 ├── status.py              # In-memory agent activity registry
 ├── terminal.py            # Raw terminal I/O for non-blocking REPL
@@ -84,8 +86,14 @@ messages(id, session_id, from_agent, to_agent, content, reasoning, data, read, c
 discord_threads(session_id, thread_id, channel_id)
 
 -- System of Record
-records(id, type, source, created_at, raw)
+records(id, type, source, created_at, raw, indexed)
 emails(record_id, message_id, sender, recipient, subject, body, received_at)
+
+-- Knowledge Graph
+entity_types(id, name, description, extract_fields, added_at)
+entities(id, type, name, metadata, created_at)
+edges(id, from_entity, to_entity, relationship, source_record, created_at)
+facts(id, entity_id, attribute, value, source_record, updated_at)
 ```
 
 SQLite with WAL mode for concurrent reads/writes across threads.
@@ -94,13 +102,36 @@ SQLite with WAL mode for concurrent reads/writes across threads.
 
 Persistent structured storage for all domain data. Each expert owns writing to its tables; the worker reads.
 
-- **`records`** — Base table shared across all data types. Every record has an `id` (e.g. `email_001`), `type`, and `source` agent.
+- **`records`** — Base table shared across all data types. Every record has an `id` (e.g. `email_001`), `type`, and `source` agent. The `indexed` flag tracks whether the Indexer has processed it.
 - **`emails`** — Gmail-specific table. Deduplication via `message_id` UNIQUE constraint.
 - **`store.py`** — CRUD module: `save_email()`, `get_email()`, `list_emails()`.
 
 ### Ownership
 - **Gmail expert writes**: after reading an email via browser, calls `save_email` tool to persist it.
 - **Worker reads**: can look up stored emails via `lookup_email` tool for context.
+
+## Knowledge Graph
+
+The Indexer processes records into a knowledge graph of entities, relationships, and facts.
+
+- **`entity_types`** — Registry of extractable types (person, company). Seeded on first run. Drives the LLM extraction prompt.
+- **`entities`** — Graph nodes. Sequential IDs per type (`person_001`, `company_001`). Metadata stored as JSON.
+- **`edges`** — Graph relationships between entities (e.g. `person_001 --works_at--> company_001`). Linked to source record.
+- **`facts`** — Living state attributes on entities (e.g. person's email, role). Upserted — same entity+attribute updates rather than duplicates.
+- **`graph.py`** — CRUD module: `find_entity()`, `create_entity()`, `create_edge()`, `upsert_fact()`.
+
+### Indexer (`indexer.py`)
+
+Background daemon thread that polls `records WHERE indexed = 0` every 5 seconds. For each unindexed record:
+
+1. Reads full content from typed table (e.g. emails)
+2. Builds extraction prompt from `entity_types` registry
+3. Calls LLM for structured JSON extraction
+4. Resolves entities against existing graph (exact name + metadata match)
+5. Creates edges and upserts facts
+6. Marks record as indexed
+
+Logs to `session.log` as `[indexer]`.
 
 ## Agent Types
 

@@ -41,7 +41,7 @@ Expert Agents (Gmail via headless browser)
 
 Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via SQLite polling. A unified log at `logs/session.log` records every action across all agents.
 
-Emails read by the Gmail expert are persisted to a System of Record (`records` + `emails` tables) with deduplication. The worker can look up stored emails by record ID.
+Emails read by the Gmail expert are persisted to a System of Record (`records` + `emails` tables) with deduplication. A background Indexer processes new records through an LLM to extract entities, relationships, and facts into a knowledge graph.
 
 ## REPL
 

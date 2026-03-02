@@ -76,6 +76,70 @@ def init_db() -> None:
             ON emails(message_id);
         CREATE INDEX IF NOT EXISTS idx_records_type
             ON records(type);
+
+        -- Knowledge Graph
+        CREATE TABLE IF NOT EXISTS entity_types (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            extract_fields TEXT,
+            added_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS entities (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            metadata TEXT,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS edges (
+            id TEXT PRIMARY KEY,
+            from_entity TEXT NOT NULL REFERENCES entities(id),
+            to_entity TEXT NOT NULL REFERENCES entities(id),
+            relationship TEXT NOT NULL,
+            source_record TEXT REFERENCES records(id),
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS facts (
+            id TEXT PRIMARY KEY,
+            entity_id TEXT NOT NULL REFERENCES entities(id),
+            attribute TEXT NOT NULL,
+            value TEXT NOT NULL,
+            source_record TEXT REFERENCES records(id),
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+        CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+        CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_entity);
+        CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_entity);
+        CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity_id);
+        """
+    )
+
+    # Add indexed column to records if not present (safe migration)
+    try:
+        conn.execute("ALTER TABLE records ADD COLUMN indexed INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_records_indexed ON records(indexed)"
+    )
+
+    # Seed entity types
+    conn.executescript(
+        """
+        INSERT OR IGNORE INTO entity_types (id, name, description, extract_fields, added_at)
+        VALUES
+            ('et_person', 'person',
+             'A human being. Look for names, email addresses, roles, titles.',
+             '["name", "email", "role"]', '2026-03-01'),
+            ('et_company', 'company',
+             'A business or organization. Look for company names, domains, industries.',
+             '["name", "domain"]', '2026-03-01');
         """
     )
     conn.commit()

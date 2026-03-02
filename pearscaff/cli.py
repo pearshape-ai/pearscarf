@@ -20,6 +20,7 @@ def run() -> None:
     from pearscaff.agents.worker import create_worker_agent
     from pearscaff.bus import MessageBus
     from pearscaff.experts.gmail import create_gmail_expert_for_runner
+    from pearscaff.indexer import Indexer
     from pearscaff.repl import SessionRepl
     from pearscaff.terminal import _restore_terminal
 
@@ -44,11 +45,18 @@ def run() -> None:
     sys.stdout.write("Worker agent started.\r\n")
     sys.stdout.flush()
 
+    # Start Indexer
+    indexer = Indexer()
+    indexer.start()
+    sys.stdout.write("Indexer started.\r\n")
+    sys.stdout.flush()
+
     # Run REPL in main thread
     repl = SessionRepl(bus)
     try:
         repl.run()
     finally:
+        indexer.stop()
         worker_runner.stop()
         gmail_runner.stop()
         gmail_manager.close()
