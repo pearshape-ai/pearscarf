@@ -1,5 +1,111 @@
 # Architecture
 
+## System Diagram
+
+```
+┌─────────────────────────────────────────────────┐
+│                   Human                          │
+│            (Discord / Terminal REPL)              │
+└──────────────────────┬──────────────────────────┘
+                       │ SQLite messages
+┌──────────────────────▼──────────────────────────┐
+│               Worker Agent                       │
+│    (reasoning, routing, triage, responds)         │
+└───┬──────────────┬──────────────┬───────────────┘
+    │              │              │
+    │ SQLite       │ SQLite       │ SQLite
+    │ messages     │ messages     │ messages
+    │              │              │
+┌───▼───┐   ┌─────▼─────┐   ┌───▼────────┐
+│ Gmail │   │  Indexer   │   │ Retriever  │
+│Expert │   │  (bg)      │   │            │
+└───┬───┘   └─────┬──────┘   └───┬────────┘
+    │             │              │
+    │ writes      │ writes       │ reads
+    │             │              │
+┌───▼─────────────▼──────────────▼────────────────┐
+│                  Storage                         │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
+│  │ SQLite   │ │ Graph    │ │ ChromaDB         │ │
+│  │ records  │ │ entities │ │ vector embeddings│ │
+│  │ emails   │ │ edges    │ │                  │ │
+│  │ sessions │ │ facts    │ │                  │ │
+│  └──────────┘ └──────────┘ └──────────────────┘ │
+└─────────────────────────────────────────────────┘
+```
+
+## Email Pipeline
+
+```
+New email arrives
+       │
+       ▼
+┌──────────────┐
+│ Gmail Expert │──── stores raw record + email ────┐
+└──────┬───────┘                                    │
+       │ sends full data to worker                  │
+       ▼                                            ▼
+┌──────────────┐                           ┌────────────────┐
+│   Worker     │                           │ System of      │
+│   (triage)   │                           │ Record (SQLite)│
+└──────┬───────┘                           └────────────────┘
+       │                                            ▲
+       ├── known entity? → auto: relevant           │
+       ├── obvious noise? → auto: noise             │
+       ├── uncertain? → ask human in Discord/REPL   │
+       │                                            │
+       ▼                                            │
+  classification stored on record ──────────────────┘
+       │
+       │ (if relevant)
+       ▼
+┌──────────────┐
+│   Indexer    │
+│  (background)│
+└──────┬───────┘
+       │
+       ├── LLM extraction → entities, edges, facts
+       ├── embed content → ChromaDB
+       └── mark as indexed
+```
+
+## Retriever Query Flow
+
+```
+"What do I know about Acme Corp?"
+       │
+       ▼
+┌──────────────┐
+│  Retriever   │
+└──────┬───────┘
+       │
+       ├── Step 1: Entity match?
+       │   └── Yes: "Acme Corp" found in entities table
+       │
+       ├── Step 2: Facts lookup
+       │   └── total_spend_q3: $13k, payment_terms: net 30
+       │
+       ├── Step 3: Graph traversal (2-3 hops)
+       │   ├── Michael Chen (person) ── works_at ──→ Acme Corp
+       │   ├── email_71 (Q3 invoice) ── mentions ──→ Acme Corp
+       │   └── email_42 (Partnership) ── mentions ──→ Acme Corp
+       │
+       ├── Step 4: Vector search (additional context)
+       │   └── email_88 (scaling discussion) ── similarity: 0.82
+       │
+       ▼
+┌──────────────────────────────────────────┐
+│ Context Package                          │
+│  facts: 2 attributes                    │
+│  related_records: 3 (2 graph, 1 vector) │
+│  entities: 1 person                     │
+│  reasoning: "Found entity, 2 facts..."  │
+└──────────────────────────────────────────┘
+       │
+       ▼
+  Worker formats and responds to human
+```
+
 ## Overview
 
 ```
