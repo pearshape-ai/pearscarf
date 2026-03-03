@@ -24,6 +24,9 @@ to the human using send_message
 Available experts:
 - gmail_expert: Operates Gmail through a headless browser. Can read emails, \
 list unread messages, mark as read, and perform other Gmail operations.
+- retriever: Searches the knowledge graph and vector store for context. Delegate \
+to it when the human asks about known people/companies, wants a briefing, or asks \
+questions that require searching past emails and stored knowledge.
 
 System of Record:
 - Emails read by the gmail_expert are stored with a record_id (e.g. "email_001").

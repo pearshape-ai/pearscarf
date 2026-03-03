@@ -213,3 +213,68 @@ def upsert_fact(
 
     conn.commit()
     return fact_id
+
+
+def get_entity_facts(entity_id: str) -> list[dict]:
+    """Get all facts for an entity."""
+    init_db()
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT id, attribute, value, source_record, updated_at "
+        "FROM facts WHERE entity_id = ? ORDER BY updated_at DESC",
+        (entity_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def traverse_graph(entity_id: str, max_depth: int = 3) -> dict:
+    """Walk edges from an entity up to max_depth hops.
+
+    Returns {entities: [...], edges: [...], source_records: [...]}.
+    """
+    init_db()
+    conn = _get_conn()
+
+    rows = conn.execute(
+        """
+        WITH RECURSIVE connected AS (
+            SELECT to_entity, relationship, source_record, 0 as depth
+            FROM edges WHERE from_entity = ?
+            UNION ALL
+            SELECT e.to_entity, e.relationship, e.source_record, c.depth + 1
+            FROM edges e JOIN connected c ON e.from_entity = c.to_entity
+            WHERE c.depth < ?
+        )
+        SELECT DISTINCT to_entity, relationship, source_record, depth
+        FROM connected
+        """,
+        (entity_id, max_depth),
+    ).fetchall()
+
+    entity_ids = set()
+    edge_list = []
+    source_records = set()
+
+    for row in rows:
+        entity_ids.add(row["to_entity"])
+        edge_list.append({
+            "to_entity": row["to_entity"],
+            "relationship": row["relationship"],
+            "source_record": row["source_record"],
+            "depth": row["depth"],
+        })
+        if row["source_record"]:
+            source_records.add(row["source_record"])
+
+    # Fetch full entity details
+    entities = []
+    for eid in entity_ids:
+        ent = get_entity(eid)
+        if ent:
+            entities.append(ent)
+
+    return {
+        "entities": entities,
+        "edges": edge_list,
+        "source_records": list(source_records),
+    }

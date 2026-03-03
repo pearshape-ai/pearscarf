@@ -11,7 +11,8 @@ pearscaff/
 │   └── runner.py          # AgentRunner — polling loop that feeds bus messages to agents
 ├── experts/
 │   ├── __init__.py        # Expert registry
-│   └── gmail.py           # Gmail expert — headless browser automation
+│   ├── gmail.py           # Gmail expert — headless browser automation
+│   └── retriever.py       # Retriever expert — knowledge graph + vector search
 ├── knowledge/
 │   └── __init__.py        # KnowledgeStore — file-based markdown storage
 ├── tools/
@@ -168,6 +169,16 @@ User-facing agent with a `send_message` tool for all outbound communication. Aut
 ### ExpertAgent (`agents/expert.py`)
 
 Domain-specialized with knowledge accumulation. Built-in `save_knowledge` tool and `reply` tool for sending results back. System prompt includes all previously stored knowledge.
+
+### Retriever (`experts/retriever.py`)
+
+Expert agent that searches the knowledge graph and vector store. The worker delegates context queries to it. Three query modes tried in sequence:
+
+1. **Entity search** — identify known entities referenced in the query
+2. **Facts lookup + graph traversal** — get attributes and walk edges up to 3 hops
+3. **Vector search** — ChromaDB semantic similarity for records not in the graph
+
+Tools: `search_entities`, `facts_lookup`, `graph_traverse`, `vector_search`.
 
 ### AgentRunner (`agents/runner.py`)
 

@@ -14,3 +14,9 @@
     - Place documentation in the `docs` folder and add regular documentation on getting started, usage, architecture and other important pieces as per situation.
 - Always update the README.md as per the latest changes according to the plan accepted
 - Delete the .gitignore immediately after the first file is already written (thats not gitignored) in the folder
+
+## Roadmap
+
+- `docs/roadmap.md` - The canonical list of what's built and what's next.
+    - Check off items when completed.
+    - Do not add new items — new items are added via specs from the planning process.

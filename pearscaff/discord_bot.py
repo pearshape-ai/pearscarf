@@ -141,6 +141,7 @@ def run_bot() -> None:
     if not DISCORD_BOT_TOKEN:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 
+    from pearscaff.experts.retriever import create_retriever_for_runner
     from pearscaff.indexer import Indexer
 
     bus = MessageBus()
@@ -150,6 +151,12 @@ def run_bot() -> None:
     gmail_runner = AgentRunner("gmail_expert", gmail_factory, bus)
     gmail_runner.start()
     print("Gmail expert started.")
+
+    # Start Retriever expert runner
+    retriever_factory = create_retriever_for_runner(bus=bus)
+    retriever_runner = AgentRunner("retriever", retriever_factory, bus)
+    retriever_runner.start()
+    print("Retriever started.")
 
     # Start Worker runner
     def worker_factory(session_id: str):
@@ -170,6 +177,7 @@ def run_bot() -> None:
         bot.run(DISCORD_BOT_TOKEN)
     finally:
         indexer.stop()
+        retriever_runner.stop()
         worker_runner.stop()
         gmail_runner.stop()
         gmail_manager.close()

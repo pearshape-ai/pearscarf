@@ -32,6 +32,7 @@ def run() -> None:
     from pearscaff.agents.worker import create_worker_agent
     from pearscaff.bus import MessageBus
     from pearscaff.experts.gmail import create_gmail_expert_for_runner
+    from pearscaff.experts.retriever import create_retriever_for_runner
     from pearscaff.indexer import Indexer
     from pearscaff.repl import SessionRepl
 
@@ -42,6 +43,13 @@ def run() -> None:
     gmail_runner = AgentRunner("gmail_expert", gmail_factory, bus)
     gmail_runner.start()
     sys.stdout.write("Gmail expert started.\r\n")
+    sys.stdout.flush()
+
+    # Start Retriever expert runner
+    retriever_factory = create_retriever_for_runner(bus=bus)
+    retriever_runner = AgentRunner("retriever", retriever_factory, bus)
+    retriever_runner.start()
+    sys.stdout.write("Retriever started.\r\n")
     sys.stdout.flush()
 
     # Start Worker runner
@@ -65,6 +73,7 @@ def run() -> None:
         repl.run()
     finally:
         indexer.stop()
+        retriever_runner.stop()
         worker_runner.stop()
         gmail_runner.stop()
         gmail_manager.close()
