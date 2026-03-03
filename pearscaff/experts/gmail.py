@@ -36,6 +36,10 @@ Your text responses are only logged internally — nobody sees them unless you u
 - Do NOT send pleasantries, thank-yous, or farewells. Just deliver results.
 - Use reply exactly once per request. After replying, your work is done.
 
+Session errors:
+- If a tool returns a "session expired" error, immediately reply with that error \
+message so the worker can inform the human. Do not try to recover or retry.
+
 Other notes:
 - When you discover useful selectors, navigation patterns, or timing info, save them
   with the save_knowledge tool so you can work more efficiently next time.
@@ -239,6 +243,21 @@ class BrowserGetHtmlTool(BaseTool):
 
 # --- Gmail-specific tools ---
 
+_SESSION_EXPIRED_MSG = (
+    "Gmail session expired. The browser was redirected to the Google sign-in page. "
+    "Run 'pearscaff expert gmail --login' to re-authenticate."
+)
+
+
+def _check_session(page: Any) -> str | None:
+    """Check if the browser was redirected to a login page.
+
+    Returns an error message if session expired, None if OK.
+    """
+    if "accounts.google.com" in page.url:
+        return _SESSION_EXPIRED_MSG
+    return None
+
 
 class GmailGetUnreadTool(BaseTool):
     name = "gmail_get_unread"
@@ -262,6 +281,10 @@ class GmailGetUnreadTool(BaseTool):
             timeout=30000,
         )
         page.wait_for_timeout(3000)  # Gmail takes time to load
+
+        expired = _check_session(page)
+        if expired:
+            return expired
 
         # Try to find unread email rows
         unread = page.query_selector_all("tr.zE")
@@ -303,6 +326,10 @@ class GmailReadLatestTool(BaseTool):
             timeout=30000,
         )
         page.wait_for_timeout(3000)
+
+        expired = _check_session(page)
+        if expired:
+            return expired
 
         # Find and click first unread
         unread = page.query_selector("tr.zE")
@@ -366,6 +393,10 @@ class GmailMarkAsReadTool(BaseTool):
 
     def execute(self, **kwargs: Any) -> str:
         page = self._get_page()
+
+        expired = _check_session(page)
+        if expired:
+            return expired
 
         # Try the "More" menu -> "Mark as read" approach
         # First try the toolbar mark-as-read button
