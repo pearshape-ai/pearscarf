@@ -19,6 +19,7 @@
 - [x] v0.9.0 — Retriever agent (explicit context queries: facts, graph, vector)
 - [x] v0.9.1 — Project documentation (vision, roadmap, diagrams)
 - [x] v0.9.2 — Gmail session expiry detection (immediate error instead of silent failure)
+- [x] v0.9.3 — Discord bot fixes (role mention support, on_message error handling)
 
 ## Next
 

@@ -32,23 +32,47 @@ class PearscaffBot(discord.Client):
         if not self.user:
             return
 
-        # Respond to DMs or mentions
+        # Respond to DMs or mentions (user mention OR role mention matching bot name)
         is_dm = isinstance(message.channel, discord.DMChannel)
-        is_mention = self.user.mentioned_in(message)
+        is_user_mention = self.user.mentioned_in(message)
+        is_role_mention = any(
+            role.name.lower() == self.user.name.lower()
+            for role in message.role_mentions
+        )
+        is_mention = is_user_mention or is_role_mention
 
         if not is_dm and not is_mention:
             # Check if this is a reply in a thread we created
             if not isinstance(message.channel, discord.Thread):
                 return
 
-        # Strip the bot mention from the message text
+        # Strip bot mention from the message text (both user and role forms)
         content = message.content
-        if is_mention:
+        if is_user_mention:
             content = content.replace(f"<@{self.user.id}>", "").strip()
+        if is_role_mention:
+            for role in message.role_mentions:
+                if role.name.lower() == self.user.name.lower():
+                    content = content.replace(f"<@&{role.id}>", "").strip()
 
         if not content:
             return
 
+        try:
+            await self._handle_message(message, content, is_dm)
+        except Exception as exc:
+            print(f"on_message error: {exc}")
+            log.write("human", "--", "error", f"Discord on_message failed: {exc}")
+            # Try to respond so the user knows something went wrong
+            try:
+                await message.reply(f"Error processing message: {exc}")
+            except Exception:
+                pass
+
+    async def _handle_message(
+        self, message: discord.Message, content: str, is_dm: bool
+    ) -> None:
+        """Process a validated message. Separated for error handling."""
         # Determine session: if in a thread, look up existing session
         if isinstance(message.channel, discord.Thread):
             session_id = db.get_session_by_thread(message.channel.id)
