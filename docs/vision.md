@@ -1,12 +1,12 @@
 # Vision
 
-## Thesis
+## Core Architecture
 
-MCPs are a transitional technology. Pre-built connectors work today but they're rigid — every new integration requires a new connector, every API change breaks things.
+The core architectural principle is separation of concerns: experts own their domains, the worker reasons, the storage layer connects everything.
 
-The future is expert agents that navigate UIs directly via headless browsers, coordinated by a context-savvy worker agent. The API contract between agents is natural language intent, not schema. Agent-to-agent communication replaces API-to-API integration.
+How an expert accesses its domain — headless browser, MCP, raw API, whatever — is an implementation detail. The system doesn't care. Pick the right tool for the job. The architecture supports swapping between transport mechanisms without touching anything outside the expert.
 
-PearScaff is built to prove this thesis.
+The real differentiator is the context layer: how well heterogeneous data gets connected, stored, and surfaced to models when they need it. MCPs, APIs, and headless browsers are all valid transport mechanisms. What matters is what happens after the data arrives.
 
 ## How the System Learns
 
@@ -37,14 +37,14 @@ A receipt arrives from Acme. Before responding, the worker asks the Retriever: w
 
 ## Multi-Expert Future
 
-Each expert agent owns a domain and operates its UI via headless browser:
+Each expert agent owns a domain and accesses it through whatever transport makes sense — MCP, API, or headless browser:
 
     Worker
-      +-- Gmail Expert (email)
-      +-- Linear Expert (issues, project tracking)
+      +-- Gmail Expert (email — MCP with OAuth)
+      +-- Linear Expert (issues, project tracking — MCP)
       +-- Calendar Expert (events, scheduling)
       +-- CRM Expert (contacts, deals)
-      +-- ... any UI accessible via browser
+      +-- ... any tool with an API, MCP, or accessible UI
 
 Each expert writes to its own typed tables. The knowledge graph connects them through shared entities. An email mentioning an issue links to the Linear issue automatically — no explicit integration between the two experts needed.
 
