@@ -8,6 +8,8 @@ dependencies = [
     "chromadb",
     "click",
     "discord.py",
+    "google-api-python-client",
+    "google-auth-oauthlib",
     "httpx",
     "playwright",
     "python-dotenv",

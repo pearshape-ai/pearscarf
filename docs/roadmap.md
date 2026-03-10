@@ -21,11 +21,11 @@
 - [x] v0.9.2 — Gmail session expiry detection (immediate error instead of silent failure)
 - [x] v0.9.3 — Discord bot fixes (role mention support, on_message error handling)
 - [x] v0.10.0 — Roadmap and vision evolution (docs only)
+- [x] v0.11.0 — Gmail MCP integration + email polling loop
 
 ## Next
 
-- [ ] v0.11.0 — Mem0 integration (replace facts table + ChromaDB with Mem0 memory layer)
-- [ ] v0.12.0 — Gmail MCP (OAuth, email polling loop, notifications)
+- [ ] v0.12.0 — Mem0 integration (replace facts table + ChromaDB with Mem0 memory layer)
 - [ ] v0.13.0 — Context quality (LLM-assisted entity resolution, memory quality filtering, re-indexing)
 - [ ] v0.14.0 — LangSmith integration (traces, cost tracking)
 - [ ] v0.15.0 — Linear expert via MCP (second data source, cross-source context)

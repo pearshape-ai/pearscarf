@@ -2,7 +2,7 @@
 
 Operational infrastructure that grows itself.
 
-Multi-agent system with async communication over SQLite. A worker agent handles reasoning and routing, expert agents operate domain-specific UIs through headless browsers.
+Multi-agent system with async communication over SQLite. A worker agent handles reasoning and routing, expert agents access domain services through APIs or headless browsers.
 
 ## Quick Start
 
@@ -12,8 +12,9 @@ source .venv/bin/activate
 playwright install chromium
 cp .env.example .env          # add ANTHROPIC_API_KEY
 
-pearscaff expert gmail --login  # first-time Gmail login
-pearscaff run                   # start the full system
+pearscaff gmail --auth             # Gmail OAuth setup (or: expert gmail --login for browser)
+pearscaff run                      # start the full system
+pearscaff run --poll-email         # start with automatic email polling
 ```
 
 ## Commands
@@ -21,9 +22,12 @@ pearscaff run                   # start the full system
 ```bash
 pearscaff --version                # print version
 pearscaff run                      # worker + experts + session REPL
+pearscaff run --poll-email         # full system + automatic email polling
 pearscaff discord                  # worker + experts + Discord bot
+pearscaff discord --poll-email     # Discord + email polling
 pearscaff chat                     # direct chat (no session bus)
-pearscaff expert gmail --login     # Gmail login
+pearscaff gmail --auth             # Gmail OAuth setup for API access
+pearscaff expert gmail --login     # Gmail browser login (legacy)
 pearscaff expert gmail             # standalone Gmail expert
 ```
 
@@ -36,7 +40,7 @@ REPL / Discord (human)
     ↓ SQLite messages
 Worker Agent (reasoning, routing, triage)
     ↓ SQLite messages
-Expert Agents (Gmail browser, Retriever graph+vector)
+Expert Agents (Gmail API/browser, Retriever graph+vector)
     ↓
 Indexer (background) → Knowledge Graph + ChromaDB
 ```

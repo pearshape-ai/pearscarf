@@ -5,10 +5,14 @@
 | Command | Description |
 |---|---|
 | `pearscaff run` | Full system: worker + experts + session REPL |
+| `pearscaff run --poll-email` | Full system with automatic email polling |
 | `pearscaff discord` | Full system with Discord frontend |
+| `pearscaff discord --poll-email` | Discord mode with automatic email polling |
 | `pearscaff chat` | Direct chat (no session bus) |
+| `pearscaff gmail --auth` | Run Gmail OAuth flow for API-based access |
 | `pearscaff expert gmail` | Standalone Gmail expert |
-| `pearscaff expert gmail --login` | Log into Gmail (first-time setup) |
+| `pearscaff expert gmail --login` | Log into Gmail via browser (legacy) |
+| `pearscaff expert gmail --auth` | Gmail OAuth setup (same as `gmail --auth`) |
 
 All commands also available via `ps`.
 
@@ -35,7 +39,7 @@ The REPL shows the active session in the prompt:
 When you type a message:
 1. It's sent to the **worker agent** via SQLite
 2. Worker reasons about it — may delegate to an **expert agent**
-3. Expert processes (e.g. reads Gmail via headless browser)
+3. Expert processes (e.g. reads Gmail via API or headless browser)
 4. Result flows back: expert → worker → you
 
 ### Notifications
@@ -67,11 +71,34 @@ Routes tasks to expert agents (e.g. `gmail_expert` for email operations)
 
 ## Gmail Expert Tools
 
+### API transport (OAuth)
+
+**Gmail:** `gmail_get_unread`, `gmail_read_email`, `gmail_search`, `gmail_mark_as_read`
+
+### Browser transport (legacy)
+
 **Browser:** `browser_navigate`, `browser_click`, `browser_type`, `browser_get_text`, `browser_get_html`, `browser_screenshot`, `browser_wait`
 
 **Gmail:** `gmail_get_unread`, `gmail_read_latest`, `gmail_mark_as_read`
 
 **Knowledge:** `save_knowledge` — stores operational knowledge for future sessions
+
+## Email Polling
+
+Enable automatic email checking with `--poll-email`:
+
+```bash
+pearscaff run --poll-email
+pearscaff discord --poll-email
+```
+
+Requires Gmail OAuth credentials. Checks every `GMAIL_POLL_INTERVAL` seconds (default: 300).
+
+Each new email:
+1. Gets saved to the System of Record
+2. Creates a new session
+3. Triggers worker triage (auto-classify or ask human)
+4. Shows up as a notification in Discord/REPL
 
 ## Adding Custom Worker Tools
 
@@ -107,3 +134,7 @@ Auto-discovered at startup.
 | `MAX_TURNS` | `10` | Max tool-call loop iterations |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
 | `DB_PATH` | `pearscaff.db` | SQLite database path |
+| `GMAIL_CLIENT_ID` | | Google OAuth client ID |
+| `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |
+| `GMAIL_REFRESH_TOKEN` | | OAuth refresh token (from `gmail --auth`) |
+| `GMAIL_POLL_INTERVAL` | `300` | Email polling interval in seconds |

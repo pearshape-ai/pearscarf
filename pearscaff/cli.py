@@ -26,12 +26,14 @@ def cli() -> None:
 
 
 @cli.command()
-def run() -> None:
+@click.option("--poll-email", is_flag=True, default=False,
+              help="Enable email polling loop (requires Gmail OAuth credentials)")
+def run(poll_email: bool) -> None:
     """Start the full system: worker + experts + REPL."""
     from pearscaff.agents.runner import AgentRunner
     from pearscaff.agents.worker import create_worker_agent
     from pearscaff.bus import MessageBus
-    from pearscaff.experts.gmail import create_gmail_expert_for_runner
+    from pearscaff.experts.gmail import create_gmail_expert_for_runner, start_email_polling
     from pearscaff.experts.retriever import create_retriever_for_runner
     from pearscaff.indexer import Indexer
     from pearscaff.repl import SessionRepl
@@ -39,11 +41,23 @@ def run() -> None:
     bus = MessageBus()
 
     # Start Gmail expert runner
-    gmail_factory, gmail_manager = create_gmail_expert_for_runner(bus=bus)
+    gmail_factory, gmail_manager, mcp_client = create_gmail_expert_for_runner(bus=bus)
     gmail_runner = AgentRunner("gmail_expert", gmail_factory, bus)
     gmail_runner.start()
     sys.stdout.write("Gmail expert started.\r\n")
     sys.stdout.flush()
+
+    # Start email polling if requested
+    if poll_email:
+        if not mcp_client:
+            raise SystemExit(
+                "Email polling requires Gmail OAuth credentials.\n"
+                "Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN in .env.\n"
+                "Run 'pearscaff gmail --auth' to set up OAuth."
+            )
+        start_email_polling(bus, mcp_client)
+        sys.stdout.write("Email polling started.\r\n")
+        sys.stdout.flush()
 
     # Start Retriever expert runner
     retriever_factory = create_retriever_for_runner(bus=bus)
@@ -76,15 +90,18 @@ def run() -> None:
         retriever_runner.stop()
         worker_runner.stop()
         gmail_runner.stop()
-        gmail_manager.close()
+        if gmail_manager:
+            gmail_manager.close()
 
 
 @cli.command()
-def discord() -> None:
+@click.option("--poll-email", is_flag=True, default=False,
+              help="Enable email polling loop (requires Gmail OAuth credentials)")
+def discord(poll_email: bool) -> None:
     """Run the full system with Discord as the frontend."""
     from pearscaff.discord_bot import run_bot
 
-    run_bot()
+    run_bot(poll_email=poll_email)
 
 
 @cli.command()
@@ -118,8 +135,15 @@ def expert() -> None:
 
 @expert.command()
 @click.option("--login", is_flag=True, help="Open a visible browser to log into Gmail.")
-def gmail(login: bool) -> None:
-    """Gmail expert — login or direct standalone mode."""
+@click.option("--auth", is_flag=True, help="Run Gmail OAuth flow for API-based access.")
+def gmail(login: bool, auth: bool) -> None:
+    """Gmail expert — login, OAuth setup, or direct standalone mode."""
+    if auth:
+        from pearscaff.experts.gmail import run_oauth_flow
+
+        run_oauth_flow()
+        return
+
     from pearscaff.experts.gmail import create_gmail_expert
     from pearscaff.experts.gmail import login as gmail_login
 
@@ -156,6 +180,18 @@ def gmail(login: bool) -> None:
         click.echo("\nbye.")
     finally:
         manager.close()
+
+
+@cli.command("gmail")
+@click.option("--auth", is_flag=True, help="Run Gmail OAuth flow for API-based access.")
+def gmail_shortcut(auth: bool) -> None:
+    """Gmail utilities (shortcut for 'expert gmail')."""
+    if auth:
+        from pearscaff.experts.gmail import run_oauth_flow
+
+        run_oauth_flow()
+        return
+    click.echo("Usage: pearscaff gmail --auth")
 
 
 if __name__ == "__main__":
