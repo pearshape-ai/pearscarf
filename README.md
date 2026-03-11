@@ -69,3 +69,4 @@ Commands: `/sessions`, `/switch <id>`, `/new`, `/history [id]`
 - [Getting Started](docs/getting-started.md)
 - [Usage](docs/usage.md)
 - [Architecture](docs/architecture.md)
+- [Changelog](CHANGELOG.md)
