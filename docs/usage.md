@@ -142,3 +142,6 @@ Auto-discovered at startup.
 | `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL (required for mem0) |
 | `NEO4J_USER` | `neo4j` | Neo4j username (required for mem0) |
 | `NEO4J_PASSWORD` | | Neo4j password (required for mem0) |
+| `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing (`true`/`false`) |
+| `LANGSMITH_API_KEY` | | LangSmith API key (required when tracing enabled) |
+| `LANGSMITH_PROJECT` | `pears` | LangSmith project name |

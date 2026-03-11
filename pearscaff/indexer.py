@@ -13,6 +13,7 @@ import traceback
 from pearscaff import log, store
 from pearscaff.db import _get_conn, init_db
 from pearscaff.memory import MemoryBackend, get_memory_backend
+from pearscaff.tracing import trace_span
 
 
 class Indexer:
@@ -59,33 +60,38 @@ class Indexer:
 
         log.write("indexer", "--", "action", f"processing {record_id}")
 
-        content = self._build_content(record)
+        with trace_span(
+            "indexer.process_record",
+            run_type="chain",
+            metadata={"record_id": record_id, "record_type": record["type"]},
+        ):
+            content = self._build_content(record)
 
-        # Append human context if available (enriches extraction)
-        human_context = record.get("human_context")
-        if human_context:
-            content += f"\n\nAdditional context from human:\n{human_context}"
+            # Append human context if available (enriches extraction)
+            human_context = record.get("human_context")
+            if human_context:
+                content += f"\n\nAdditional context from human:\n{human_context}"
 
-        metadata = {
-            "record_id": record_id,
-            "type": record["type"],
-            "source": record["source"],
-            "created_at": record["created_at"],
-        }
-        if record["type"] == "email":
-            email = store.get_email(record_id)
-            if email:
-                metadata["sender"] = email.get("sender", "")
-                metadata["subject"] = email.get("subject", "")
+            metadata = {
+                "record_id": record_id,
+                "type": record["type"],
+                "source": record["source"],
+                "created_at": record["created_at"],
+            }
+            if record["type"] == "email":
+                email = store.get_email(record_id)
+                if email:
+                    metadata["sender"] = email.get("sender", "")
+                    metadata["subject"] = email.get("subject", "")
 
-        try:
-            self._memory.add(content, metadata)
-        except Exception as exc:
-            log.write("indexer", "--", "error", f"memory.add failed for {record_id}: {exc}")
-            return
+            try:
+                self._memory.add(content, metadata)
+            except Exception as exc:
+                log.write("indexer", "--", "error", f"memory.add failed for {record_id}: {exc}")
+                return
 
-        self._mark_indexed(record_id)
-        log.write("indexer", "--", "action", f"indexed {record_id}")
+            self._mark_indexed(record_id)
+            log.write("indexer", "--", "action", f"indexed {record_id}")
 
     def _mark_indexed(self, record_id: str) -> None:
         conn = _get_conn()

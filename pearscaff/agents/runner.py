@@ -9,6 +9,7 @@ from typing import Any
 from pearscaff import log, status
 from pearscaff.agents.base import BaseAgent
 from pearscaff.bus import MessageBus
+from pearscaff.tracing import trace_span
 
 
 class AgentRunner:
@@ -81,54 +82,66 @@ class AgentRunner:
         agent = self._get_agent(session_id)
 
         status.set_status(self._agent_name, session_id, "working")
-        try:
-            # Set session context so agent tools know where to send messages
-            if hasattr(agent, "_send_tool") and agent._send_tool:
-                agent._send_tool._session_id = session_id
-            if hasattr(agent, "_reply_tool") and agent._reply_tool:
-                agent._reply_tool._session_id = session_id
-                agent._reply_tool._reply_to = from_agent
+        with trace_span(
+            f"{self._agent_name}.process_message",
+            run_type="chain",
+            metadata={
+                "agent": self._agent_name,
+                "session_id": session_id,
+                "from_agent": from_agent,
+            },
+            inputs={"content": content[:500]},
+        ) as span:
+            try:
+                # Set session context so agent tools know where to send messages
+                if hasattr(agent, "_send_tool") and agent._send_tool:
+                    agent._send_tool._session_id = session_id
+                if hasattr(agent, "_reply_tool") and agent._reply_tool:
+                    agent._reply_tool._session_id = session_id
+                    agent._reply_tool._reply_to = from_agent
 
-            # Build context from session history for the agent
-            history = self._bus.get_history(session_id)
-            agent._messages.clear()
-            for h in history:
-                if h["from_agent"] == self._agent_name:
-                    agent._messages.append(
-                        {"role": "assistant", "content": h["content"]}
-                    )
+                # Build context from session history for the agent
+                history = self._bus.get_history(session_id)
+                agent._messages.clear()
+                for h in history:
+                    if h["from_agent"] == self._agent_name:
+                        agent._messages.append(
+                            {"role": "assistant", "content": h["content"]}
+                        )
+                    else:
+                        agent._messages.append(
+                            {"role": "user", "content": h["content"]}
+                        )
+                # Remove the last message (it's the one we're about to process,
+                # and agent.run() will append it)
+                if agent._messages and agent._messages[-1]["role"] == "user":
+                    agent._messages.pop()
+
+                # Run the agent — it uses tools (send_message / reply) to
+                # communicate explicitly. No auto-reply from the runner.
+                response = agent.run(content)
+
+                log.write(
+                    self._agent_name,
+                    session_id,
+                    "thinking",
+                    f"agent output (not sent): {response[:200]}",
+                )
+                if span:
+                    span.end(outputs={"response": response[:500]})
+            except Exception as exc:
+                log.write(
+                    self._agent_name,
+                    session_id,
+                    "error",
+                    f"{type(exc).__name__}: {exc}",
+                )
+                if self._on_error:
+                    self._on_error(session_id, exc)
                 else:
-                    agent._messages.append(
-                        {"role": "user", "content": h["content"]}
-                    )
-            # Remove the last message (it's the one we're about to process,
-            # and agent.run() will append it)
-            if agent._messages and agent._messages[-1]["role"] == "user":
-                agent._messages.pop()
-
-            # Run the agent — it uses tools (send_message / reply) to
-            # communicate explicitly. No auto-reply from the runner.
-            response = agent.run(content)
-
-            log.write(
-                self._agent_name,
-                session_id,
-                "thinking",
-                f"agent output (not sent): {response[:200]}",
-            )
-        except Exception as exc:
-            log.write(
-                self._agent_name,
-                session_id,
-                "error",
-                f"{type(exc).__name__}: {exc}",
-            )
-            if self._on_error:
-                self._on_error(session_id, exc)
-            else:
-                traceback.print_exc()
-        finally:
-            status.clear_status(self._agent_name, session_id)
+                    traceback.print_exc()
+            finally:
+                status.clear_status(self._agent_name, session_id)
 
     def _loop(self) -> None:
         while not self._stop.is_set():

@@ -117,6 +117,7 @@ class ExpertAgent(BaseAgent):
         super().__init__(
             tool_registry=tool_registry,
             system_prompt=system_prompt,
+            agent_name=agent_name or domain,
             on_tool_call=on_tool_call,
             on_text=on_text,
             on_tool_result=on_tool_result,

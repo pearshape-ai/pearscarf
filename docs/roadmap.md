@@ -11,5 +11,5 @@ Next: integrate Graphiti and Cognee as alternative backends behind the same inte
 - Linear expert agent via MCP — second data source, validate cross-source entity connection
 - Cloud deployment — always-on system running on Mac Mini or cloud, Gmail polling, Discord as the human interface
 - Implicit retrieval — worker auto-retrieves context before responding, without the human asking
-- Observability — LangSmith or Langfuse for trace visualization, cost tracking, and evaluation
+- ~~Observability~~ — done (LangSmith, v1.1.0)
 - Additional expert agents (Calendar, CRM) as the pattern stabilizes

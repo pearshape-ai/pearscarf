@@ -22,3 +22,7 @@ MEMORY_BACKEND = os.getenv("MEMORY_BACKEND", "sqlite")  # "mem0" | "sqlite"
 NEO4J_URL = os.getenv("NEO4J_URL", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
+
+# LangSmith observability
+LANGSMITH_ENABLED = os.getenv("LANGSMITH_TRACING", "").lower() in ("true", "1")
+LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "pears")

@@ -23,6 +23,7 @@ from pearscaff.config import (
     NEO4J_USER,
 )
 from pearscaff.db import init_db
+from pearscaff.tracing import trace_span
 
 # ---------------------------------------------------------------------------
 # Custom extraction prompt for Mem0
@@ -100,10 +101,22 @@ class Mem0Backend(MemoryBackend):
         )
 
     def add(self, content: str, metadata: dict[str, Any]) -> None:
-        self._mem.add(content, user_id="default", metadata=metadata)
+        with trace_span(
+            "mem0.add",
+            run_type="chain",
+            metadata={"record_id": metadata.get("record_id", "")},
+            inputs={"content_length": len(content)},
+        ):
+            self._mem.add(content, user_id="default", metadata=metadata)
 
     def search(self, query: str, limit: int = 10) -> list[dict]:
-        results = self._mem.search(query, user_id="default", limit=limit)
+        with trace_span(
+            "mem0.search",
+            run_type="chain",
+            metadata={"limit": limit},
+            inputs={"query": query},
+        ):
+            results = self._mem.search(query, user_id="default", limit=limit)
         # Normalize to list of dicts with 'memory', 'score', 'metadata' keys
         out = []
         for r in results.get("results", results) if isinstance(results, dict) else results:
@@ -294,11 +307,22 @@ class SqliteBackend(MemoryBackend):
             record_id=record_id,
             content=content,
         )
-        response = self._client.messages.create(
-            model=MODEL,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        with trace_span(
+            "indexer.extract",
+            run_type="llm",
+            metadata={"record_id": record_id, "record_type": record_type},
+            inputs={"model": MODEL, "prompt_length": len(prompt)},
+        ) as span:
+            response = self._client.messages.create(
+                model=MODEL,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            if span:
+                span.end(outputs={
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                })
         text = ""
         for block in response.content:
             if block.type == "text":

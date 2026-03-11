@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+- LangSmith integration for observability (opt-in)
+- Hierarchical tracing: agent runs, LLM calls, tool executions, memory operations
+- Traces tagged with agent name, session ID, record ID
+- Cost and token tracking across all agents including Mem0
+- session.log preserved as local fallback
+
 ## 1.0.0
 - Mem0 integration as pluggable memory backend (Neo4j graph + vector)
 - Custom extraction prompt for operational email data

@@ -245,6 +245,7 @@ def create_worker_agent(
     agent = BaseAgent(
         tool_registry=registry,
         system_prompt=WORKER_SYSTEM_PROMPT,
+        agent_name="worker",
         on_tool_call=on_tool_call,
         on_text=on_text,
         on_tool_result=on_tool_result,

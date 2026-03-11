@@ -82,6 +82,21 @@ NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
 ```
 
+## LangSmith Setup (optional — observability)
+
+Opt-in tracing for LLM calls, tool executions, and cost tracking.
+
+1. Sign up at [smith.langchain.com](https://smith.langchain.com)
+2. Create an API key
+3. Add to `.env`:
+   ```
+   LANGSMITH_TRACING=true
+   LANGSMITH_API_KEY=lsv2_your_key_here
+   LANGSMITH_PROJECT=pears
+   ```
+
+When not configured, the system runs with zero tracing overhead.
+
 ## Usage
 
 ### Full System (recommended)

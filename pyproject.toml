@@ -11,6 +11,7 @@ dependencies = [
     "google-api-python-client",
     "google-auth-oauthlib",
     "httpx",
+    "langsmith",
     "mem0ai[graph]",
     "playwright",
     "python-dotenv",
