@@ -65,6 +65,23 @@ Log in, complete 2FA, then press Enter in the terminal. Session saved for reuse.
 
 If both OAuth credentials and a browser session exist, OAuth (API) is used by default.
 
+## Neo4j Setup (optional — for Mem0 backend)
+
+Only required when `MEMORY_BACKEND=mem0`. Not needed for the default SQLite backend.
+
+```bash
+docker run -d --name neo4j -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]' neo4j:5
+```
+
+Add to `.env`:
+```
+MEMORY_BACKEND=mem0
+NEO4J_URL=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+```
+
 ## Usage
 
 ### Full System (recommended)

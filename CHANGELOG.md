@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0
+- Mem0 integration as pluggable memory backend (Neo4j graph + vector)
+- Custom extraction prompt for operational email data
+- Indexer simplified: delegates extraction to memory backend
+- Retriever unified: single memory_search replaces facts/graph/vector queries when using Mem0
+- MEMORY_BACKEND env var for switching between mem0 and sqlite
+- SQLite pipeline preserved as fallback (default)
+
 ## 0.11.1
 - Roadmap restructured to high-level prose milestones
 - Changelog created (this file) — factual record of completed work

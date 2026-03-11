@@ -1,10 +1,10 @@
 # Roadmap
 
-## Now: Storage & Context
+## Now: Memory Backend Evaluation
 
-The agent communication layer works. Triage works. The pipeline works. What needs to get right is the quality of stored context — how well heterogeneous operational data gets connected, stored, and surfaced to models when they need it.
+Mem0 is integrated as the first pluggable memory backend behind the Retriever, with Neo4j as the graph store. The SQLite pipeline remains as a fallback.
 
-Evaluating memory backends (Mem0, Graphiti, Cognee) as a pluggable storage layer behind the Retriever. Goal: integrate all three with an on/off switch, test against real email data, and let usage decide which one wins.
+Next: integrate Graphiti and Cognee as alternative backends behind the same interface. Test all three against real email data. Let usage decide which one wins.
 
 ## TODO
 

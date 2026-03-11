@@ -1,7 +1,7 @@
-"""Retriever expert agent — searches the knowledge graph and vector store.
+"""Retriever expert agent — searches the memory layer for context.
 
-The worker delegates context queries here. The Retriever searches facts,
-traverses the graph, and runs vector search, then assembles a context package.
+The worker delegates context queries here. The Retriever searches the
+configured memory backend and assembles a context package.
 """
 
 from __future__ import annotations
@@ -12,9 +12,15 @@ from typing import Any
 from pearscaff import graph, vectorstore
 from pearscaff.agents.expert import ExpertAgent
 from pearscaff.bus import MessageBus
+from pearscaff.config import MEMORY_BACKEND
+from pearscaff.memory import MemoryBackend, get_memory_backend
 from pearscaff.tools import BaseTool, ToolRegistry
 
-RETRIEVER_SYSTEM_PROMPT = """\
+# ---------------------------------------------------------------------------
+# System prompts
+# ---------------------------------------------------------------------------
+
+RETRIEVER_SYSTEM_PROMPT_SQLITE = """\
 You are the retriever expert agent. You find relevant context from the knowledge \
 graph and vector store.
 
@@ -35,6 +41,77 @@ IMPORTANT: You MUST use the reply tool to send your results back. \
 Your text responses are only logged internally — nobody sees them unless you use reply.
 Use reply exactly once per request. After replying, your work is done.
 """
+
+RETRIEVER_SYSTEM_PROMPT_MEM0 = """\
+You are the retriever expert agent. You find relevant context from the memory layer.
+
+When you receive a query:
+1. Use memory_search to find relevant memories, entities, and relationships.
+2. Assemble the results and reply with a structured summary.
+
+Your reply should include:
+- Memories found (factual statements about people, companies, projects, finances)
+- Related entities and their relationships
+- Brief reasoning about what was found and relevance
+
+IMPORTANT: You MUST use the reply tool to send your results back. \
+Your text responses are only logged internally — nobody sees them unless you use reply.
+Use reply exactly once per request. After replying, your work is done.
+"""
+
+# ---------------------------------------------------------------------------
+# Mem0 tool
+# ---------------------------------------------------------------------------
+
+
+class MemorySearchTool(BaseTool):
+    """Unified memory search — queries Mem0 for memories and graph connections."""
+
+    name = "memory_search"
+    description = (
+        "Search the memory layer for context about a topic, person, company, "
+        "project, or any other entity. Returns relevant memories and connections."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "What to search for",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results to return (default 10)",
+            },
+        },
+        "required": ["query"],
+    }
+
+    def __init__(self, memory: MemoryBackend) -> None:
+        self._memory = memory
+
+    def execute(self, **kwargs: Any) -> str:
+        results = self._memory.search(
+            query=kwargs["query"],
+            limit=kwargs.get("limit", 10),
+        )
+        if not results:
+            return f"No memories found matching '{kwargs['query']}'."
+        lines = []
+        for i, r in enumerate(results, 1):
+            if isinstance(r, dict):
+                memory = r.get("memory", r.get("text", r.get("content", str(r))))
+                score = r.get("score", r.get("distance", ""))
+                score_str = f" (score: {score:.3f})" if isinstance(score, float) else ""
+                lines.append(f"{i}. {memory}{score_str}")
+            else:
+                lines.append(f"{i}. {r}")
+        return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# SQLite tools (unchanged from original)
+# ---------------------------------------------------------------------------
 
 
 class SearchEntitiesTool(BaseTool):
@@ -201,23 +278,37 @@ class VectorSearchTool(BaseTool):
         return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
+
+
 def create_retriever_for_runner(
     bus: MessageBus,
 ) -> callable:
     """Create a factory function for the AgentRunner.
 
     Returns agent_factory: Callable[[session_id], ExpertAgent].
+    Registers Mem0 or SQLite tools based on MEMORY_BACKEND config.
     """
+    memory = get_memory_backend()
 
     def factory(session_id: str) -> ExpertAgent:
         registry = ToolRegistry()
-        registry.register(SearchEntitiesTool())
-        registry.register(FactsLookupTool())
-        registry.register(GraphTraverseTool())
-        registry.register(VectorSearchTool())
+
+        if MEMORY_BACKEND == "mem0":
+            registry.register(MemorySearchTool(memory))
+            system_prompt = RETRIEVER_SYSTEM_PROMPT_MEM0
+        else:
+            registry.register(SearchEntitiesTool())
+            registry.register(FactsLookupTool())
+            registry.register(GraphTraverseTool())
+            registry.register(VectorSearchTool())
+            system_prompt = RETRIEVER_SYSTEM_PROMPT_SQLITE
+
         return ExpertAgent(
             domain="retriever",
-            domain_prompt=RETRIEVER_SYSTEM_PROMPT,
+            domain_prompt=system_prompt,
             tool_registry=registry,
             bus=bus,
             agent_name="retriever",
