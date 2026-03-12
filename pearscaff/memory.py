@@ -13,7 +13,7 @@ from typing import Any
 
 import anthropic
 
-from pearscaff import graph, log, store, vectorstore
+from pearscaff import graph, log, store
 from pearscaff.config import (
     ANTHROPIC_API_KEY,
     MEMORY_BACKEND,
@@ -77,8 +77,12 @@ class Mem0Backend(MemoryBackend):
     """Mem0 with Neo4j graph memory."""
 
     def __init__(self) -> None:
+        import sys
+
         from mem0 import Memory
 
+        sys.stdout.write("Initializing Mem0 (Neo4j + embeddings)...\r\n")
+        sys.stdout.flush()
         self._mem = Memory.from_config(
             {
                 "graph_store": {
@@ -96,9 +100,30 @@ class Mem0Backend(MemoryBackend):
                         "api_key": ANTHROPIC_API_KEY,
                     },
                 },
+                "embedder": {
+                    "provider": "huggingface",
+                    "config": {
+                        "model": "all-MiniLM-L6-v2",
+                        "embedding_dims": 384,
+                    },
+                },
                 "custom_prompt": MEM0_EXTRACTION_PROMPT,
             }
         )
+        sys.stdout.write("Mem0 ready.\r\n")
+        sys.stdout.flush()
+
+        # Close Qdrant cleanly before Python shuts down to avoid noisy errors
+        import atexit
+
+        def _cleanup():
+            try:
+                if hasattr(self._mem, 'vector_store') and hasattr(self._mem.vector_store, 'client'):
+                    self._mem.vector_store.client.close()
+            except Exception:
+                pass
+
+        atexit.register(_cleanup)
 
     def add(self, content: str, metadata: dict[str, Any]) -> None:
         with trace_span(
@@ -240,6 +265,7 @@ class SqliteBackend(MemoryBackend):
                 if email:
                     embed_metadata["sender"] = email.get("sender", "")
                     embed_metadata["subject"] = email.get("subject", "")
+            from pearscaff import vectorstore
             vectorstore.add_record(record_id, content, embed_metadata)
             log.write("indexer", "--", "action", f"embedded {record_id} in ChromaDB")
         except Exception as exc:
@@ -277,6 +303,7 @@ class SqliteBackend(MemoryBackend):
                 })
 
         # 2. Vector search
+        from pearscaff import vectorstore
         vector_results = vectorstore.query(query, n_results=min(limit, 5))
         for vr in vector_results:
             results.append({

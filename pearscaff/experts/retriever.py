@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pearscaff import graph, vectorstore
 from pearscaff.agents.expert import ExpertAgent
 from pearscaff.bus import MessageBus
 from pearscaff.config import MEMORY_BACKEND
@@ -138,6 +137,8 @@ class SearchEntitiesTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
+        from pearscaff import graph
+
         results = graph.search_entities(
             query=kwargs["query"],
             entity_type=kwargs.get("entity_type"),
@@ -171,6 +172,8 @@ class FactsLookupTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
+        from pearscaff import graph
+
         facts = graph.get_entity_facts(kwargs["entity_id"])
         if not facts:
             return f"No facts found for entity '{kwargs['entity_id']}'."
@@ -207,6 +210,8 @@ class GraphTraverseTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
+        from pearscaff import graph
+
         result = graph.traverse_graph(
             entity_id=kwargs["entity_id"],
             max_depth=kwargs.get("max_depth", 3),
@@ -260,6 +265,8 @@ class VectorSearchTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
+        from pearscaff import vectorstore
+
         results = vectorstore.query(
             query_text=kwargs["query"],
             n_results=kwargs.get("n_results", 5),
