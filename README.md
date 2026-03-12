@@ -29,6 +29,11 @@ pearscaff chat                     # direct chat (no session bus)
 pearscaff gmail --auth             # Gmail OAuth setup for API access
 pearscaff expert gmail --login     # Gmail browser login (legacy)
 pearscaff expert gmail             # standalone Gmail expert
+pearscaff memory list              # list stored memories
+pearscaff memory search "query"    # search memories
+pearscaff memory entity "name"     # look up entity + connections
+pearscaff memory graph             # graph stats overview
+pearscaff memory record <id>       # memories from a specific record
 ```
 
 Also available as `ps --version`, `ps run`, `ps discord`, etc.
@@ -62,7 +67,7 @@ Non-blocking prompt with message attribution and live activity indicator:
 [ses_001] you >
 ```
 
-Commands: `/sessions`, `/switch <id>`, `/new`, `/history [id]`
+Commands: `/sessions`, `/switch <id>`, `/new`, `/history [id]`, `/memory`
 
 ## Docs
 

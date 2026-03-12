@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2
+- Memory inspection CLI: `ps memory list/search/entity/graph/record`
+- `ps memory list -f` — tail-style real-time memory watching
+- Same commands in REPL via `/memory`
+- Direct Neo4j graph queries for entity lookup and stats (Mem0 backend)
+- SQLite backend: entity lookup, graph stats, record-level memory tracing
+- Fixed Qdrant exit traceback (neutered `__del__` on class, explicit atexit cleanup)
+- Read-only — no memory editing or deletion
+
 ## 1.1.0
 - LangSmith integration for observability (opt-in)
 - Hierarchical tracing: agent runs, LLM calls, tool executions, memory operations

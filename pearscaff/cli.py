@@ -196,5 +196,7 @@ def gmail_shortcut(auth: bool) -> None:
     click.echo("Usage: pearscaff gmail --auth")
 
 
+import pearscaff.cli_memory  # noqa: F401 — registers memory command group
+
 if __name__ == "__main__":
     cli()

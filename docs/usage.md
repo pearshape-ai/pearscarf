@@ -16,6 +16,29 @@
 
 All commands also available via `ps`.
 
+## Memory Inspection
+
+| Command | Description |
+|---|---|
+| `ps memory list` | List stored memories (default limit 10) |
+| `ps memory list --limit 20` | List with custom limit |
+| `ps memory list -f` | Watch for new memories in real-time (Ctrl+C to stop) |
+| `ps memory list -f --interval 5` | Follow with custom poll interval (seconds) |
+| `ps memory search "query"` | Search memories by query |
+| `ps memory entity "name"` | Look up entity and its connections |
+| `ps memory graph` | Graph overview and stats |
+| `ps memory record <id>` | Memories extracted from a specific record |
+
+Same commands available in the REPL via `/memory`:
+
+| REPL Command | Description |
+|---|---|
+| `/memory list [limit]` | List stored memories |
+| `/memory search <query>` | Search memories |
+| `/memory entity <name>` | Look up entity |
+| `/memory graph` | Graph overview |
+| `/memory record <id>` | Memories from a record |
+
 ## Session REPL (`pearscaff run`)
 
 The REPL shows the active session in the prompt:

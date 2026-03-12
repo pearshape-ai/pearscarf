@@ -67,6 +67,22 @@ class MemoryBackend(ABC):
     def search(self, query: str, limit: int = 10) -> list[dict]:
         """Search memories. Returns list of result dicts."""
 
+    @abstractmethod
+    def get_all(self, limit: int = 10) -> list[dict]:
+        """List stored memories."""
+
+    @abstractmethod
+    def get_entity(self, name: str) -> dict | None:
+        """Look up an entity by name. Returns entity with connections."""
+
+    @abstractmethod
+    def graph_stats(self) -> dict:
+        """High-level graph stats: totals, type breakdown, most connected."""
+
+    @abstractmethod
+    def get_memories_for_record(self, record_id: str) -> list[dict]:
+        """Get memories extracted from a specific source record."""
+
 
 # ---------------------------------------------------------------------------
 # Mem0 backend
@@ -113,13 +129,19 @@ class Mem0Backend(MemoryBackend):
         sys.stdout.write("Mem0 ready.\r\n")
         sys.stdout.flush()
 
-        # Close Qdrant cleanly before Python shuts down to avoid noisy errors
+        # Qdrant's __del__ calls close() during GC after Python's import system
+        # is torn down, causing noisy ImportError tracebacks. Fix: disable __del__
+        # entirely and do explicit cleanup in atexit (which runs before teardown).
         import atexit
+
+        from qdrant_client import QdrantClient as _QC
+        _QC.__del__ = lambda self: None
 
         def _cleanup():
             try:
-                if hasattr(self._mem, 'vector_store') and hasattr(self._mem.vector_store, 'client'):
-                    self._mem.vector_store.client.close()
+                qdrant = getattr(self._mem, 'vector_store', None)
+                if qdrant and hasattr(qdrant, 'client'):
+                    qdrant.client.close()
             except Exception:
                 pass
 
@@ -147,6 +169,107 @@ class Mem0Backend(MemoryBackend):
         for r in results.get("results", results) if isinstance(results, dict) else results:
             if isinstance(r, dict):
                 out.append(r)
+            else:
+                out.append({"memory": str(r)})
+        return out
+
+    def get_all(self, limit: int = 10) -> list[dict]:
+        results = self._mem.get_all(user_id="default", limit=limit)
+        out = []
+        for r in results.get("results", results) if isinstance(results, dict) else results:
+            if isinstance(r, dict):
+                out.append(r)
+            else:
+                out.append({"memory": str(r)})
+        return out
+
+    def get_entity(self, name: str) -> dict | None:
+        try:
+            from neo4j import GraphDatabase
+            driver = GraphDatabase.driver(NEO4J_URL, auth=(NEO4J_USER, NEO4J_PASSWORD))
+            with driver.session() as session:
+                # Find node by name
+                result = session.run(
+                    "MATCH (n) WHERE n.name = $name "
+                    "OPTIONAL MATCH (n)-[r]-(m) "
+                    "RETURN n, collect(DISTINCT {rel: type(r), target: m.name, target_labels: labels(m)}) as connections",
+                    name=name,
+                )
+                record = result.single()
+                if not record:
+                    return None
+                node = record["n"]
+                connections = [
+                    c for c in record["connections"]
+                    if c["target"] is not None
+                ]
+                return {
+                    "name": node.get("name", name),
+                    "labels": list(node.labels),
+                    "properties": dict(node),
+                    "connections": connections,
+                }
+        except Exception as exc:
+            return {"name": name, "error": str(exc)}
+        finally:
+            try:
+                driver.close()
+            except Exception:
+                pass
+
+    def graph_stats(self) -> dict:
+        try:
+            from neo4j import GraphDatabase
+            driver = GraphDatabase.driver(NEO4J_URL, auth=(NEO4J_USER, NEO4J_PASSWORD))
+            with driver.session() as session:
+                # Node counts by label
+                node_result = session.run(
+                    "MATCH (n) UNWIND labels(n) AS label "
+                    "RETURN label, count(*) AS count ORDER BY count DESC"
+                )
+                node_counts = {r["label"]: r["count"] for r in node_result}
+
+                # Relationship counts by type
+                rel_result = session.run(
+                    "MATCH ()-[r]->() RETURN type(r) AS rel_type, count(*) AS count "
+                    "ORDER BY count DESC"
+                )
+                rel_counts = {r["rel_type"]: r["count"] for r in rel_result}
+
+                # Most connected nodes
+                top_result = session.run(
+                    "MATCH (n)-[r]-() "
+                    "RETURN n.name AS name, labels(n) AS labels, count(r) AS degree "
+                    "ORDER BY degree DESC LIMIT 10"
+                )
+                most_connected = [
+                    {"name": r["name"], "labels": r["labels"], "degree": r["degree"]}
+                    for r in top_result
+                ]
+
+                return {
+                    "total_nodes": sum(node_counts.values()),
+                    "total_relationships": sum(rel_counts.values()),
+                    "node_counts": node_counts,
+                    "rel_counts": rel_counts,
+                    "most_connected": most_connected,
+                }
+        except Exception as exc:
+            return {"error": str(exc)}
+        finally:
+            try:
+                driver.close()
+            except Exception:
+                pass
+
+    def get_memories_for_record(self, record_id: str) -> list[dict]:
+        results = self._mem.search(record_id, user_id="default", limit=20)
+        out = []
+        for r in results.get("results", results) if isinstance(results, dict) else results:
+            if isinstance(r, dict):
+                meta = r.get("metadata", {})
+                if meta.get("record_id") == record_id or record_id in r.get("memory", ""):
+                    out.append(r)
             else:
                 out.append({"memory": str(r)})
         return out
@@ -312,6 +435,161 @@ class SqliteBackend(MemoryBackend):
                 "content": vr["content"][:300] if vr["content"] else "",
                 "metadata": vr["metadata"],
                 "distance": vr["distance"],
+            })
+
+        return results
+
+    def get_all(self, limit: int = 10) -> list[dict]:
+        from pearscaff.db import _get_conn
+        init_db()
+        conn = _get_conn()
+        results: list[dict] = []
+
+        # Recent entities
+        rows = conn.execute(
+            "SELECT id, type, name, metadata, created_at FROM entities "
+            "ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        for row in rows:
+            d = dict(row)
+            d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
+            results.append({
+                "type": "entity",
+                "id": d["id"],
+                "name": d["name"],
+                "entity_type": d["type"],
+                "metadata": d["metadata"],
+                "created_at": d["created_at"],
+            })
+
+        # Recent facts
+        rows = conn.execute(
+            "SELECT f.id, f.entity_id, f.attribute, f.value, f.source_record, f.updated_at, "
+            "e.name as entity_name "
+            "FROM facts f JOIN entities e ON f.entity_id = e.id "
+            "ORDER BY f.updated_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        for row in rows:
+            d = dict(row)
+            results.append({
+                "type": "fact",
+                "id": d["id"],
+                "entity_name": d["entity_name"],
+                "attribute": d["attribute"],
+                "value": d["value"],
+                "source_record": d["source_record"],
+                "updated_at": d["updated_at"],
+            })
+
+        return results
+
+    def get_entity(self, name: str) -> dict | None:
+        entity = graph.find_entity("person", name) or graph.find_entity("company", name)
+        if not entity:
+            # Broad search
+            results = graph.search_entities(name, limit=1)
+            if results:
+                entity = results[0]
+        if not entity:
+            return None
+
+        facts = graph.get_entity_facts(entity["id"])
+        traversal = graph.traverse_graph(entity["id"], max_depth=2)
+
+        return {
+            "name": entity["name"],
+            "labels": [entity["type"]],
+            "properties": entity.get("metadata", {}),
+            "facts": [
+                {"attribute": f["attribute"], "value": f["value"], "source": f.get("source_record", "")}
+                for f in facts
+            ],
+            "connections": [
+                {"rel": e["relationship"], "target": e["to_entity"], "depth": e["depth"]}
+                for e in traversal["edges"]
+            ],
+        }
+
+    def graph_stats(self) -> dict:
+        from pearscaff.db import _get_conn
+        init_db()
+        conn = _get_conn()
+
+        # Entity counts by type
+        rows = conn.execute(
+            "SELECT type, COUNT(*) as count FROM entities GROUP BY type ORDER BY count DESC"
+        ).fetchall()
+        node_counts = {r["type"]: r["count"] for r in rows}
+
+        # Relationship counts by type
+        rows = conn.execute(
+            "SELECT relationship, COUNT(*) as count FROM edges GROUP BY relationship ORDER BY count DESC"
+        ).fetchall()
+        rel_counts = {r["relationship"]: r["count"] for r in rows}
+
+        # Total facts
+        fact_count = conn.execute("SELECT COUNT(*) as c FROM facts").fetchone()["c"]
+
+        # Most connected entities (by edge count)
+        rows = conn.execute(
+            "SELECT e.name, e.type, "
+            "(SELECT COUNT(*) FROM edges WHERE from_entity = e.id OR to_entity = e.id) as degree "
+            "FROM entities e ORDER BY degree DESC LIMIT 10"
+        ).fetchall()
+        most_connected = [
+            {"name": r["name"], "labels": [r["type"]], "degree": r["degree"]}
+            for r in rows if r["degree"] > 0
+        ]
+
+        return {
+            "total_nodes": sum(node_counts.values()),
+            "total_relationships": sum(rel_counts.values()),
+            "total_facts": fact_count,
+            "node_counts": node_counts,
+            "rel_counts": rel_counts,
+            "most_connected": most_connected,
+        }
+
+    def get_memories_for_record(self, record_id: str) -> list[dict]:
+        from pearscaff.db import _get_conn
+        init_db()
+        conn = _get_conn()
+        results: list[dict] = []
+
+        # Facts from this record
+        rows = conn.execute(
+            "SELECT f.id, f.entity_id, f.attribute, f.value, e.name as entity_name "
+            "FROM facts f JOIN entities e ON f.entity_id = e.id "
+            "WHERE f.source_record = ? ORDER BY f.updated_at DESC",
+            (record_id,),
+        ).fetchall()
+        for row in rows:
+            d = dict(row)
+            results.append({
+                "type": "fact",
+                "entity_name": d["entity_name"],
+                "attribute": d["attribute"],
+                "value": d["value"],
+            })
+
+        # Edges from this record
+        rows = conn.execute(
+            "SELECT ed.relationship, e1.name as from_name, e2.name as to_name "
+            "FROM edges ed "
+            "JOIN entities e1 ON ed.from_entity = e1.id "
+            "JOIN entities e2 ON ed.to_entity = e2.id "
+            "WHERE ed.source_record = ?",
+            (record_id,),
+        ).fetchall()
+        for row in rows:
+            d = dict(row)
+            results.append({
+                "type": "relationship",
+                "from": d["from_name"],
+                "to": d["to_name"],
+                "relationship": d["relationship"],
             })
 
         return results

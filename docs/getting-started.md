@@ -82,6 +82,8 @@ NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
 ```
 
+**Tip:** Neo4j Browser is available at `http://localhost:7474` for visual graph exploration beyond the CLI tools.
+
 ## LangSmith Setup (optional — observability)
 
 Opt-in tracing for LLM calls, tool executions, and cost tracking.
