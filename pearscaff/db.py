@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
 
 from pearscaff.config import DB_PATH
+
+os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
 
 _local = threading.local()
 

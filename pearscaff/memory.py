@@ -21,6 +21,9 @@ from pearscaff.config import (
     NEO4J_PASSWORD,
     NEO4J_URL,
     NEO4J_USER,
+    OPENAI_API_KEY,
+    OPENAI_MODEL,
+    QDRANT_URL,
 )
 from pearscaff.db import init_db
 from pearscaff.tracing import trace_span
@@ -101,6 +104,14 @@ class Mem0Backend(MemoryBackend):
         sys.stdout.flush()
         self._mem = Memory.from_config(
             {
+                "vector_store": {
+                    "provider": "qdrant",
+                    "config": {
+                        "collection_name": "mem0",
+                        "url": QDRANT_URL,
+                        "embedding_model_dims": 384,
+                    },
+                },
                 "graph_store": {
                     "provider": "neo4j",
                     "config": {
@@ -110,10 +121,10 @@ class Mem0Backend(MemoryBackend):
                     },
                 },
                 "llm": {
-                    "provider": "anthropic",
+                    "provider": "openai",
                     "config": {
-                        "model": MODEL,
-                        "api_key": ANTHROPIC_API_KEY,
+                        "model": OPENAI_MODEL,
+                        "api_key": OPENAI_API_KEY,
                     },
                 },
                 "embedder": {

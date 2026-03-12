@@ -255,7 +255,7 @@ Logs to `session.log` as `[indexer]`.
 
 ### Vector Storage (`vectorstore.py`)
 
-ChromaDB with `all-MiniLM-L6-v2` sentence-transformer embeddings. Runs embedded (no server), persists to `chroma_data/`.
+ChromaDB with `all-MiniLM-L6-v2` sentence-transformer embeddings. Runs embedded (no server), persists to `data/chroma/`.
 
 - Single `records` collection — all record types, filterable by metadata (`type`, `source`, `sender`, etc.)
 - Lazy-initialized — model and client only load on first use
@@ -315,7 +315,7 @@ Direct interaction with the Gmail expert without the bus. Useful for debugging.
 
 ## Logging
 
-All agents write to a single shared log file: `logs/session.log`. The log is a unified timeline of everything happening across all agents — every tool call, every thought, every message sent and received.
+All agents write to a single shared log file: `data/logs/session.log`. The log is a unified timeline of everything happening across all agents — every tool call, every thought, every message sent and received.
 
 Entry format:
 ```
@@ -341,4 +341,4 @@ The version string lives in `pearscaff/__init__.py` as `__version__`. `pyproject
 | `MODEL` | `claude-sonnet-4-5-20250929` | Model to use |
 | `MAX_TURNS` | `10` | Max agentic loop iterations per message |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
-| `DB_PATH` | `pearscaff.db` | SQLite database file path |
+| `DB_PATH` | `data/pearscaff.db` | SQLite database file path |

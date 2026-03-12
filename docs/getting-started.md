@@ -65,21 +65,32 @@ Log in, complete 2FA, then press Enter in the terminal. Session saved for reuse.
 
 If both OAuth credentials and a browser session exist, OAuth (API) is used by default.
 
-## Neo4j Setup (optional — for Mem0 backend)
+## Mem0 Backend Setup (optional)
 
 Only required when `MEMORY_BACKEND=mem0`. Not needed for the default SQLite backend.
 
+Start Neo4j and Qdrant (data stored in `data/` within the repo, gitignored):
+
 ```bash
+source .env
+mkdir -p data/neo4j data/qdrant
+
 docker run -d --name neo4j -p 7474:7474 -p 7687:7687 \
+  -v ./data/neo4j:/data \
   -e NEO4J_AUTH=neo4j/$NEO4J_PASSWORD -e NEO4J_PLUGINS='["apoc"]' neo4j:5
+
+docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
+  -v ./data/qdrant:/qdrant/storage qdrant/qdrant
 ```
 
 Add to `.env`:
 ```
 MEMORY_BACKEND=mem0
+OPENAI_API_KEY=sk-your-openai-key
 NEO4J_URL=bolt://localhost:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=password
+NEO4J_PASSWORD=your-password
+QDRANT_URL=http://localhost:6333
 ```
 
 **Tip:** Neo4j Browser is available at `http://localhost:7474` for visual graph exploration beyond the CLI tools.

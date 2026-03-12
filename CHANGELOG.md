@@ -1,12 +1,19 @@
 # Changelog
 
+## 1.1.3
+- Mem0 LLM provider switched from Anthropic to OpenAI (Mem0's native provider)
+- Removed Anthropic compatibility patches (top_p, tool_choice, tool format)
+- Added OPENAI_API_KEY and OPENAI_MODEL config (default: gpt-4o-mini)
+- Qdrant switched from local file-based to server (Docker) — fixes multi-process locking
+- All data consolidated under `data/` directory (SQLite, ChromaDB, logs, Neo4j, Qdrant, browser state)
+- Fixed Qdrant exit traceback (neutered `__del__`, explicit atexit cleanup)
+
 ## 1.1.2
 - Memory inspection CLI: `ps memory list/search/entity/graph/record`
 - `ps memory list -f` — tail-style real-time memory watching
 - Same commands in REPL via `/memory`
 - Direct Neo4j graph queries for entity lookup and stats (Mem0 backend)
 - SQLite backend: entity lookup, graph stats, record-level memory tracing
-- Fixed Qdrant exit traceback (neutered `__del__` on class, explicit atexit cleanup)
 - Read-only — no memory editing or deletion
 
 ## 1.1.0

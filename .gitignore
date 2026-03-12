@@ -18,10 +18,5 @@ uv.lock
 ai-work/specs/
 ai-work/plans/
 
-storage_state.json
-pearscaff.db
-pearscaff.db-shm
-pearscaff.db-wal
+data/
 pearscaff/knowledge/gmail/*.md
-logs/
-chroma_data/

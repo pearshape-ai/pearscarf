@@ -4,7 +4,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-_LOGS_DIR = Path("logs")
+_LOGS_DIR = Path("data/logs")
 _LOG_FILE = _LOGS_DIR / "session.log"
 _lock = threading.Lock()
 _initialized = False

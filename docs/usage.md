@@ -156,11 +156,13 @@ Auto-discovered at startup.
 | `MODEL` | `claude-sonnet-4-5-20250929` | Model identifier |
 | `MAX_TURNS` | `10` | Max tool-call loop iterations |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
-| `DB_PATH` | `pearscaff.db` | SQLite database path |
+| `DB_PATH` | `data/pearscaff.db` | SQLite database path |
 | `GMAIL_CLIENT_ID` | | Google OAuth client ID |
 | `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |
 | `GMAIL_REFRESH_TOKEN` | | OAuth refresh token (from `gmail --auth`) |
 | `GMAIL_POLL_INTERVAL` | `300` | Email polling interval in seconds |
+| `OPENAI_API_KEY` | | OpenAI API key (required for mem0 backend) |
+| `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI model for Mem0 extraction |
 | `MEMORY_BACKEND` | `sqlite` | Memory backend: `mem0` or `sqlite` |
 | `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL (required for mem0) |
 | `NEO4J_USER` | `neo4j` | Neo4j username (required for mem0) |

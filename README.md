@@ -50,7 +50,7 @@ Expert Agents (Gmail API/browser, Retriever)
 Indexer (background) → Memory Backend (Mem0+Neo4j or SQLite+ChromaDB)
 ```
 
-Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via SQLite polling. A unified log at `logs/session.log` records every action across all agents.
+Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via SQLite polling. A unified log at `data/logs/session.log` records every action across all agents.
 
 Emails read by the Gmail expert are persisted to a System of Record with deduplication. The worker triages each email — auto-classifying known senders and obvious noise, asking the human when uncertain. A background Indexer processes relevant records through a pluggable memory backend — either Mem0 (with Neo4j graph + vector) or the original SQLite+ChromaDB pipeline. The Retriever expert searches the memory layer when the worker needs context.
 

@@ -14,7 +14,7 @@ from pearscaff import log
 from pearscaff.agents.expert import ExpertAgent
 from pearscaff.tools import BaseTool, ToolRegistry
 
-STORAGE_STATE_PATH = Path("storage_state.json")
+STORAGE_STATE_PATH = Path("data/storage_state.json")
 
 class GmailAPIClient:
     """Gmail API client using OAuth2 credentials.
