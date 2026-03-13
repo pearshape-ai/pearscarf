@@ -9,7 +9,9 @@ MODEL = os.getenv("MODEL", "claude-sonnet-4-5-20250929")
 MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 DB_PATH = os.getenv("DB_PATH", "data/pearscaff.db")
-CHROMA_PATH = os.getenv("CHROMA_PATH", "data/chroma")
+
+# Qdrant vector store
+QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 
 # Gmail OAuth (API-based transport)
 GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "")

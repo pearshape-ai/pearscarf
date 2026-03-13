@@ -1,7 +1,7 @@
 """Indexer — background agent that processes records into the knowledge graph.
 
 Polls for unindexed records and runs LLM extraction → entity resolution →
-graph population → ChromaDB embedding.
+graph population → Qdrant embedding.
 """
 
 from __future__ import annotations
@@ -227,7 +227,7 @@ class Indexer:
                 f"wrote {edges_created} edges, {facts_written} facts for {record_id}",
             )
 
-            # Step 5: Embed in ChromaDB
+            # Step 5: Embed in Qdrant
             try:
                 metadata = {
                     "type": record_type,
@@ -241,7 +241,7 @@ class Indexer:
                         metadata["subject"] = email.get("subject", "")
                 from pearscaff import vectorstore
                 vectorstore.add_record(record_id, content, metadata)
-                log.write("indexer", "--", "action", f"embedded {record_id} in ChromaDB")
+                log.write("indexer", "--", "action", f"embedded {record_id} in Qdrant")
             except Exception as exc:
                 log.write("indexer", "--", "error", f"embedding failed for {record_id}: {exc}")
 

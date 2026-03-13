@@ -157,6 +157,7 @@ Auto-discovered at startup.
 | `MAX_TURNS` | `10` | Max tool-call loop iterations |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
 | `DB_PATH` | `data/pearscaff.db` | SQLite database path |
+| `QDRANT_URL` | `http://localhost:6333` | Qdrant server URL |
 | `GMAIL_CLIENT_ID` | | Google OAuth client ID |
 | `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |
 | `GMAIL_REFRESH_TOKEN` | | OAuth refresh token (from `gmail --auth`) |

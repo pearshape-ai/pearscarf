@@ -65,9 +65,25 @@ Log in, complete 2FA, then press Enter in the terminal. Session saved for reuse.
 
 If both OAuth credentials and a browser session exist, OAuth (API) is used by default.
 
+## Qdrant Setup (required for vector search)
+
+Qdrant stores vector embeddings for semantic search. Run it via Docker:
+
+```bash
+mkdir -p data/qdrant
+
+docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
+  -v ./data/qdrant:/qdrant/storage qdrant/qdrant
+```
+
+Default config works out of the box. To customize, add to `.env`:
+```
+QDRANT_URL=http://localhost:6333
+```
+
 ## Neo4j Setup (optional)
 
-Neo4j is retained for future graph backend evaluation (Graphiti, Cognee). Not required for the default SQLite+ChromaDB pipeline.
+Neo4j is retained for future graph backend evaluation (Graphiti, Cognee). Not required for the default SQLite+Qdrant pipeline.
 
 ```bash
 source .env

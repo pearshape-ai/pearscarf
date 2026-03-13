@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1
+- Replaced ChromaDB with Qdrant as the vector store
+- Qdrant connects to existing Docker container (same setup from Mem0 era)
+- Same embedding model (all-MiniLM-L6-v2), now loaded directly via sentence-transformers
+- Removed chromadb dependency
+- Added qdrant-client dependency
+- Removed CHROMA_PATH config, added QDRANT_URL
+- Point IDs use deterministic uuid5 for clean string↔UUID mapping
+
 ## 1.2.0
 - Removed Mem0 integration — extraction quality and visibility insufficient for operational data
 - Restored SQLite facts + graph + ChromaDB as the sole storage pipeline

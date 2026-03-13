@@ -1,7 +1,7 @@
 """Retriever expert agent — searches the knowledge graph and vector store for context.
 
 The worker delegates context queries here. The Retriever searches the
-SQLite knowledge graph and ChromaDB vector store and assembles a context package.
+SQLite knowledge graph and Qdrant vector store and assembles a context package.
 """
 
 from __future__ import annotations
