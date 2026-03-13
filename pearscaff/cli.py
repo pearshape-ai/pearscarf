@@ -36,11 +36,9 @@ def run(poll_email: bool) -> None:
     from pearscaff.experts.gmail import create_gmail_expert_for_runner, start_email_polling
     from pearscaff.experts.retriever import create_retriever_for_runner
     from pearscaff.indexer import Indexer
-    from pearscaff.memory import get_memory_backend
     from pearscaff.repl import SessionRepl
 
     bus = MessageBus()
-    memory = get_memory_backend()
 
     # Start Gmail expert runner
     gmail_factory, gmail_manager, mcp_client = create_gmail_expert_for_runner(bus=bus)
@@ -78,7 +76,7 @@ def run(poll_email: bool) -> None:
     sys.stdout.flush()
 
     # Start Indexer
-    indexer = Indexer(memory=memory)
+    indexer = Indexer()
     indexer.start()
     sys.stdout.write("Indexer started.\r\n")
     sys.stdout.flush()

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+- Removed Mem0 integration — extraction quality and visibility insufficient for operational data
+- Restored SQLite facts + graph + ChromaDB as the sole storage pipeline
+- Removed MemoryBackend abstraction — indexer and retriever use graph.py/vectorstore.py directly
+- Removed mem0ai dependency (and transitive qdrant-client, openai, etc.)
+- Removed MEMORY_BACKEND, OPENAI_API_KEY, OPENAI_MODEL, QDRANT_URL config
+- Neo4j and Qdrant Docker configs retained for future Graphiti/Cognee evaluation
+- Memory inspection CLI and REPL commands updated to use SQLite directly
+
 ## 1.1.3
 - Mem0 LLM provider switched from Anthropic to OpenAI (Mem0's native provider)
 - Removed Anthropic compatibility patches (top_p, tool_choice, tool format)

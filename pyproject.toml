@@ -12,7 +12,6 @@ dependencies = [
     "google-auth-oauthlib",
     "httpx",
     "langsmith",
-    "mem0ai[graph]",
     "playwright",
     "python-dotenv",
     "sentence-transformers",

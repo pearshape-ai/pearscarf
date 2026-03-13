@@ -161,12 +161,9 @@ Auto-discovered at startup.
 | `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |
 | `GMAIL_REFRESH_TOKEN` | | OAuth refresh token (from `gmail --auth`) |
 | `GMAIL_POLL_INTERVAL` | `300` | Email polling interval in seconds |
-| `OPENAI_API_KEY` | | OpenAI API key (required for mem0 backend) |
-| `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI model for Mem0 extraction |
-| `MEMORY_BACKEND` | `sqlite` | Memory backend: `mem0` or `sqlite` |
-| `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL (required for mem0) |
-| `NEO4J_USER` | `neo4j` | Neo4j username (required for mem0) |
-| `NEO4J_PASSWORD` | | Neo4j password (required for mem0) |
+| `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL (optional, for future use) |
+| `NEO4J_USER` | `neo4j` | Neo4j username (optional) |
+| `NEO4J_PASSWORD` | | Neo4j password (optional) |
 | `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing (`true`/`false`) |
 | `LANGSMITH_API_KEY` | | LangSmith API key (required when tracing enabled) |
 | `LANGSMITH_PROJECT` | `pears` | LangSmith project name |

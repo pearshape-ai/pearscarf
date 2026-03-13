@@ -1,7 +1,8 @@
-"""Memory inspection CLI commands — read-only tools for exploring the memory layer."""
+"""Memory inspection CLI commands — read-only tools for exploring the knowledge graph."""
 
 from __future__ import annotations
 
+import json
 import time
 
 import click
@@ -20,9 +21,7 @@ def format_memory_list(memories: list[dict]) -> list[str]:
         return ["No memories found."]
     lines = []
     for i, m in enumerate(memories, 1):
-        if "memory" in m:
-            content = m["memory"]
-        elif "name" in m:
+        if "name" in m:
             content = f"[{m.get('entity_type', m.get('type', '?'))}] {m['name']}"
             if m.get("metadata"):
                 content += f"  {m['metadata']}"
@@ -46,7 +45,7 @@ def format_search_results(results: list[dict]) -> list[str]:
     lines = []
     for i, r in enumerate(results, 1):
         if isinstance(r, dict):
-            memory = r.get("memory", r.get("text", r.get("content", str(r))))
+            memory = r.get("text", r.get("content", str(r)))
             score = r.get("score", r.get("distance", ""))
             score_str = f" (score: {score:.3f})" if isinstance(score, float) else ""
             meta = r.get("metadata", {})
@@ -70,33 +69,29 @@ def format_entity(entity_data: dict | None) -> list[str]:
 
     lines = []
     name = entity_data.get("name", "?")
-    labels = ", ".join(entity_data.get("labels", []))
-    lines.append(f"  {name} ({labels})")
+    etype = entity_data.get("type", "?")
+    lines.append(f"  {name} ({etype})")
 
-    props = entity_data.get("properties", {})
-    if props:
-        for k, v in props.items():
-            if k != "name":
-                lines.append(f"    {k}: {v}")
+    metadata = entity_data.get("metadata", {})
+    if metadata:
+        for k, v in metadata.items():
+            lines.append(f"    {k}: {v}")
 
     facts = entity_data.get("facts", [])
     if facts:
         lines.append("  Facts:")
         for f in facts:
-            source = f" [from: {f['source']}]" if f.get("source") else ""
+            source = f" [from: {f['source_record']}]" if f.get("source_record") else ""
             lines.append(f"    {f['attribute']}: {f['value']}{source}")
 
     connections = entity_data.get("connections", [])
     if connections:
         lines.append("  Connections:")
         for c in connections:
-            target = c.get("target", c.get("target_name", "?"))
-            rel = c.get("rel", c.get("relationship", "?"))
-            extra = ""
-            if c.get("target_labels"):
-                extra = f" ({', '.join(c['target_labels'])})"
-            elif c.get("depth") is not None:
-                extra = f" (depth: {c['depth']})"
+            target = c.get("to_entity", "?")
+            rel = c.get("relationship", "?")
+            depth = c.get("depth")
+            extra = f" (depth: {depth})" if depth is not None else ""
             lines.append(f"    --{rel}--> {target}{extra}")
 
     return lines
@@ -108,29 +103,21 @@ def format_graph_stats(stats: dict) -> list[str]:
         return [f"Error: {stats['error']}"]
 
     lines = []
-    lines.append(f"  Nodes: {stats.get('total_nodes', 0)}")
-    lines.append(f"  Relationships: {stats.get('total_relationships', 0)}")
-    if stats.get("total_facts"):
-        lines.append(f"  Facts: {stats['total_facts']}")
+    lines.append(f"  Entities: {stats.get('total_entities', 0)}")
+    lines.append(f"  Edges: {stats.get('total_edges', 0)}")
+    lines.append(f"  Facts: {stats.get('total_facts', 0)}")
 
-    node_counts = stats.get("node_counts", {})
-    if node_counts:
-        lines.append("  Node types:")
-        for label, count in node_counts.items():
-            lines.append(f"    {label}: {count}")
+    entity_counts = stats.get("entity_counts", {})
+    if entity_counts:
+        lines.append("  Entity types:")
+        for etype, count in entity_counts.items():
+            lines.append(f"    {etype}: {count}")
 
     rel_counts = stats.get("rel_counts", {})
     if rel_counts:
         lines.append("  Relationship types:")
         for rel, count in rel_counts.items():
             lines.append(f"    {rel}: {count}")
-
-    most_connected = stats.get("most_connected", [])
-    if most_connected:
-        lines.append("  Most connected:")
-        for node in most_connected:
-            labels = ", ".join(node.get("labels", []))
-            lines.append(f"    {node['name']} ({labels}) — {node['degree']} connections")
 
     return lines
 
@@ -146,11 +133,178 @@ def format_record_memories(memories: list[dict]) -> list[str]:
             lines.append(f"  {i}. [fact] {m.get('entity_name', '?')}.{m['attribute']} = {m['value']}")
         elif mem_type == "relationship":
             lines.append(f"  {i}. [rel] {m.get('from', '?')} --{m['relationship']}--> {m.get('to', '?')}")
-        elif "memory" in m:
-            lines.append(f"  {i}. {m['memory']}")
         else:
             lines.append(f"  {i}. {m}")
     return lines
+
+
+# ---------------------------------------------------------------------------
+# Direct graph/DB query helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_all(limit: int = 10) -> list[dict]:
+    """List entities and recent facts from SQLite graph."""
+    from pearscaff import graph
+    from pearscaff.db import _get_conn, init_db
+
+    init_db()
+    conn = _get_conn()
+
+    # Get entities
+    entities = conn.execute(
+        "SELECT id, type as entity_type, name, metadata, created_at "
+        "FROM entities ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+
+    results = []
+    for e in entities:
+        d = dict(e)
+        d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
+        results.append(d)
+
+    # If fewer entities than limit, fill with recent facts
+    remaining = limit - len(results)
+    if remaining > 0:
+        facts = conn.execute(
+            "SELECT f.id, f.attribute, f.value, f.updated_at, e.name as entity_name "
+            "FROM facts f JOIN entities e ON f.entity_id = e.id "
+            "ORDER BY f.updated_at DESC LIMIT ?",
+            (remaining,),
+        ).fetchall()
+        for f in facts:
+            results.append(dict(f))
+
+    return results
+
+
+def _search(query: str, limit: int = 10) -> list[dict]:
+    """Search entities + vector store."""
+    from pearscaff import graph, vectorstore
+
+    results = []
+
+    # Entity search
+    entities = graph.search_entities(query, limit=limit)
+    for e in entities:
+        results.append({
+            "text": f"[{e['type']}] {e['name']}",
+            "metadata": e.get("metadata", {}),
+        })
+
+    # Vector search
+    remaining = limit - len(results)
+    if remaining > 0:
+        vec_results = vectorstore.query(query, n_results=remaining)
+        for r in vec_results:
+            subject = r["metadata"].get("subject", "")
+            sender = r["metadata"].get("sender", "")
+            text = f"'{subject}' from {sender}" if subject else (r["content"][:150] if r["content"] else r["id"])
+            results.append({
+                "text": text,
+                "distance": r["distance"],
+                "metadata": r["metadata"],
+            })
+
+    return results
+
+
+def _get_entity(name: str) -> dict | None:
+    """Look up entity by name — search, get facts, traverse."""
+    from pearscaff import graph
+
+    # Search by name across all types
+    entities = graph.search_entities(name, limit=1)
+    if not entities:
+        return None
+
+    entity = entities[0]
+    entity_id = entity["id"]
+
+    # Get facts
+    facts = graph.get_entity_facts(entity_id)
+
+    # Traverse for connections
+    traversal = graph.traverse_graph(entity_id, max_depth=2)
+
+    return {
+        "name": entity["name"],
+        "type": entity["type"],
+        "metadata": entity.get("metadata", {}),
+        "facts": facts,
+        "connections": traversal.get("edges", []),
+    }
+
+
+def _graph_stats() -> dict:
+    """Get entity/edge/fact counts from SQLite."""
+    from pearscaff.db import _get_conn, init_db
+
+    init_db()
+    conn = _get_conn()
+
+    total_entities = conn.execute("SELECT COUNT(*) as c FROM entities").fetchone()["c"]
+    total_edges = conn.execute("SELECT COUNT(*) as c FROM edges").fetchone()["c"]
+    total_facts = conn.execute("SELECT COUNT(*) as c FROM facts").fetchone()["c"]
+
+    # Entity type breakdown
+    type_rows = conn.execute(
+        "SELECT type, COUNT(*) as c FROM entities GROUP BY type ORDER BY c DESC"
+    ).fetchall()
+    entity_counts = {r["type"]: r["c"] for r in type_rows}
+
+    # Relationship type breakdown
+    rel_rows = conn.execute(
+        "SELECT relationship, COUNT(*) as c FROM edges GROUP BY relationship ORDER BY c DESC"
+    ).fetchall()
+    rel_counts = {r["relationship"]: r["c"] for r in rel_rows}
+
+    return {
+        "total_entities": total_entities,
+        "total_edges": total_edges,
+        "total_facts": total_facts,
+        "entity_counts": entity_counts,
+        "rel_counts": rel_counts,
+    }
+
+
+def _get_memories_for_record(record_id: str) -> list[dict]:
+    """Get facts and edges sourced from a specific record."""
+    from pearscaff.db import _get_conn, init_db
+
+    init_db()
+    conn = _get_conn()
+
+    results = []
+
+    # Facts from this record
+    facts = conn.execute(
+        "SELECT f.attribute, f.value, e.name as entity_name "
+        "FROM facts f JOIN entities e ON f.entity_id = e.id "
+        "WHERE f.source_record = ?",
+        (record_id,),
+    ).fetchall()
+    for f in facts:
+        d = dict(f)
+        d["type"] = "fact"
+        results.append(d)
+
+    # Edges from this record
+    edges = conn.execute(
+        "SELECT e1.name as `from`, e2.name as `to`, ed.relationship "
+        "FROM edges ed "
+        "JOIN entities e1 ON ed.from_entity = e1.id "
+        "JOIN entities e2 ON ed.to_entity = e2.id "
+        "WHERE ed.source_record = ?",
+        (record_id,),
+    ).fetchall()
+    for e in edges:
+        d = dict(e)
+        d["type"] = "relationship"
+        results.append(d)
+
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -160,15 +314,14 @@ def format_record_memories(memories: list[dict]) -> list[str]:
 
 @cli.group()
 def memory():
-    """Inspect the memory layer."""
+    """Inspect the knowledge graph."""
 
 
 def _get_memory_id(m: dict) -> str:
     """Extract a stable identifier from a memory dict for deduplication."""
     if "id" in m:
         return str(m["id"])
-    # Fallback: hash the content
-    content = m.get("memory", m.get("name", m.get("attribute", str(m))))
+    content = m.get("name", m.get("attribute", str(m)))
     return f"_hash_{hash(content)}"
 
 
@@ -178,24 +331,20 @@ def _get_memory_id(m: dict) -> str:
 @click.option("--interval", default=2.0, help="Poll interval in seconds (with --follow).")
 def memory_list(limit: int, follow: bool, interval: float) -> None:
     """List stored memories."""
-    from pearscaff.memory import get_memory_backend
-
-    backend = get_memory_backend()
-    results = backend.get_all(limit=limit)
+    results = _get_all(limit=limit)
     for line in format_memory_list(results):
         click.echo(line)
 
     if not follow:
         return
 
-    # Track what we've already shown
     seen = {_get_memory_id(m) for m in results}
     click.echo(click.style("\n  — following (Ctrl+C to stop) —", fg="yellow"))
 
     try:
         while True:
             time.sleep(interval)
-            results = backend.get_all(limit=limit)
+            results = _get_all(limit=limit)
             new = [m for m in results if _get_memory_id(m) not in seen]
             for m in new:
                 seen.add(_get_memory_id(m))
@@ -211,10 +360,7 @@ def memory_list(limit: int, follow: bool, interval: float) -> None:
 @click.option("--limit", default=10, help="Max results.")
 def memory_search(query: str, limit: int) -> None:
     """Search memories by query."""
-    from pearscaff.memory import get_memory_backend
-
-    backend = get_memory_backend()
-    results = backend.search(query, limit=limit)
+    results = _search(query, limit=limit)
     for line in format_search_results(results):
         click.echo(line)
 
@@ -223,10 +369,7 @@ def memory_search(query: str, limit: int) -> None:
 @click.argument("name")
 def memory_entity(name: str) -> None:
     """Look up an entity and its connections."""
-    from pearscaff.memory import get_memory_backend
-
-    backend = get_memory_backend()
-    entity = backend.get_entity(name)
+    entity = _get_entity(name)
     for line in format_entity(entity):
         click.echo(line)
 
@@ -234,10 +377,7 @@ def memory_entity(name: str) -> None:
 @memory.command("graph")
 def memory_graph() -> None:
     """Show graph overview and stats."""
-    from pearscaff.memory import get_memory_backend
-
-    backend = get_memory_backend()
-    stats = backend.graph_stats()
+    stats = _graph_stats()
     for line in format_graph_stats(stats):
         click.echo(line)
 
@@ -246,9 +386,6 @@ def memory_graph() -> None:
 @click.argument("record_id")
 def memory_record(record_id: str) -> None:
     """Show memories extracted from a specific record."""
-    from pearscaff.memory import get_memory_backend
-
-    backend = get_memory_backend()
-    results = backend.get_memories_for_record(record_id)
+    results = _get_memories_for_record(record_id)
     for line in format_record_memories(results):
         click.echo(line)

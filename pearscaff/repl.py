@@ -153,13 +153,17 @@ class SessionRepl:
     def _handle_memory_command(self, text: str) -> None:
         """Handle /memory subcommands."""
         from pearscaff.cli_memory import (
+            _get_all,
+            _get_entity,
+            _get_memories_for_record,
+            _graph_stats,
+            _search,
             format_entity,
             format_graph_stats,
             format_memory_list,
             format_record_memories,
             format_search_results,
         )
-        from pearscaff.memory import get_memory_backend
 
         subparts = text.split(maxsplit=2)
         subcmd = subparts[1] if len(subparts) > 1 else "help"
@@ -175,48 +179,45 @@ class SessionRepl:
             return
 
         try:
-            backend = get_memory_backend()
+            if subcmd == "list":
+                limit = int(arg) if arg.isdigit() else 10
+                results = _get_all(limit=limit)
+                for line in format_memory_list(results):
+                    self._ui.print_above(line)
+
+            elif subcmd == "search":
+                if not arg:
+                    self._ui.print_above("Usage: /memory search <query>")
+                    return
+                results = _search(arg, limit=10)
+                for line in format_search_results(results):
+                    self._ui.print_above(line)
+
+            elif subcmd == "entity":
+                if not arg:
+                    self._ui.print_above("Usage: /memory entity <name>")
+                    return
+                entity = _get_entity(arg)
+                for line in format_entity(entity):
+                    self._ui.print_above(line)
+
+            elif subcmd == "graph":
+                stats = _graph_stats()
+                for line in format_graph_stats(stats):
+                    self._ui.print_above(line)
+
+            elif subcmd == "record":
+                if not arg:
+                    self._ui.print_above("Usage: /memory record <record_id>")
+                    return
+                results = _get_memories_for_record(arg)
+                for line in format_record_memories(results):
+                    self._ui.print_above(line)
+
+            else:
+                self._ui.print_above(f"Unknown memory command: {subcmd}. Type /memory help.")
         except Exception as exc:
-            self._ui.print_above(f"Memory backend error: {exc}")
-            return
-
-        if subcmd == "list":
-            limit = int(arg) if arg.isdigit() else 10
-            results = backend.get_all(limit=limit)
-            for line in format_memory_list(results):
-                self._ui.print_above(line)
-
-        elif subcmd == "search":
-            if not arg:
-                self._ui.print_above("Usage: /memory search <query>")
-                return
-            results = backend.search(arg, limit=10)
-            for line in format_search_results(results):
-                self._ui.print_above(line)
-
-        elif subcmd == "entity":
-            if not arg:
-                self._ui.print_above("Usage: /memory entity <name>")
-                return
-            entity = backend.get_entity(arg)
-            for line in format_entity(entity):
-                self._ui.print_above(line)
-
-        elif subcmd == "graph":
-            stats = backend.graph_stats()
-            for line in format_graph_stats(stats):
-                self._ui.print_above(line)
-
-        elif subcmd == "record":
-            if not arg:
-                self._ui.print_above("Usage: /memory record <record_id>")
-                return
-            results = backend.get_memories_for_record(arg)
-            for line in format_record_memories(results):
-                self._ui.print_above(line)
-
-        else:
-            self._ui.print_above(f"Unknown memory command: {subcmd}. Type /memory help.")
+            self._ui.print_above(f"Memory error: {exc}")
 
     # --- Main loop ---
 
