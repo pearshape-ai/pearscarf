@@ -2,7 +2,7 @@
 
 Operational infrastructure that grows itself.
 
-Multi-agent system with async communication over SQLite. A worker agent handles reasoning and routing, expert agents access domain services through APIs or headless browsers.
+Multi-agent system with async communication over Postgres. A worker agent handles reasoning and routing, expert agents access domain services through APIs or headless browsers.
 
 ## Quick Start
 
@@ -10,7 +10,8 @@ Multi-agent system with async communication over SQLite. A worker agent handles 
 uv sync
 source .venv/bin/activate
 playwright install chromium
-cp .env.example .env          # add ANTHROPIC_API_KEY
+docker compose up -d           # start Postgres, Qdrant, Neo4j
+cp .env.example .env          # add ANTHROPIC_API_KEY + POSTGRES_PASSWORD
 
 pearscaff gmail --auth             # Gmail OAuth setup (or: expert gmail --login for browser)
 pearscaff run                      # start the full system
@@ -42,17 +43,17 @@ Also available as `ps --version`, `ps run`, `ps discord`, etc.
 
 ```
 REPL / Discord (human)
-    ↓ SQLite messages
+    ↓ Postgres messages
 Worker Agent (reasoning, routing, triage)
-    ↓ SQLite messages
+    ↓ Postgres messages
 Expert Agents (Gmail API/browser, Retriever)
     ↓
-Indexer (background) → Knowledge Graph (SQLite) + Vector Store (Qdrant)
+Indexer (background) → Knowledge Graph (Postgres) + Vector Store (Qdrant)
 ```
 
-Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via SQLite polling. A unified log at `data/logs/session.log` records every action across all agents.
+Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via Postgres polling. A unified log at `data/logs/session.log` records every action across all agents.
 
-Emails read by the Gmail expert are persisted to a System of Record with deduplication. The worker triages each email — auto-classifying known senders and obvious noise, asking the human when uncertain. A background Indexer extracts entities and facts into a knowledge graph (SQLite) and embeds records in Qdrant for semantic search. The Retriever expert searches the knowledge graph and vector store when the worker needs context.
+Emails read by the Gmail expert are persisted to a System of Record with deduplication. The worker triages each email — auto-classifying known senders and obvious noise, asking the human when uncertain. A background Indexer extracts entities and facts into a knowledge graph (Postgres) and embeds records in Qdrant for semantic search. The Retriever expert searches the knowledge graph and vector store when the worker needs context.
 
 ## REPL
 

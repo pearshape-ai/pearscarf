@@ -60,7 +60,7 @@ The REPL shows the active session in the prompt:
 ### Message Flow
 
 When you type a message:
-1. It's sent to the **worker agent** via SQLite
+1. It's sent to the **worker agent** via Postgres
 2. Worker reasons about it — may delegate to an **expert agent**
 3. Expert processes (e.g. reads Gmail via API or headless browser)
 4. Result flows back: expert → worker → you
@@ -156,7 +156,11 @@ Auto-discovered at startup.
 | `MODEL` | `claude-sonnet-4-5-20250929` | Model identifier |
 | `MAX_TURNS` | `10` | Max tool-call loop iterations |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
-| `DB_PATH` | `data/pearscaff.db` | SQLite database path |
+| `POSTGRES_HOST` | `localhost` | Postgres host |
+| `POSTGRES_PORT` | `5432` | Postgres port |
+| `POSTGRES_USER` | `pearscaff` | Postgres user |
+| `POSTGRES_PASSWORD` | (required) | Postgres password |
+| `POSTGRES_DB` | `pearscaff` | Postgres database name |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant server URL |
 | `GMAIL_CLIENT_ID` | | Google OAuth client ID |
 | `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |

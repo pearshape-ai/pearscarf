@@ -12,6 +12,8 @@ dependencies = [
     "httpx",
     "langsmith",
     "playwright",
+    "psycopg[binary]",
+    "psycopg-pool",
     "qdrant-client",
     "python-dotenv",
     "sentence-transformers",

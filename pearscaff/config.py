@@ -8,7 +8,13 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MODEL = os.getenv("MODEL", "claude-sonnet-4-5-20250929")
 MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
-DB_PATH = os.getenv("DB_PATH", "data/pearscaff.db")
+
+# Postgres
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+POSTGRES_USER = os.getenv("POSTGRES_USER", "pearscaff")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "pearscaff")
 
 # Qdrant vector store
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")

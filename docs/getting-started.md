@@ -65,43 +65,27 @@ Log in, complete 2FA, then press Enter in the terminal. Session saved for reuse.
 
 If both OAuth credentials and a browser session exist, OAuth (API) is used by default.
 
-## Qdrant Setup (required for vector search)
+## Docker Services
 
-Qdrant stores vector embeddings for semantic search. Run it via Docker:
-
-```bash
-mkdir -p data/qdrant
-
-docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
-  -v ./data/qdrant:/qdrant/storage qdrant/qdrant
-```
-
-Default config works out of the box. To customize, add to `.env`:
-```
-QDRANT_URL=http://localhost:6333
-```
-
-## Neo4j Setup (optional)
-
-Neo4j is retained for future graph backend evaluation (Graphiti, Cognee). Not required for the default SQLite+Qdrant pipeline.
+Postgres (application data), Qdrant (vector search), and Neo4j (future graph backend) run as Docker containers. A `docker-compose.yml` is provided:
 
 ```bash
-source .env
-mkdir -p data/neo4j
-
-docker run -d --name neo4j -p 7474:7474 -p 7687:7687 \
-  -v ./data/neo4j:/data \
-  -e NEO4J_AUTH=neo4j/$NEO4J_PASSWORD -e NEO4J_PLUGINS='["apoc"]' neo4j:5
+# Set POSTGRES_PASSWORD in .env first
+docker compose up -d
 ```
 
-Add to `.env`:
+This starts all three services with data persisted under `data/`.
+
+Add Postgres credentials to `.env`:
 ```
-NEO4J_URL=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your-password
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=pearscaff
+POSTGRES_PASSWORD=your-password
+POSTGRES_DB=pearscaff
 ```
 
-**Tip:** Neo4j Browser is available at `http://localhost:7474` for visual graph exploration.
+**Neo4j** is optional — retained for future graph backend evaluation (Graphiti, Cognee). Browser available at `http://localhost:7474`.
 
 ## LangSmith Setup (optional — observability)
 
@@ -126,7 +110,7 @@ When not configured, the system runs with zero tracing overhead.
 pearscaff run
 ```
 
-Starts worker agent + Gmail expert + session-aware REPL. All communication goes through SQLite.
+Starts worker agent + Gmail expert + session-aware REPL. All communication goes through Postgres.
 
 ```
 [ses_001] > Read my latest emails

@@ -1,157 +1,168 @@
 from __future__ import annotations
 
-import json
-import os
-import sqlite3
-import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from pearscaff.config import DB_PATH
+import psycopg
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
 
-os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+from pearscaff.config import (
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+)
 
-_local = threading.local()
+_pool: ConnectionPool | None = None
 
 
-def _get_conn() -> sqlite3.Connection:
-    if not hasattr(_local, "conn"):
-        _local.conn = sqlite3.connect(DB_PATH, timeout=10)
-        _local.conn.row_factory = sqlite3.Row
-        _local.conn.execute("PRAGMA journal_mode=WAL")
-        _local.conn.execute("PRAGMA busy_timeout=5000")
-    return _local.conn
+def _get_pool() -> ConnectionPool:
+    global _pool
+    if _pool is None:
+        conninfo = (
+            f"host={POSTGRES_HOST} port={POSTGRES_PORT} "
+            f"dbname={POSTGRES_DB} user={POSTGRES_USER} password={POSTGRES_PASSWORD}"
+        )
+        _pool = ConnectionPool(
+            conninfo,
+            min_size=2,
+            max_size=10,
+            kwargs={"row_factory": dict_row, "autocommit": False},
+        )
+    return _pool
+
+
+@contextmanager
+def _get_conn():
+    """Get a connection from the pool. Use as context manager."""
+    with _get_pool().connection() as conn:
+        yield conn
+
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    initiated_by TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    from_agent TEXT NOT NULL,
+    to_agent TEXT NOT NULL,
+    content TEXT NOT NULL,
+    reasoning TEXT NOT NULL DEFAULT '',
+    data JSONB NOT NULL DEFAULT '{}',
+    read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_to_unread
+    ON messages(to_agent, read);
+CREATE INDEX IF NOT EXISTS idx_messages_session
+    ON messages(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS discord_threads (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(id),
+    thread_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL
+);
+
+-- System of Record
+CREATE TABLE IF NOT EXISTS records (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    raw TEXT,
+    indexed BOOLEAN NOT NULL DEFAULT FALSE,
+    classification TEXT,
+    classification_reason TEXT,
+    human_context TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_records_type ON records(type);
+CREATE INDEX IF NOT EXISTS idx_records_indexed ON records(indexed);
+
+CREATE TABLE IF NOT EXISTS emails (
+    record_id TEXT PRIMARY KEY REFERENCES records(id),
+    message_id TEXT UNIQUE,
+    sender TEXT,
+    recipient TEXT,
+    subject TEXT,
+    body TEXT,
+    received_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_emails_message_id ON emails(message_id);
+
+-- Knowledge Graph
+CREATE TABLE IF NOT EXISTS entity_types (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    extract_fields JSONB,
+    added_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entities (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+
+CREATE TABLE IF NOT EXISTS edges (
+    id TEXT PRIMARY KEY,
+    from_entity TEXT NOT NULL REFERENCES entities(id),
+    to_entity TEXT NOT NULL REFERENCES entities(id),
+    relationship TEXT NOT NULL,
+    source_record TEXT REFERENCES records(id),
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_entity);
+CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_entity);
+
+CREATE TABLE IF NOT EXISTS facts (
+    id TEXT PRIMARY KEY,
+    entity_id TEXT NOT NULL REFERENCES entities(id),
+    attribute TEXT NOT NULL,
+    value TEXT NOT NULL,
+    source_record TEXT REFERENCES records(id),
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity_id);
+"""
+
+_SEED_ENTITY_TYPES = """
+INSERT INTO entity_types (id, name, description, extract_fields, added_at)
+VALUES
+    ('et_person', 'person',
+     'A human being. Look for names, email addresses, roles, titles.',
+     '["name", "email", "role"]', '2026-03-01'),
+    ('et_company', 'company',
+     'A business or organization. Look for company names, domains, industries.',
+     '["name", "domain"]', '2026-03-01')
+ON CONFLICT DO NOTHING;
+"""
 
 
 def init_db() -> None:
-    conn = _get_conn()
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT PRIMARY KEY,
-            initiated_by TEXT NOT NULL,
-            summary TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL REFERENCES sessions(id),
-            from_agent TEXT NOT NULL,
-            to_agent TEXT NOT NULL,
-            content TEXT NOT NULL,
-            reasoning TEXT NOT NULL DEFAULT '',
-            data TEXT NOT NULL DEFAULT '{}',
-            read INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_messages_to_unread
-            ON messages(to_agent, read);
-        CREATE INDEX IF NOT EXISTS idx_messages_session
-            ON messages(session_id, created_at);
-
-        CREATE TABLE IF NOT EXISTS discord_threads (
-            session_id TEXT PRIMARY KEY REFERENCES sessions(id),
-            thread_id INTEGER NOT NULL,
-            channel_id INTEGER NOT NULL
-        );
-
-        -- System of Record
-        CREATE TABLE IF NOT EXISTS records (
-            id TEXT PRIMARY KEY,
-            type TEXT NOT NULL,
-            source TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            raw TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS emails (
-            record_id TEXT PRIMARY KEY REFERENCES records(id),
-            message_id TEXT UNIQUE,
-            sender TEXT,
-            recipient TEXT,
-            subject TEXT,
-            body TEXT,
-            received_at TEXT
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_emails_message_id
-            ON emails(message_id);
-        CREATE INDEX IF NOT EXISTS idx_records_type
-            ON records(type);
-
-        -- Knowledge Graph
-        CREATE TABLE IF NOT EXISTS entity_types (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT,
-            extract_fields TEXT,
-            added_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS entities (
-            id TEXT PRIMARY KEY,
-            type TEXT NOT NULL,
-            name TEXT NOT NULL,
-            metadata TEXT,
-            created_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS edges (
-            id TEXT PRIMARY KEY,
-            from_entity TEXT NOT NULL REFERENCES entities(id),
-            to_entity TEXT NOT NULL REFERENCES entities(id),
-            relationship TEXT NOT NULL,
-            source_record TEXT REFERENCES records(id),
-            created_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS facts (
-            id TEXT PRIMARY KEY,
-            entity_id TEXT NOT NULL REFERENCES entities(id),
-            attribute TEXT NOT NULL,
-            value TEXT NOT NULL,
-            source_record TEXT REFERENCES records(id),
-            updated_at TEXT NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
-        CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
-        CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_entity);
-        CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_entity);
-        CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity_id);
-        """
-    )
-
-    # Safe migrations — add columns if not present
-    for col_sql in [
-        "ALTER TABLE records ADD COLUMN indexed INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE records ADD COLUMN classification TEXT",
-        "ALTER TABLE records ADD COLUMN classification_reason TEXT",
-        "ALTER TABLE records ADD COLUMN human_context TEXT",
-    ]:
-        try:
-            conn.execute(col_sql)
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_records_indexed ON records(indexed)"
-    )
-
-    # Seed entity types
-    conn.executescript(
-        """
-        INSERT OR IGNORE INTO entity_types (id, name, description, extract_fields, added_at)
-        VALUES
-            ('et_person', 'person',
-             'A human being. Look for names, email addresses, roles, titles.',
-             '["name", "email", "role"]', '2026-03-01'),
-            ('et_company', 'company',
-             'A business or organization. Look for company names, domains, industries.',
-             '["name", "domain"]', '2026-03-01');
-        """
-    )
-    conn.commit()
+    with _get_conn() as conn:
+        conn.execute(_SCHEMA)
+        conn.execute(_SEED_ENTITY_TYPES)
+        conn.commit()
 
 
 def _now() -> str:
@@ -159,38 +170,38 @@ def _now() -> str:
 
 
 def _next_session_id() -> str:
-    conn = _get_conn()
-    row = conn.execute("SELECT COUNT(*) as c FROM sessions").fetchone()
-    num = row["c"] + 1
-    return f"ses_{num:03d}"
+    with _get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) as c FROM sessions").fetchone()
+        num = row["c"] + 1
+        return f"ses_{num:03d}"
 
 
 def create_session(initiated_by: str, summary: str = "") -> str:
-    conn = _get_conn()
     session_id = _next_session_id()
-    conn.execute(
-        "INSERT INTO sessions (id, initiated_by, summary, created_at) VALUES (?, ?, ?, ?)",
-        (session_id, initiated_by, summary, _now()),
-    )
-    conn.commit()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO sessions (id, initiated_by, summary, created_at) VALUES (%s, %s, %s, %s)",
+            (session_id, initiated_by, summary, _now()),
+        )
+        conn.commit()
     return session_id
 
 
 def list_sessions() -> list[dict]:
-    conn = _get_conn()
-    rows = conn.execute(
-        "SELECT id, initiated_by, summary, created_at FROM sessions ORDER BY created_at"
-    ).fetchall()
-    return [dict(r) for r in rows]
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, initiated_by, summary, created_at FROM sessions ORDER BY created_at"
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_session(session_id: str) -> dict | None:
-    conn = _get_conn()
-    row = conn.execute(
-        "SELECT id, initiated_by, summary, created_at FROM sessions WHERE id = ?",
-        (session_id,),
-    ).fetchone()
-    return dict(row) if row else None
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, initiated_by, summary, created_at FROM sessions WHERE id = %s",
+            (session_id,),
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def insert_message(
@@ -201,74 +212,75 @@ def insert_message(
     reasoning: str = "",
     data: dict | None = None,
 ) -> int:
-    conn = _get_conn()
-    cur = conn.execute(
-        "INSERT INTO messages (session_id, from_agent, to_agent, content, reasoning, data, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (
-            session_id,
-            from_agent,
-            to_agent,
-            content,
-            reasoning,
-            json.dumps(data or {}),
-            _now(),
-        ),
-    )
-    conn.commit()
-    return cur.lastrowid
+    with _get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO messages (session_id, from_agent, to_agent, content, reasoning, data, created_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (
+                session_id,
+                from_agent,
+                to_agent,
+                content,
+                reasoning,
+                Jsonb(data or {}),
+                _now(),
+            ),
+        )
+        conn.commit()
+        return cur.fetchone()["id"]
 
 
 def poll_unread(to_agent: str) -> list[dict]:
-    conn = _get_conn()
-    rows = conn.execute(
-        "SELECT id, session_id, from_agent, to_agent, content, reasoning, data, created_at "
-        "FROM messages WHERE to_agent = ? AND read = 0 ORDER BY created_at",
-        (to_agent,),
-    ).fetchall()
-    return [dict(r) for r in rows]
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, session_id, from_agent, to_agent, content, reasoning, data, created_at "
+            "FROM messages WHERE to_agent = %s AND read = FALSE ORDER BY created_at",
+            (to_agent,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def mark_read(msg_id: int) -> None:
-    conn = _get_conn()
-    conn.execute("UPDATE messages SET read = 1 WHERE id = ?", (msg_id,))
-    conn.commit()
+    with _get_conn() as conn:
+        conn.execute("UPDATE messages SET read = TRUE WHERE id = %s", (msg_id,))
+        conn.commit()
 
 
 def get_history(session_id: str) -> list[dict]:
-    conn = _get_conn()
-    rows = conn.execute(
-        "SELECT id, from_agent, to_agent, content, reasoning, data, created_at "
-        "FROM messages WHERE session_id = ? ORDER BY created_at",
-        (session_id,),
-    ).fetchall()
-    return [dict(r) for r in rows]
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, from_agent, to_agent, content, reasoning, data, created_at "
+            "FROM messages WHERE session_id = %s ORDER BY created_at",
+            (session_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 # Discord thread mapping
 
 def save_thread_mapping(session_id: str, thread_id: int, channel_id: int) -> None:
-    conn = _get_conn()
-    conn.execute(
-        "INSERT OR REPLACE INTO discord_threads (session_id, thread_id, channel_id) VALUES (?, ?, ?)",
-        (session_id, thread_id, channel_id),
-    )
-    conn.commit()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO discord_threads (session_id, thread_id, channel_id) VALUES (%s, %s, %s) "
+            "ON CONFLICT (session_id) DO UPDATE SET thread_id = EXCLUDED.thread_id, channel_id = EXCLUDED.channel_id",
+            (session_id, thread_id, channel_id),
+        )
+        conn.commit()
 
 
 def get_session_by_thread(thread_id: int) -> str | None:
-    conn = _get_conn()
-    row = conn.execute(
-        "SELECT session_id FROM discord_threads WHERE thread_id = ?",
-        (thread_id,),
-    ).fetchone()
-    return row["session_id"] if row else None
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT session_id FROM discord_threads WHERE thread_id = %s",
+            (thread_id,),
+        ).fetchone()
+        return row["session_id"] if row else None
 
 
 def get_thread_by_session(session_id: str) -> int | None:
-    conn = _get_conn()
-    row = conn.execute(
-        "SELECT thread_id FROM discord_threads WHERE session_id = ?",
-        (session_id,),
-    ).fetchone()
-    return row["thread_id"] if row else None
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT thread_id FROM discord_threads WHERE session_id = %s",
+            (session_id,),
+        ).fetchone()
+        return row["thread_id"] if row else None

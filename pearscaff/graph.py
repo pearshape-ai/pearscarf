@@ -5,7 +5,7 @@ The Indexer writes to the graph. The worker and other agents read from it.
 
 from __future__ import annotations
 
-import json
+from psycopg.types.json import Jsonb
 
 from pearscaff.db import _get_conn, _now, init_db
 
@@ -16,28 +16,29 @@ from pearscaff.db import _get_conn, _now, init_db
 def list_entity_types() -> list[dict]:
     """Return all registered entity types."""
     init_db()
-    conn = _get_conn()
-    rows = conn.execute(
-        "SELECT id, name, description, extract_fields, added_at FROM entity_types"
-    ).fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["extract_fields"] = json.loads(d["extract_fields"]) if d["extract_fields"] else []
-        result.append(d)
-    return result
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name, description, extract_fields, added_at FROM entity_types"
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            # JSONB auto-deserializes; ensure list
+            d["extract_fields"] = d["extract_fields"] if d["extract_fields"] else []
+            result.append(d)
+        return result
 
 
 # --- Entities ---
 
 
 def _next_entity_id(entity_type: str) -> str:
-    conn = _get_conn()
-    row = conn.execute(
-        "SELECT COUNT(*) as c FROM entities WHERE type = ?", (entity_type,)
-    ).fetchone()
-    num = row["c"] + 1
-    return f"{entity_type}_{num:03d}"
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as c FROM entities WHERE type = %s", (entity_type,)
+        ).fetchone()
+        num = row["c"] + 1
+        return f"{entity_type}_{num:03d}"
 
 
 def find_entity(
@@ -49,30 +50,29 @@ def find_entity(
     For companies: match on name, or domain in metadata.
     """
     init_db()
-    conn = _get_conn()
-
-    # Exact name match
-    row = conn.execute(
-        "SELECT id, type, name, metadata, created_at FROM entities "
-        "WHERE type = ? AND name = ?",
-        (entity_type, name),
-    ).fetchone()
-    if row:
-        d = dict(row)
-        d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
-        return d
-
-    # Metadata match (e.g. email or domain)
-    if metadata_match:
+    with _get_conn() as conn:
+        # Exact name match
         row = conn.execute(
             "SELECT id, type, name, metadata, created_at FROM entities "
-            "WHERE type = ? AND metadata LIKE ?",
-            (entity_type, f"%{metadata_match}%"),
+            "WHERE type = %s AND name = %s",
+            (entity_type, name),
         ).fetchone()
         if row:
             d = dict(row)
-            d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
+            d["metadata"] = d["metadata"] if d["metadata"] else {}
             return d
+
+        # Metadata match (e.g. email or domain) — cast JSONB to text for LIKE
+        if metadata_match:
+            row = conn.execute(
+                "SELECT id, type, name, metadata, created_at FROM entities "
+                "WHERE type = %s AND metadata::text LIKE %s",
+                (entity_type, f"%{metadata_match}%"),
+            ).fetchone()
+            if row:
+                d = dict(row)
+                d["metadata"] = d["metadata"] if d["metadata"] else {}
+                return d
 
     return None
 
@@ -80,29 +80,29 @@ def find_entity(
 def create_entity(entity_type: str, name: str, metadata: dict | None = None) -> str:
     """Create a new entity. Returns the entity ID."""
     init_db()
-    conn = _get_conn()
     entity_id = _next_entity_id(entity_type)
-    conn.execute(
-        "INSERT INTO entities (id, type, name, metadata, created_at) VALUES (?, ?, ?, ?, ?)",
-        (entity_id, entity_type, name, json.dumps(metadata or {}), _now()),
-    )
-    conn.commit()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO entities (id, type, name, metadata, created_at) VALUES (%s, %s, %s, %s, %s)",
+            (entity_id, entity_type, name, Jsonb(metadata or {}), _now()),
+        )
+        conn.commit()
     return entity_id
 
 
 def get_entity(entity_id: str) -> dict | None:
     """Look up an entity by ID."""
     init_db()
-    conn = _get_conn()
-    row = conn.execute(
-        "SELECT id, type, name, metadata, created_at FROM entities WHERE id = ?",
-        (entity_id,),
-    ).fetchone()
-    if not row:
-        return None
-    d = dict(row)
-    d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
-    return d
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, type, name, metadata, created_at FROM entities WHERE id = %s",
+            (entity_id,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["metadata"] = d["metadata"] if d["metadata"] else {}
+        return d
 
 
 def search_entities(
@@ -115,40 +115,39 @@ def search_entities(
     Matches exact name or LIKE on name and metadata fields.
     """
     init_db()
-    conn = _get_conn()
+    with _get_conn() as conn:
+        conditions = ["(name = %s OR name LIKE %s OR metadata::text LIKE %s)"]
+        params: list = [query, f"%{query}%", f"%{query}%"]
 
-    conditions = ["(name = ? OR name LIKE ? OR metadata LIKE ?)"]
-    params: list = [query, f"%{query}%", f"%{query}%"]
+        if entity_type:
+            conditions.append("type = %s")
+            params.append(entity_type)
 
-    if entity_type:
-        conditions.append("type = ?")
-        params.append(entity_type)
+        params.append(limit)
 
-    params.append(limit)
+        where = " AND ".join(conditions)
+        rows = conn.execute(
+            f"SELECT id, type, name, metadata, created_at FROM entities "
+            f"WHERE {where} ORDER BY created_at DESC LIMIT %s",
+            params,
+        ).fetchall()
 
-    where = " AND ".join(conditions)
-    rows = conn.execute(
-        f"SELECT id, type, name, metadata, created_at FROM entities "
-        f"WHERE {where} ORDER BY created_at DESC LIMIT ?",
-        params,
-    ).fetchall()
-
-    result = []
-    for row in rows:
-        d = dict(row)
-        d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
-        result.append(d)
-    return result
+        result = []
+        for row in rows:
+            d = dict(row)
+            d["metadata"] = d["metadata"] if d["metadata"] else {}
+            result.append(d)
+        return result
 
 
 # --- Edges ---
 
 
 def _next_edge_id() -> str:
-    conn = _get_conn()
-    row = conn.execute("SELECT COUNT(*) as c FROM edges").fetchone()
-    num = row["c"] + 1
-    return f"edge_{num:03d}"
+    with _get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) as c FROM edges").fetchone()
+        num = row["c"] + 1
+        return f"edge_{num:03d}"
 
 
 def create_edge(
@@ -159,14 +158,14 @@ def create_edge(
 ) -> str:
     """Create a graph edge. Returns the edge ID."""
     init_db()
-    conn = _get_conn()
     edge_id = _next_edge_id()
-    conn.execute(
-        "INSERT INTO edges (id, from_entity, to_entity, relationship, source_record, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (edge_id, from_entity, to_entity, relationship, source_record, _now()),
-    )
-    conn.commit()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO edges (id, from_entity, to_entity, relationship, source_record, created_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (edge_id, from_entity, to_entity, relationship, source_record, _now()),
+        )
+        conn.commit()
     return edge_id
 
 
@@ -174,10 +173,10 @@ def create_edge(
 
 
 def _next_fact_id() -> str:
-    conn = _get_conn()
-    row = conn.execute("SELECT COUNT(*) as c FROM facts").fetchone()
-    num = row["c"] + 1
-    return f"fact_{num:03d}"
+    with _get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) as c FROM facts").fetchone()
+        num = row["c"] + 1
+        return f"fact_{num:03d}"
 
 
 def upsert_fact(
@@ -188,43 +187,42 @@ def upsert_fact(
 ) -> str:
     """Insert or update a fact. Returns the fact ID."""
     init_db()
-    conn = _get_conn()
     now = _now()
+    with _get_conn() as conn:
+        # Check if fact already exists for this entity + attribute
+        row = conn.execute(
+            "SELECT id FROM facts WHERE entity_id = %s AND attribute = %s",
+            (entity_id, attribute),
+        ).fetchone()
 
-    # Check if fact already exists for this entity + attribute
-    row = conn.execute(
-        "SELECT id FROM facts WHERE entity_id = ? AND attribute = ?",
-        (entity_id, attribute),
-    ).fetchone()
+        if row:
+            fact_id = row["id"]
+            conn.execute(
+                "UPDATE facts SET value = %s, source_record = %s, updated_at = %s WHERE id = %s",
+                (value, source_record, now, fact_id),
+            )
+        else:
+            fact_id = _next_fact_id()
+            conn.execute(
+                "INSERT INTO facts (id, entity_id, attribute, value, source_record, updated_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (fact_id, entity_id, attribute, value, source_record, now),
+            )
 
-    if row:
-        fact_id = row["id"]
-        conn.execute(
-            "UPDATE facts SET value = ?, source_record = ?, updated_at = ? WHERE id = ?",
-            (value, source_record, now, fact_id),
-        )
-    else:
-        fact_id = _next_fact_id()
-        conn.execute(
-            "INSERT INTO facts (id, entity_id, attribute, value, source_record, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (fact_id, entity_id, attribute, value, source_record, now),
-        )
-
-    conn.commit()
+        conn.commit()
     return fact_id
 
 
 def get_entity_facts(entity_id: str) -> list[dict]:
     """Get all facts for an entity."""
     init_db()
-    conn = _get_conn()
-    rows = conn.execute(
-        "SELECT id, attribute, value, source_record, updated_at "
-        "FROM facts WHERE entity_id = ? ORDER BY updated_at DESC",
-        (entity_id,),
-    ).fetchall()
-    return [dict(r) for r in rows]
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, attribute, value, source_record, updated_at "
+            "FROM facts WHERE entity_id = %s ORDER BY updated_at DESC",
+            (entity_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def traverse_graph(entity_id: str, max_depth: int = 3) -> dict:
@@ -233,23 +231,22 @@ def traverse_graph(entity_id: str, max_depth: int = 3) -> dict:
     Returns {entities: [...], edges: [...], source_records: [...]}.
     """
     init_db()
-    conn = _get_conn()
-
-    rows = conn.execute(
-        """
-        WITH RECURSIVE connected AS (
-            SELECT to_entity, relationship, source_record, 0 as depth
-            FROM edges WHERE from_entity = ?
-            UNION ALL
-            SELECT e.to_entity, e.relationship, e.source_record, c.depth + 1
-            FROM edges e JOIN connected c ON e.from_entity = c.to_entity
-            WHERE c.depth < ?
-        )
-        SELECT DISTINCT to_entity, relationship, source_record, depth
-        FROM connected
-        """,
-        (entity_id, max_depth),
-    ).fetchall()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            """
+            WITH RECURSIVE connected AS (
+                SELECT to_entity, relationship, source_record, 0 as depth
+                FROM edges WHERE from_entity = %s
+                UNION ALL
+                SELECT e.to_entity, e.relationship, e.source_record, c.depth + 1
+                FROM edges e JOIN connected c ON e.from_entity = c.to_entity
+                WHERE c.depth < %s
+            )
+            SELECT DISTINCT to_entity, relationship, source_record, depth
+            FROM connected
+            """,
+            (entity_id, max_depth),
+        ).fetchall()
 
     entity_ids = set()
     edge_list = []

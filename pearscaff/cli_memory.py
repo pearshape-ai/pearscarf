@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 
 import click
@@ -144,37 +143,35 @@ def format_record_memories(memories: list[dict]) -> list[str]:
 
 
 def _get_all(limit: int = 10) -> list[dict]:
-    """List entities and recent facts from SQLite graph."""
-    from pearscaff import graph
+    """List entities and recent facts from the knowledge graph."""
     from pearscaff.db import _get_conn, init_db
 
     init_db()
-    conn = _get_conn()
-
-    # Get entities
-    entities = conn.execute(
-        "SELECT id, type as entity_type, name, metadata, created_at "
-        "FROM entities ORDER BY created_at DESC LIMIT ?",
-        (limit,),
-    ).fetchall()
-
-    results = []
-    for e in entities:
-        d = dict(e)
-        d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
-        results.append(d)
-
-    # If fewer entities than limit, fill with recent facts
-    remaining = limit - len(results)
-    if remaining > 0:
-        facts = conn.execute(
-            "SELECT f.id, f.attribute, f.value, f.updated_at, e.name as entity_name "
-            "FROM facts f JOIN entities e ON f.entity_id = e.id "
-            "ORDER BY f.updated_at DESC LIMIT ?",
-            (remaining,),
+    with _get_conn() as conn:
+        # Get entities
+        entities = conn.execute(
+            "SELECT id, type as entity_type, name, metadata, created_at "
+            "FROM entities ORDER BY created_at DESC LIMIT %s",
+            (limit,),
         ).fetchall()
-        for f in facts:
-            results.append(dict(f))
+
+        results = []
+        for e in entities:
+            d = dict(e)
+            d["metadata"] = d["metadata"] if d["metadata"] else {}
+            results.append(d)
+
+        # If fewer entities than limit, fill with recent facts
+        remaining = limit - len(results)
+        if remaining > 0:
+            facts = conn.execute(
+                "SELECT f.id, f.attribute, f.value, f.updated_at, e.name as entity_name "
+                "FROM facts f JOIN entities e ON f.entity_id = e.id "
+                "ORDER BY f.updated_at DESC LIMIT %s",
+                (remaining,),
+            ).fetchall()
+            for f in facts:
+                results.append(dict(f))
 
     return results
 
@@ -238,27 +235,26 @@ def _get_entity(name: str) -> dict | None:
 
 
 def _graph_stats() -> dict:
-    """Get entity/edge/fact counts from SQLite."""
+    """Get entity/edge/fact counts from Postgres."""
     from pearscaff.db import _get_conn, init_db
 
     init_db()
-    conn = _get_conn()
+    with _get_conn() as conn:
+        total_entities = conn.execute("SELECT COUNT(*) as c FROM entities").fetchone()["c"]
+        total_edges = conn.execute("SELECT COUNT(*) as c FROM edges").fetchone()["c"]
+        total_facts = conn.execute("SELECT COUNT(*) as c FROM facts").fetchone()["c"]
 
-    total_entities = conn.execute("SELECT COUNT(*) as c FROM entities").fetchone()["c"]
-    total_edges = conn.execute("SELECT COUNT(*) as c FROM edges").fetchone()["c"]
-    total_facts = conn.execute("SELECT COUNT(*) as c FROM facts").fetchone()["c"]
+        # Entity type breakdown
+        type_rows = conn.execute(
+            "SELECT type, COUNT(*) as c FROM entities GROUP BY type ORDER BY c DESC"
+        ).fetchall()
+        entity_counts = {r["type"]: r["c"] for r in type_rows}
 
-    # Entity type breakdown
-    type_rows = conn.execute(
-        "SELECT type, COUNT(*) as c FROM entities GROUP BY type ORDER BY c DESC"
-    ).fetchall()
-    entity_counts = {r["type"]: r["c"] for r in type_rows}
-
-    # Relationship type breakdown
-    rel_rows = conn.execute(
-        "SELECT relationship, COUNT(*) as c FROM edges GROUP BY relationship ORDER BY c DESC"
-    ).fetchall()
-    rel_counts = {r["relationship"]: r["c"] for r in rel_rows}
+        # Relationship type breakdown
+        rel_rows = conn.execute(
+            "SELECT relationship, COUNT(*) as c FROM edges GROUP BY relationship ORDER BY c DESC"
+        ).fetchall()
+        rel_counts = {r["relationship"]: r["c"] for r in rel_rows}
 
     return {
         "total_entities": total_entities,
@@ -274,35 +270,34 @@ def _get_memories_for_record(record_id: str) -> list[dict]:
     from pearscaff.db import _get_conn, init_db
 
     init_db()
-    conn = _get_conn()
+    with _get_conn() as conn:
+        results = []
 
-    results = []
+        # Facts from this record
+        facts = conn.execute(
+            "SELECT f.attribute, f.value, e.name as entity_name "
+            "FROM facts f JOIN entities e ON f.entity_id = e.id "
+            "WHERE f.source_record = %s",
+            (record_id,),
+        ).fetchall()
+        for f in facts:
+            d = dict(f)
+            d["type"] = "fact"
+            results.append(d)
 
-    # Facts from this record
-    facts = conn.execute(
-        "SELECT f.attribute, f.value, e.name as entity_name "
-        "FROM facts f JOIN entities e ON f.entity_id = e.id "
-        "WHERE f.source_record = ?",
-        (record_id,),
-    ).fetchall()
-    for f in facts:
-        d = dict(f)
-        d["type"] = "fact"
-        results.append(d)
-
-    # Edges from this record
-    edges = conn.execute(
-        "SELECT e1.name as `from`, e2.name as `to`, ed.relationship "
-        "FROM edges ed "
-        "JOIN entities e1 ON ed.from_entity = e1.id "
-        "JOIN entities e2 ON ed.to_entity = e2.id "
-        "WHERE ed.source_record = ?",
-        (record_id,),
-    ).fetchall()
-    for e in edges:
-        d = dict(e)
-        d["type"] = "relationship"
-        results.append(d)
+        # Edges from this record
+        edges = conn.execute(
+            'SELECT e1.name as "from", e2.name as "to", ed.relationship '
+            "FROM edges ed "
+            "JOIN entities e1 ON ed.from_entity = e1.id "
+            "JOIN entities e2 ON ed.to_entity = e2.id "
+            "WHERE ed.source_record = %s",
+            (record_id,),
+        ).fetchall()
+        for e in edges:
+            d = dict(e)
+            d["type"] = "relationship"
+            results.append(d)
 
     return results
 

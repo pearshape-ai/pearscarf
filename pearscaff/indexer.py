@@ -58,15 +58,15 @@ class Indexer:
 
     def _build_content(self, record: dict) -> str:
         """Build the record content string for extraction."""
-        conn = _get_conn()
         record_type = record["type"]
 
         if record_type == "email":
-            row = conn.execute(
-                "SELECT sender, recipient, subject, body, received_at "
-                "FROM emails WHERE record_id = ?",
-                (record["id"],),
-            ).fetchone()
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT sender, recipient, subject, body, received_at "
+                    "FROM emails WHERE record_id = %s",
+                    (record["id"],),
+                ).fetchone()
             if row:
                 email = dict(row)
                 parts = []
@@ -249,23 +249,23 @@ class Indexer:
             log.write("indexer", "--", "action", f"indexed {record_id}")
 
     def _mark_indexed(self, record_id: str) -> None:
-        conn = _get_conn()
-        conn.execute(
-            "UPDATE records SET indexed = 1 WHERE id = ?", (record_id,)
-        )
-        conn.commit()
+        with _get_conn() as conn:
+            conn.execute(
+                "UPDATE records SET indexed = TRUE WHERE id = %s", (record_id,)
+            )
+            conn.commit()
 
     def _loop(self) -> None:
         init_db()
         while not self._stop.is_set():
             try:
-                conn = _get_conn()
-                rows = conn.execute(
-                    "SELECT id, type, source, created_at, raw, human_context "
-                    "FROM records "
-                    "WHERE indexed = 0 AND classification = 'relevant' "
-                    "ORDER BY created_at"
-                ).fetchall()
+                with _get_conn() as conn:
+                    rows = conn.execute(
+                        "SELECT id, type, source, created_at, raw, human_context "
+                        "FROM records "
+                        "WHERE indexed = FALSE AND classification = 'relevant' "
+                        "ORDER BY created_at"
+                    ).fetchall()
 
                 if rows:
                     log.write(

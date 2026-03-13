@@ -7,13 +7,13 @@
 │                   Human                          │
 │            (Discord / Terminal REPL)              │
 └──────────────────────┬──────────────────────────┘
-                       │ SQLite messages
+                       │ Postgres messages
 ┌──────────────────────▼──────────────────────────┐
 │               Worker Agent                       │
 │    (reasoning, routing, triage, responds)         │
 └───┬──────────────┬──────────────┬───────────────┘
     │              │              │
-    │ SQLite       │ SQLite       │ SQLite
+    │ Postgres     │ Postgres     │ Postgres
     │ messages     │ messages     │ messages
     │              │              │
 ┌───▼───┐   ┌─────▼─────┐   ┌───▼────────┐
@@ -26,7 +26,7 @@
 ┌───▼─────────────▼──────────────▼────────────────┐
 │                  Storage                         │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
-│  │ SQLite   │ │ Graph    │ │ Qdrant         │ │
+│  │ Postgres │ │ Graph    │ │ Qdrant         │ │
 │  │ records  │ │ entities │ │ vector embeddings│ │
 │  │ emails   │ │ edges    │ │                  │ │
 │  │ sessions │ │ facts    │ │                  │ │
@@ -47,7 +47,7 @@ New email arrives
        ▼                                            ▼
 ┌──────────────┐                           ┌────────────────┐
 │   Worker     │                           │ System of      │
-│   (triage)   │                           │ Record (SQLite)│
+│   (triage)   │                           │ Record (Postgres)│
 └──────┬───────┘                           └────────────────┘
        │                                            ▲
        ├── known entity? → auto: relevant           │
@@ -125,8 +125,8 @@ pearscaff/
 │   ├── __init__.py        # BaseTool + ToolRegistry with auto-discovery
 │   ├── math.py            # Safe math expression evaluator
 │   └── web_search.py      # DuckDuckGo web search
-├── db.py                  # SQLite schema + queries (sessions, messages, records, graph)
-├── bus.py                 # MessageBus — send/receive/poll over SQLite
+├── db.py                  # Postgres schema + queries (sessions, messages, records, graph)
+├── bus.py                 # MessageBus — send/receive/poll over Postgres
 ├── store.py               # System of Record — structured email/record storage
 ├── graph.py               # Knowledge graph CRUD — entities, edges, facts
 ├── indexer.py             # Indexer — background LLM extraction into knowledge graph
@@ -144,13 +144,13 @@ pearscaff/
 
 ```
 Terminal REPL / Discord (human interface)
-    ↓ messages via SQLite
+    ↓ messages via Postgres
 Worker Agent (context, reasoning, task routing)
-    ↓ messages via SQLite
+    ↓ messages via Postgres
 Expert Agents (headless browser UI operators)
 ```
 
-All agent-to-agent communication goes through SQLite. There is no direct function calling between agents. Each agent runs in its own thread, polling the database for unread messages.
+All agent-to-agent communication goes through Postgres. There is no direct function calling between agents. Each agent runs in its own thread, polling the database for unread messages.
 
 ### Explicit Communication Model
 
@@ -204,7 +204,7 @@ edges(id, from_entity, to_entity, relationship, source_record, created_at)
 facts(id, entity_id, attribute, value, source_record, updated_at)
 ```
 
-SQLite with WAL mode for concurrent reads/writes across threads.
+Postgres with connection pooling (psycopg_pool) for concurrent reads/writes across threads.
 
 ## System of Record
 
@@ -234,7 +234,7 @@ Human responses are captured as `human_context` on the record. The Indexer appen
 The Indexer processes records into a knowledge graph of entities, relationships, and facts.
 
 - **`entity_types`** — Registry of extractable types (person, company). Seeded on first run. Drives the LLM extraction prompt.
-- **`entities`** — Graph nodes. Sequential IDs per type (`person_001`, `company_001`). Metadata stored as JSON.
+- **`entities`** — Graph nodes. Sequential IDs per type (`person_001`, `company_001`). Metadata stored as JSONB.
 - **`edges`** — Graph relationships between entities (e.g. `person_001 --works_at--> company_001`). Linked to source record.
 - **`facts`** — Living state attributes on entities (e.g. person's email, role). Upserted — same entity+attribute updates rather than duplicates.
 - **`graph.py`** — CRUD module: `find_entity()`, `create_entity()`, `create_edge()`, `upsert_fact()`.
@@ -341,4 +341,8 @@ The version string lives in `pearscaff/__init__.py` as `__version__`. `pyproject
 | `MODEL` | `claude-sonnet-4-5-20250929` | Model to use |
 | `MAX_TURNS` | `10` | Max agentic loop iterations per message |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
-| `DB_PATH` | `data/pearscaff.db` | SQLite database file path |
+| `POSTGRES_HOST` | `localhost` | Postgres host |
+| `POSTGRES_PORT` | `5432` | Postgres port |
+| `POSTGRES_USER` | `pearscaff` | Postgres user |
+| `POSTGRES_PASSWORD` | (required) | Postgres password |
+| `POSTGRES_DB` | `pearscaff` | Postgres database name |

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.2
+- Migrated from SQLite to Postgres for all application data
+- Connection pooling via psycopg_pool (min 2, max 10 connections)
+- JSONB columns for metadata, extract_fields, and message data (auto-serialize/deserialize)
+- BOOLEAN columns replace INTEGER 0/1 for read/indexed flags
+- Added docker-compose.yml consolidating Postgres, Qdrant, and Neo4j services
+- Added migration script: `scripts/migrate_sqlite_to_postgres.py`
+- Added psycopg[binary] and psycopg-pool dependencies
+- Removed sqlite3, DB_PATH config; added POSTGRES_* config vars
+
 ## 1.2.1
 - Replaced ChromaDB with Qdrant as the vector store
 - Qdrant connects to existing Docker container (same setup from Mem0 era)

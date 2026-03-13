@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from pearscaff import db
@@ -30,8 +29,6 @@ class MessageBus:
         messages = db.poll_unread(agent_name)
         for msg in messages:
             db.mark_read(msg["id"])
-            if isinstance(msg["data"], str):
-                msg["data"] = json.loads(msg["data"])
         return messages
 
     def list_sessions(self) -> list[dict]:
@@ -41,8 +38,4 @@ class MessageBus:
         return db.get_session(session_id)
 
     def get_history(self, session_id: str) -> list[dict]:
-        history = db.get_history(session_id)
-        for msg in history:
-            if isinstance(msg["data"], str):
-                msg["data"] = json.loads(msg["data"])
-        return history
+        return db.get_history(session_id)
