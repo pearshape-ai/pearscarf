@@ -143,163 +143,28 @@ def format_record_memories(memories: list[dict]) -> list[str]:
 
 
 def _get_all(limit: int = 10) -> list[dict]:
-    """List entities and recent facts from the knowledge graph."""
-    from pearscaff.db import _get_conn, init_db
-
-    init_db()
-    with _get_conn() as conn:
-        # Get entities
-        entities = conn.execute(
-            "SELECT id, type as entity_type, name, metadata, created_at "
-            "FROM entities ORDER BY created_at DESC LIMIT %s",
-            (limit,),
-        ).fetchall()
-
-        results = []
-        for e in entities:
-            d = dict(e)
-            d["metadata"] = d["metadata"] if d["metadata"] else {}
-            results.append(d)
-
-        # If fewer entities than limit, fill with recent facts
-        remaining = limit - len(results)
-        if remaining > 0:
-            facts = conn.execute(
-                "SELECT f.id, f.attribute, f.value, f.updated_at, e.name as entity_name "
-                "FROM facts f JOIN entities e ON f.entity_id = e.id "
-                "ORDER BY f.updated_at DESC LIMIT %s",
-                (remaining,),
-            ).fetchall()
-            for f in facts:
-                results.append(dict(f))
-
-    return results
+    """List entities and recent facts from the knowledge graph. (stubbed)"""
+    return []
 
 
 def _search(query: str, limit: int = 10) -> list[dict]:
-    """Search entities + vector store."""
-    from pearscaff import graph, vectorstore
-
-    results = []
-
-    # Entity search
-    entities = graph.search_entities(query, limit=limit)
-    for e in entities:
-        results.append({
-            "text": f"[{e['type']}] {e['name']}",
-            "metadata": e.get("metadata", {}),
-        })
-
-    # Vector search
-    remaining = limit - len(results)
-    if remaining > 0:
-        vec_results = vectorstore.query(query, n_results=remaining)
-        for r in vec_results:
-            subject = r["metadata"].get("subject", "")
-            sender = r["metadata"].get("sender", "")
-            text = f"'{subject}' from {sender}" if subject else (r["content"][:150] if r["content"] else r["id"])
-            results.append({
-                "text": text,
-                "distance": r["distance"],
-                "metadata": r["metadata"],
-            })
-
-    return results
+    """Search entities + vector store. (stubbed)"""
+    return []
 
 
 def _get_entity(name: str) -> dict | None:
-    """Look up entity by name — search, get facts, traverse."""
-    from pearscaff import graph
-
-    # Search by name across all types
-    entities = graph.search_entities(name, limit=1)
-    if not entities:
-        return None
-
-    entity = entities[0]
-    entity_id = entity["id"]
-
-    # Get facts
-    facts = graph.get_entity_facts(entity_id)
-
-    # Traverse for connections
-    traversal = graph.traverse_graph(entity_id, max_depth=2)
-
-    return {
-        "name": entity["name"],
-        "type": entity["type"],
-        "metadata": entity.get("metadata", {}),
-        "facts": facts,
-        "connections": traversal.get("edges", []),
-    }
+    """Look up entity by name. (stubbed)"""
+    return None
 
 
 def _graph_stats() -> dict:
-    """Get entity/edge/fact counts from Postgres."""
-    from pearscaff.db import _get_conn, init_db
-
-    init_db()
-    with _get_conn() as conn:
-        total_entities = conn.execute("SELECT COUNT(*) as c FROM entities").fetchone()["c"]
-        total_edges = conn.execute("SELECT COUNT(*) as c FROM edges").fetchone()["c"]
-        total_facts = conn.execute("SELECT COUNT(*) as c FROM facts").fetchone()["c"]
-
-        # Entity type breakdown
-        type_rows = conn.execute(
-            "SELECT type, COUNT(*) as c FROM entities GROUP BY type ORDER BY c DESC"
-        ).fetchall()
-        entity_counts = {r["type"]: r["c"] for r in type_rows}
-
-        # Relationship type breakdown
-        rel_rows = conn.execute(
-            "SELECT relationship, COUNT(*) as c FROM edges GROUP BY relationship ORDER BY c DESC"
-        ).fetchall()
-        rel_counts = {r["relationship"]: r["c"] for r in rel_rows}
-
-    return {
-        "total_entities": total_entities,
-        "total_edges": total_edges,
-        "total_facts": total_facts,
-        "entity_counts": entity_counts,
-        "rel_counts": rel_counts,
-    }
+    """Get entity/edge/fact counts from Postgres. (stubbed)"""
+    return {"error": "Knowledge graph is being rebuilt. No data available."}
 
 
 def _get_memories_for_record(record_id: str) -> list[dict]:
-    """Get facts and edges sourced from a specific record."""
-    from pearscaff.db import _get_conn, init_db
-
-    init_db()
-    with _get_conn() as conn:
-        results = []
-
-        # Facts from this record
-        facts = conn.execute(
-            "SELECT f.attribute, f.value, e.name as entity_name "
-            "FROM facts f JOIN entities e ON f.entity_id = e.id "
-            "WHERE f.source_record = %s",
-            (record_id,),
-        ).fetchall()
-        for f in facts:
-            d = dict(f)
-            d["type"] = "fact"
-            results.append(d)
-
-        # Edges from this record
-        edges = conn.execute(
-            'SELECT e1.name as "from", e2.name as "to", ed.relationship '
-            "FROM edges ed "
-            "JOIN entities e1 ON ed.from_entity = e1.id "
-            "JOIN entities e2 ON ed.to_entity = e2.id "
-            "WHERE ed.source_record = %s",
-            (record_id,),
-        ).fetchall()
-        for e in edges:
-            d = dict(e)
-            d["type"] = "relationship"
-            results.append(d)
-
-    return results
+    """Get facts and edges sourced from a specific record. (stubbed)"""
+    return []
 
 
 # ---------------------------------------------------------------------------

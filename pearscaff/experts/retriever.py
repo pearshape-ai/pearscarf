@@ -1,12 +1,11 @@
 """Retriever expert agent — searches the knowledge graph and vector store for context.
 
-The worker delegates context queries here. The Retriever searches the
-SQLite knowledge graph and Qdrant vector store and assembles a context package.
+The worker delegates context queries here. Tools are currently stubbed —
+extraction pipeline is being rebuilt.
 """
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from pearscaff.agents.expert import ExpertAgent
@@ -68,19 +67,7 @@ class SearchEntitiesTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscaff import graph
-
-        results = graph.search_entities(
-            query=kwargs["query"],
-            entity_type=kwargs.get("entity_type"),
-        )
-        if not results:
-            return f"No entities found matching '{kwargs['query']}'."
-        lines = []
-        for ent in results:
-            meta = json.dumps(ent["metadata"]) if ent["metadata"] else "{}"
-            lines.append(f"{ent['id']} ({ent['type']}): {ent['name']} metadata={meta}")
-        return "\n".join(lines)
+        return "No results (extraction not yet implemented)"
 
 
 class FactsLookupTool(BaseTool):
@@ -103,18 +90,7 @@ class FactsLookupTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscaff import graph
-
-        facts = graph.get_entity_facts(kwargs["entity_id"])
-        if not facts:
-            return f"No facts found for entity '{kwargs['entity_id']}'."
-        lines = []
-        for f in facts:
-            lines.append(
-                f"{f['attribute']}: {f['value']} (source: {f['source_record']}, "
-                f"updated: {f['updated_at']})"
-            )
-        return "\n".join(lines)
+        return "No facts (extraction not yet implemented)"
 
 
 class GraphTraverseTool(BaseTool):
@@ -141,35 +117,7 @@ class GraphTraverseTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscaff import graph
-
-        result = graph.traverse_graph(
-            entity_id=kwargs["entity_id"],
-            max_depth=kwargs.get("max_depth", 3),
-        )
-
-        parts = []
-
-        if result["entities"]:
-            parts.append("Connected entities:")
-            for ent in result["entities"]:
-                meta = json.dumps(ent["metadata"]) if ent["metadata"] else ""
-                parts.append(f"  {ent['id']} ({ent['type']}): {ent['name']}" + (f" {meta}" if meta else ""))
-
-        if result["edges"]:
-            parts.append("Relationships:")
-            for edge in result["edges"]:
-                parts.append(
-                    f"  --{edge['relationship']}--> {edge['to_entity']} "
-                    f"(source: {edge['source_record']}, depth: {edge['depth']})"
-                )
-
-        if result["source_records"]:
-            parts.append(f"Source records: {', '.join(result['source_records'])}")
-
-        if not parts:
-            return f"No connections found from entity '{kwargs['entity_id']}'."
-        return "\n".join(parts)
+        return "No connections (extraction not yet implemented)"
 
 
 class VectorSearchTool(BaseTool):
@@ -196,24 +144,7 @@ class VectorSearchTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscaff import vectorstore
-
-        results = vectorstore.query(
-            query_text=kwargs["query"],
-            n_results=kwargs.get("n_results", 5),
-        )
-        if not results:
-            return f"No records found matching '{kwargs['query']}'."
-        lines = []
-        for r in results:
-            subject = r["metadata"].get("subject", "")
-            sender = r["metadata"].get("sender", "")
-            snippet = r["content"][:150] if r["content"] else ""
-            lines.append(
-                f"{r['id']} (dist={r['distance']:.3f}): "
-                + (f"'{subject}' from {sender}" if subject else snippet)
-            )
-        return "\n".join(lines)
+        return "No results (extraction not yet implemented)"
 
 
 # ---------------------------------------------------------------------------

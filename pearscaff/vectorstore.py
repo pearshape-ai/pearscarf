@@ -59,19 +59,8 @@ def _embed(text: str) -> list[float]:
 
 
 def add_record(record_id: str, content: str, metadata: dict) -> None:
-    """Add or update a record's embedding in Qdrant."""
-    from qdrant_client.models import PointStruct
-    client = _get_client()
-    vector = _embed(content)
-    payload = {**metadata, "content": content, "record_id": record_id}
-    client.upsert(
-        collection_name=COLLECTION_NAME,
-        points=[PointStruct(
-            id=_record_id_to_uuid(record_id),
-            vector=vector,
-            payload=payload,
-        )],
-    )
+    """Add or update a record's embedding in Qdrant. (stubbed)"""
+    return
 
 
 def query(
@@ -79,36 +68,5 @@ def query(
     n_results: int = 5,
     where: dict | None = None,
 ) -> list[dict]:
-    """Query Qdrant for similar records.
-
-    Returns list of dicts with keys: id, content, metadata, distance.
-    """
-    from qdrant_client.models import FieldCondition, Filter, MatchValue
-    client = _get_client()
-    vector = _embed(query_text)
-
-    query_filter = None
-    if where:
-        conditions = []
-        for key, value in where.items():
-            conditions.append(FieldCondition(key=key, match=MatchValue(value=value)))
-        query_filter = Filter(must=conditions)
-
-    results = client.search(
-        collection_name=COLLECTION_NAME,
-        query_vector=vector,
-        limit=n_results,
-        query_filter=query_filter,
-    )
-
-    output = []
-    for hit in results:
-        payload = hit.payload or {}
-        record_id = payload.get("record_id", str(hit.id))
-        output.append({
-            "id": record_id,
-            "content": payload.get("content", ""),
-            "metadata": {k: v for k, v in payload.items() if k not in ("content", "record_id")},
-            "distance": 1.0 - hit.score,  # Qdrant cosine returns similarity; callers expect distance
-        })
-    return output
+    """Query Qdrant for similar records. (stubbed)"""
+    return []

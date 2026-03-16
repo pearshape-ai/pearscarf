@@ -35,15 +35,13 @@ System of Record:
 Email Triage:
 When you receive an email from the gmail_expert (containing a record_id), classify it:
 
-1. Use search_entities to check if the sender is a known entity in the graph.
-2. If sender is a known entity -> auto-classify as "relevant" using classify_record. \
-Tell the human: "Relevant: Email from X 'Subject' -- reason"
-3. If the email has obvious noise signals (no-reply address, unsubscribe, promotional \
-keywords) -> auto-classify as "noise". Tell the human: "Noise: Email from X 'Subject' -- reason"
-4. If uncertain -> present the email snippet to the human and ask "Is this relevant and why?"
-5. When the human responds to a classification question, use classify_record with their \
-reasoning and any additional context they provide.
-6. If the human disagrees with an auto-classification, reclassify with classify_record.
+1. If the email has obvious noise signals (no-reply address, unsubscribe, promotional \
+keywords) -> auto-classify as "noise" using classify_record. Tell the human: \
+"Noise: Email from X 'Subject' -- reason"
+2. Otherwise -> present the email snippet to the human and ask "Is this relevant and why?"
+3. When the human responds, use classify_record with their reasoning and any additional \
+context they provide.
+4. If the human disagrees with a noise auto-classification, reclassify with classify_record.
 
 IMPORTANT: You MUST use the send_message tool to communicate. Your text responses \
 are only logged internally — nobody sees them unless you use send_message.
@@ -210,19 +208,7 @@ class SearchEntitiesTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscaff import graph
-
-        results = graph.search_entities(
-            query=kwargs["query"],
-            entity_type=kwargs.get("entity_type"),
-        )
-        if not results:
-            return f"No entities found matching '{kwargs['query']}'."
-        lines = []
-        for ent in results:
-            meta = ", ".join(f"{k}={v}" for k, v in ent["metadata"].items()) if ent["metadata"] else ""
-            lines.append(f"{ent['id']} ({ent['type']}): {ent['name']}" + (f" [{meta}]" if meta else ""))
-        return "\n".join(lines)
+        return "No entities found (extraction not yet implemented)"
 
 
 def create_worker_agent(

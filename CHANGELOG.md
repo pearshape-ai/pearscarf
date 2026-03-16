@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.3
+- Gutted data processing logic in preparation for extraction pipeline rebuild
+- Indexer: polls and marks records indexed, but no LLM extraction or embedding
+- Retriever: tools registered but return empty results
+- graph.py: all write/read functions stubbed (except list_entity_types)
+- vectorstore.py: add_record and query stubbed
+- Worker triage: simplified to always ask human (no graph-based auto-classify)
+- Memory CLI/REPL: commands return stub messages
+- No schema, dependency, or config changes
+
 ## 1.2.2
 - Migrated from SQLite to Postgres for all application data
 - Connection pooling via psycopg_pool (min 2, max 10 connections)

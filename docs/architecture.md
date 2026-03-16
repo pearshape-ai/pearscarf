@@ -231,6 +231,8 @@ Human responses are captured as `human_context` on the record. The Indexer appen
 
 ## Knowledge Graph
 
+> **Note:** The extraction pipeline is in transition. The Indexer and Retriever are currently placeholder stubs — they start and run but do not extract or search. The graph tables and Qdrant collection remain in the schema for the upcoming extraction rebuild.
+
 The Indexer processes records into a knowledge graph of entities, relationships, and facts.
 
 - **`entity_types`** — Registry of extractable types (person, company). Seeded on first run. Drives the LLM extraction prompt.
