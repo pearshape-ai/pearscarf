@@ -149,7 +149,7 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
 
         print(f"\n(tokens: {response.usage.input_tokens} in / {response.usage.output_tokens} out)")
         print()
-
+# 
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
