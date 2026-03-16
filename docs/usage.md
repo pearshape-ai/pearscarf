@@ -13,6 +13,7 @@
 | `pearscaff expert gmail` | Standalone Gmail expert |
 | `pearscaff expert gmail --login` | Log into Gmail via browser (legacy) |
 | `pearscaff expert gmail --auth` | Gmail OAuth setup (same as `gmail --auth`) |
+| `pearscaff extract-test [record_ids...]` | Run extraction prompt against emails (no writes) |
 
 All commands also available via `ps`.
 

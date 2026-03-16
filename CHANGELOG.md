@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1
+- Added extraction prompt testing utility (pearscaff extract-test / scripts/test_extraction.py)
+- Runs extraction prompt against stored emails, prints results — no writes to graph or vector store
+- Supports single record, multiple records, or all relevant emails
+- LangSmith tracing support when enabled
+
 ## 1.3.0
 - Extracted all system prompts from Python code into standalone markdown files under pearscaff/prompts/
 - Added prompt loader utility (pearscaff.prompts.load)

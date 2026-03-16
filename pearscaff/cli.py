@@ -194,6 +194,15 @@ def gmail_shortcut(auth: bool) -> None:
     click.echo("Usage: pearscaff gmail --auth")
 
 
+@cli.command("extract-test")
+@click.argument("record_ids", nargs=-1)
+def extract_test(record_ids: tuple[str, ...]) -> None:
+    """Run extraction prompt against emails (no writes). Pass record IDs or omit for all relevant."""
+    from pearscaff.extract_test import run_extraction
+
+    run_extraction(list(record_ids) if record_ids else None)
+
+
 import pearscaff.cli_memory  # noqa: F401 — registers memory command group
 
 if __name__ == "__main__":
