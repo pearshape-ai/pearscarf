@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+- Extracted all system prompts from Python code into standalone markdown files under pearscaff/prompts/
+- Added prompt loader utility (pearscaff.prompts.load)
+- Worker, Gmail expert (browser + MCP), Retriever, and extraction prompts are now editable without touching Python
+- No prompt content changes
+
 ## 1.2.3
 - Gutted data processing logic in preparation for extraction pipeline rebuild
 - Indexer: polls and marks records indexed, but no LLM extraction or embedding

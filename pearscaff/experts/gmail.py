@@ -12,6 +12,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 from pearscaff import log
 from pearscaff.agents.expert import ExpertAgent
+from pearscaff.prompts import load as load_prompt
 from pearscaff.tools import BaseTool, ToolRegistry
 
 STORAGE_STATE_PATH = Path("data/storage_state.json")
@@ -164,68 +165,6 @@ def _create_mcp_client() -> GmailAPIClient | None:
             f"MCP init failed: {e}, falling back to browser",
         )
         return None
-
-
-GMAIL_SYSTEM_PROMPT_BROWSER = """\
-You are a Gmail expert agent. You operate Gmail through a headless browser.
-
-Your job is to navigate Gmail's web UI, read emails, and perform actions the user asks for.
-You have browser tools to interact with pages and Gmail-specific tools for common operations.
-
-When navigating Gmail:
-- Gmail's URL is https://mail.google.com
-- The inbox is the default view
-- Emails appear as rows in the inbox list
-- Clicking an email opens it in a detail view
-- Use the browser tools to inspect the page when unsure about selectors
-
-System of Record:
-- After reading an email, ALWAYS save it using the save_email tool before replying.
-- Include the record_id from save_email in your reply so the worker can reference it.
-- If save_email returns that the email is a duplicate, note the existing record.
-
-IMPORTANT: You MUST use the reply tool to send your results back. \
-Your text responses are only logged internally — nobody sees them unless you use reply.
-
-- When you finish your task, use reply(content=...) with your results.
-- Do NOT send pleasantries, thank-yous, or farewells. Just deliver results.
-- Use reply exactly once per request. After replying, your work is done.
-
-Session errors:
-- If a tool returns a "session expired" error, immediately reply with that error \
-message so the worker can inform the human. Do not try to recover or retry.
-
-Other notes:
-- When you discover useful selectors, navigation patterns, or timing info, save them
-  with the save_knowledge tool so you can work more efficiently next time.
-- If something doesn't work as expected, try alternative approaches and record what you learn.
-"""
-
-GMAIL_SYSTEM_PROMPT_MCP = """\
-You are a Gmail expert agent. You access Gmail through the Gmail API.
-
-Your job is to read emails, search for messages, and perform actions the user asks for.
-You have Gmail tools for listing unread emails, reading specific emails, searching, \
-and marking emails as read.
-
-System of Record:
-- After reading an email, ALWAYS save it using the save_email tool before replying.
-- Include the record_id from save_email in your reply so the worker can reference it.
-- If save_email returns that the email is a duplicate, note the existing record.
-
-IMPORTANT: You MUST use the reply tool to send your results back. \
-Your text responses are only logged internally — nobody sees them unless you use reply.
-
-- When you finish your task, use reply(content=...) with your results.
-- Do NOT send pleasantries, thank-yous, or farewells. Just deliver results.
-- Use reply exactly once per request. After replying, your work is done.
-
-Session errors:
-- If a tool returns an OAuth/authentication error, immediately reply with that error \
-message so the worker can inform the human. Do not try to recover or retry.
-"""
-
-GMAIL_SYSTEM_PROMPT = GMAIL_SYSTEM_PROMPT_BROWSER
 
 
 # --- Browser tools ---
@@ -996,7 +935,7 @@ def create_gmail_expert(
 
     agent = ExpertAgent(
         domain="gmail",
-        domain_prompt=GMAIL_SYSTEM_PROMPT,
+        domain_prompt=load_prompt("gmail_browser"),
         tool_registry=registry,
         on_tool_call=on_tool_call,
         on_text=on_text,
@@ -1024,7 +963,7 @@ def create_gmail_expert_for_runner(
             _register_mcp_gmail_tools(registry, mcp_client)
             return ExpertAgent(
                 domain="gmail",
-                domain_prompt=GMAIL_SYSTEM_PROMPT_MCP,
+                domain_prompt=load_prompt("gmail_mcp"),
                 tool_registry=registry,
                 bus=bus,
                 agent_name="gmail_expert",
@@ -1047,7 +986,7 @@ def create_gmail_expert_for_runner(
         _register_gmail_tools(registry, manager.get_page)
         return ExpertAgent(
             domain="gmail",
-            domain_prompt=GMAIL_SYSTEM_PROMPT_BROWSER,
+            domain_prompt=load_prompt("gmail_browser"),
             tool_registry=registry,
             bus=bus,
             agent_name="gmail_expert",

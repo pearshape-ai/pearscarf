@@ -121,6 +121,13 @@ pearscaff/
 │   └── retriever.py       # Retriever expert — knowledge graph + vector search
 ├── knowledge/
 │   └── __init__.py        # KnowledgeStore — file-based markdown storage
+├── prompts/               # System prompts as standalone markdown files
+│   ├── __init__.py        # load(name) — prompt loader
+│   ├── worker.md          # Worker agent system prompt
+│   ├── gmail_browser.md   # Gmail expert browser transport prompt
+│   ├── gmail_mcp.md       # Gmail expert MCP/API transport prompt
+│   ├── retriever.md       # Retriever expert system prompt
+│   └── extraction.md      # Indexer LLM extraction template (format-string placeholders)
 ├── tools/
 │   ├── __init__.py        # BaseTool + ToolRegistry with auto-discovery
 │   ├── math.py            # Safe math expression evaluator
