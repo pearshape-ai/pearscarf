@@ -11,8 +11,10 @@ Postgres connection uses POSTGRES_* env vars (loaded from .env).
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import sys
+from email.utils import parsedate_to_datetime
 
 import psycopg
 from psycopg.rows import dict_row
@@ -55,6 +57,23 @@ BOOL_COLUMNS = {
     "records": ["indexed"],
 }
 
+# Columns that need RFC 2822 date string → datetime for TIMESTAMPTZ
+TIMESTAMP_COLUMNS = {
+    "emails": ["received_at"],
+}
+
+
+def _parse_rfc2822(val: str) -> str | None:
+    """Parse an RFC 2822 date string into an ISO 8601 string Postgres can handle."""
+    if not val:
+        return None
+    # Strip trailing parenthesized timezone name, e.g. "(UTC)", "(PST)"
+    cleaned = re.sub(r"\s*\([^)]*\)\s*$", "", val)
+    try:
+        return parsedate_to_datetime(cleaned).isoformat()
+    except Exception:
+        return val  # Return as-is and let Postgres try
+
 
 def migrate() -> None:
     print(f"Migrating from {SQLITE_PATH} to Postgres...")
@@ -86,6 +105,7 @@ def migrate() -> None:
 
         json_cols = JSON_COLUMNS.get(table, [])
         bool_cols = BOOL_COLUMNS.get(table, [])
+        ts_cols = TIMESTAMP_COLUMNS.get(table, [])
 
         with pg_conn.cursor() as cur:
             for row in rows:
@@ -99,6 +119,8 @@ def migrate() -> None:
                             val = Jsonb({})
                     if col in bool_cols:
                         val = bool(val)
+                    if col in ts_cols and isinstance(val, str):
+                        val = _parse_rfc2822(val)
                     values.append(val)
                 cur.execute(insert_sql, values)
         pg_conn.commit()
