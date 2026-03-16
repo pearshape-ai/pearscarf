@@ -15,8 +15,6 @@ build/
 .python-version
 uv.lock
 
-ai-work/specs/
-ai-work/plans/
 
 data/
 pearscaff/knowledge/gmail/*.md

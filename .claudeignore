@@ -1,3 +1,8 @@
 .venv/
 dist/
 build/
+
+ai-work/specs/
+ai-work/plans/
+
+.env
