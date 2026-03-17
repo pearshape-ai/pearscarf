@@ -156,6 +156,8 @@ Auto-discovered at startup.
 | `ANTHROPIC_API_KEY` | (required) | Anthropic API key |
 | `MODEL` | `claude-sonnet-4-5-20250929` | Model identifier |
 | `MAX_TURNS` | `10` | Max tool-call loop iterations |
+| `EXTRACTION_MODEL` | (same as `MODEL`) | Model for entity extraction (overridable) |
+| `EXTRACTION_MAX_TOKENS` | `2048` | Max output tokens for extraction calls |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
 | `POSTGRES_HOST` | `localhost` | Postgres host |
 | `POSTGRES_PORT` | `5432` | Postgres port |

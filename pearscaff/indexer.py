@@ -9,10 +9,10 @@ from __future__ import annotations
 import threading
 import traceback
 
-from pearscaff import graph, log
+from pearscaff import log
 from pearscaff.db import _get_conn, init_db
 
-# Extraction prompt lives in pearscaff/prompts/extraction.md
+# Extraction system prompt: pearscaff/prompts/extraction.md
 
 
 class Indexer:
@@ -51,14 +51,6 @@ class Indexer:
 
         # Fallback: use raw content from records table
         return record.get("raw") or "(no content)"
-
-    def _build_entity_types_block(self) -> str:
-        types = graph.list_entity_types()
-        lines = []
-        for et in types:
-            fields = ", ".join(et["extract_fields"])
-            lines.append(f"- {et['name']}: {et['description']} Fields: {fields}")
-        return "\n".join(lines)
 
     def _extract(self, record_type: str, record_id: str, content: str) -> dict:
         """LLM extraction of entities, relationships, and facts. (stubbed)"""

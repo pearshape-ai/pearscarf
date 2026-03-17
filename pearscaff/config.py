@@ -9,6 +9,11 @@ MODEL = os.getenv("MODEL", "claude-sonnet-4-5-20250929")
 MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 
+# Extraction
+EXTRACTION_MODEL = os.getenv("EXTRACTION_MODEL", MODEL)
+EXTRACTION_MAX_TOKENS = int(os.getenv("EXTRACTION_MAX_TOKENS", "2048"))
+EXTRACTION_TEMPERATURE = 0.0
+
 # Postgres
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
 POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))

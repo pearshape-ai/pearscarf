@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.2
+- Extraction API call configured for structured output: temperature 0, system/user prompt split
+- Extraction instructions (extraction.md) used as system prompt; record content sent as user message
+- Added EXTRACTION_MODEL and EXTRACTION_MAX_TOKENS config (defaults to system MODEL and 2048)
+- Removed entity_types_block DB lookup — entity types now defined directly in the extraction prompt
+
 ## 1.3.1
 - Added extraction prompt testing utility (pearscaff extract-test / scripts/test_extraction.py)
 - Runs extraction prompt against stored emails, prints results — no writes to graph or vector store

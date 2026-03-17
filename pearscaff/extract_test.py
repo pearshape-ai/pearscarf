@@ -18,7 +18,12 @@ import sys
 
 import anthropic
 
-from pearscaff.config import ANTHROPIC_API_KEY, MODEL
+from pearscaff.config import (
+    ANTHROPIC_API_KEY,
+    EXTRACTION_MAX_TOKENS,
+    EXTRACTION_MODEL,
+    EXTRACTION_TEMPERATURE,
+)
 from pearscaff.db import _get_conn, init_db
 from pearscaff.indexer import Indexer
 from pearscaff.prompts import load as load_prompt
@@ -68,8 +73,7 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
 
     indexer = Indexer()
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
-    prompt_template = load_prompt("extraction")
-    entity_types_block = indexer._build_entity_types_block()
+    system_prompt = load_prompt("extraction")
 
     # Resolve records
     if record_ids:
@@ -87,7 +91,8 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
         print("No records to process.")
         return
 
-    print(f"Processing {len(records)} record(s)...\n")
+    print(f"Processing {len(records)} record(s)...")
+    print(f"Model: {EXTRACTION_MODEL}  Temperature: {EXTRACTION_TEMPERATURE}  Max tokens: {EXTRACTION_MAX_TOKENS}\n")
 
     for record in records:
         record_id = record["id"]
@@ -98,13 +103,8 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
         if record.get("human_context"):
             content += f"\n\nAdditional context from human:\n{record['human_context']}"
 
-        # Format prompt
-        prompt = prompt_template.format(
-            record_type=record_type,
-            entity_types_block=entity_types_block,
-            record_id=record_id,
-            content=content,
-        )
+        # User message — fixed template, not in prompt file
+        user_message = f"Record ({record_id}, {record_type}):\n\n{content}"
 
         # Print email content
         print("═" * 60)
@@ -120,12 +120,14 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
             "extract_test",
             run_type="llm",
             metadata={"record_id": record_id, "record_type": record_type},
-            inputs={"model": MODEL, "prompt_length": len(prompt)},
+            inputs={"model": EXTRACTION_MODEL, "prompt_length": len(user_message)},
         ) as span:
             response = client.messages.create(
-                model=MODEL,
-                max_tokens=2048,
-                messages=[{"role": "user", "content": prompt}],
+                model=EXTRACTION_MODEL,
+                max_tokens=EXTRACTION_MAX_TOKENS,
+                temperature=EXTRACTION_TEMPERATURE,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
             )
             if span:
                 span.end(outputs={
