@@ -1,9 +1,17 @@
 # Changelog
 
+## 1.5.0
+- Un-stubbed `vectorstore.py` — `add_record` embeds via sentence-transformers and upserts to Qdrant; `query` does semantic similarity search
+- Indexer embeds email content in Qdrant after Neo4j extraction (Qdrant failures don't block indexing)
+- Retriever's `VectorSearchTool` un-stubbed — semantic search across stored records with scores and metadata
+- Memory CLI `search` and `list` commands un-stubbed — `search` uses Qdrant semantic search, `list` scrolls recent vectors
+- `scripts/reindex_all.py` now also clears Qdrant collection (delete + recreate)
+- No new dependencies
+
 ## 1.4.1
-- Added `scripts/reindex.py` — wipes Neo4j graph and resets Postgres indexed flags for re-extraction
+- Added `scripts/reindex_all.py` — wipes Neo4j graph and resets Postgres indexed flags for re-extraction
 - Interactive confirmation required before executing
-- No CLI command — standalone script only (`python scripts/reindex.py`)
+- No CLI command — standalone script only (`python scripts/reindex_all.py`)
 - Indexer picks up reset records automatically on next poll cycle
 
 ## 1.4.0

@@ -59,8 +59,23 @@ def _embed(text: str) -> list[float]:
 
 
 def add_record(record_id: str, content: str, metadata: dict) -> None:
-    """Add or update a record's embedding in Qdrant. (stubbed)"""
-    return
+    """Add or update a record's embedding in Qdrant."""
+    from qdrant_client.models import PointStruct
+
+    client = _get_client()
+    vector = _embed(content)
+
+    payload = {
+        "record_id": record_id,
+        "content": content[:1000],
+        **{k: v for k, v in metadata.items() if v},
+    }
+
+    point_id = _record_id_to_uuid(record_id)
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=[PointStruct(id=point_id, vector=vector, payload=payload)],
+    )
 
 
 def query(
@@ -68,5 +83,25 @@ def query(
     n_results: int = 5,
     where: dict | None = None,
 ) -> list[dict]:
-    """Query Qdrant for similar records. (stubbed)"""
-    return []
+    """Query Qdrant for similar records."""
+    client = _get_client()
+    vector = _embed(query_text)
+
+    results = client.search(
+        collection_name=COLLECTION_NAME,
+        query_vector=vector,
+        limit=n_results,
+    )
+
+    return [
+        {
+            "id": hit.payload.get("record_id", ""),
+            "content": hit.payload.get("content", ""),
+            "metadata": {
+                k: v for k, v in hit.payload.items()
+                if k not in ("record_id", "content")
+            },
+            "score": hit.score,
+        }
+        for hit in results
+    ]

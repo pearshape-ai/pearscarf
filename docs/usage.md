@@ -21,7 +21,7 @@ All commands also available via `ps`.
 
 | Script | Description |
 |---|---|
-| `python scripts/reindex.py` | Wipe Neo4j graph and reset indexed flags — Indexer re-extracts on next poll |
+| `python scripts/reindex_all.py` | Wipe Neo4j graph and reset indexed flags — Indexer re-extracts on next poll |
 | `python scripts/test_extraction.py [record_ids...]` | Run extraction prompt against emails (no writes) |
 | `python scripts/migrate_sqlite_to_postgres.py` | One-time SQLite → Postgres migration |
 
@@ -29,14 +29,14 @@ All commands also available via `ps`.
 
 | Command | Description |
 |---|---|
-| `ps memory list` | List stored memories (default limit 10) |
+| `ps memory list` | List recent records from Qdrant (default limit 10) |
 | `ps memory list --limit 20` | List with custom limit |
-| `ps memory list -f` | Watch for new memories in real-time (Ctrl+C to stop) |
+| `ps memory list -f` | Watch for new records in real-time (Ctrl+C to stop) |
 | `ps memory list -f --interval 5` | Follow with custom poll interval (seconds) |
-| `ps memory search "query"` | Search memories by query |
-| `ps memory entity "name"` | Look up entity and its connections |
-| `ps memory graph` | Graph overview and stats |
-| `ps memory record <id>` | Memories extracted from a specific record |
+| `ps memory search "query"` | Semantic search across stored records (Qdrant) |
+| `ps memory entity "name"` | Look up entity and its connections (Neo4j) |
+| `ps memory graph` | Graph overview and stats (Neo4j) |
+| `ps memory record <id>` | Entities and facts extracted from a specific record (Neo4j) |
 
 Same commands available in the REPL via `/memory`:
 

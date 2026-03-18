@@ -1,7 +1,7 @@
 """Indexer — background agent that processes records into the knowledge graph.
 
 Polls for unindexed records and runs LLM extraction → entity resolution →
-Neo4j graph population.
+Neo4j graph population → Qdrant embedding.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import traceback
 
 import anthropic
 
-from pearscaff import graph, log
+from pearscaff import graph, log, vectorstore
 from pearscaff.config import (
     ANTHROPIC_API_KEY,
     EXTRACTION_MAX_TOKENS,
@@ -133,8 +133,31 @@ class Indexer:
 
         return graph.create_entity(entity_type, name, metadata)
 
+    def _embed_record(self, record: dict, content: str) -> None:
+        """Embed record content into Qdrant."""
+        record_id = record["id"]
+        metadata = {
+            "type": record.get("type", ""),
+            "source": record.get("source", ""),
+        }
+        # Add email-specific metadata if available
+        if record.get("type") == "email":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT sender, subject FROM emails WHERE record_id = %s",
+                    (record_id,),
+                ).fetchone()
+            if row:
+                metadata["sender"] = row["sender"] or ""
+                metadata["subject"] = row["subject"] or ""
+
+        try:
+            vectorstore.add_record(record_id, content, metadata)
+        except Exception as exc:
+            log.write("indexer", "--", "error", f"Qdrant embed failed for {record_id}: {exc}")
+
     def _process_record(self, record: dict) -> None:
-        """Process a single record: extract → resolve → write to Neo4j."""
+        """Process a single record: extract → resolve → write to Neo4j → embed in Qdrant."""
         record_id = record["id"]
         record_type = record["type"]
 
@@ -179,6 +202,9 @@ class Indexer:
             eid = entity_id_map.get(entity_name)
             if eid and claim:
                 graph.upsert_fact(eid, claim, confidence, record_id)
+
+        # Step 5: Embed in Qdrant
+        self._embed_record(record, content)
 
         entity_count = len(entity_id_map)
         rel_count = len(extracted.get("relationships", []))

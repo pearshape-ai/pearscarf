@@ -1,14 +1,14 @@
 """Retriever expert agent — searches the knowledge graph and vector store for context.
 
 The worker delegates context queries here. Entity search, facts lookup, and
-graph traversal query Neo4j. Vector search stays stubbed.
+graph traversal query Neo4j. Vector search queries Qdrant.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from pearscaff import graph
+from pearscaff import graph, vectorstore
 from pearscaff.agents.expert import ExpertAgent
 from pearscaff.bus import MessageBus
 from pearscaff.prompts import load as load_prompt
@@ -158,7 +158,20 @@ class VectorSearchTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        return "No results (extraction not yet implemented)"
+        query = kwargs["query"]
+        n_results = kwargs.get("n_results", 5)
+        results = vectorstore.query(query, n_results=n_results)
+        if not results:
+            return "No results found."
+        lines = []
+        for r in results:
+            meta = r.get("metadata", {})
+            sender = meta.get("sender", "")
+            subject = meta.get("subject", "")
+            header = f" — {sender}: {subject}" if sender or subject else ""
+            snippet = r.get("content", "")[:200]
+            lines.append(f"- [{r['id']}]{header} (score: {r['score']:.3f})\n  {snippet}")
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import time
 
 import click
 
-from pearscaff import graph
+from pearscaff import graph, vectorstore
 from pearscaff.cli import cli
 
 
@@ -144,13 +144,42 @@ def format_record_memories(memories: list[dict]) -> list[str]:
 
 
 def _get_all(limit: int = 10) -> list[dict]:
-    """List entities and recent facts from the knowledge graph. (stubbed)"""
-    return []
+    """List recent records from Qdrant."""
+    try:
+        client = vectorstore._get_client()
+        results, _ = client.scroll(
+            collection_name=vectorstore.COLLECTION_NAME,
+            limit=limit,
+        )
+        items = []
+        for point in results:
+            payload = point.payload or {}
+            items.append({
+                "id": payload.get("record_id", ""),
+                "name": payload.get("subject", payload.get("content", "")[:60]),
+                "entity_type": payload.get("type", "record"),
+                "metadata": payload.get("sender", ""),
+                "created_at": "",
+            })
+        return items
+    except Exception:
+        return []
 
 
 def _search(query: str, limit: int = 10) -> list[dict]:
-    """Search entities + vector store. (stubbed)"""
-    return []
+    """Search records via Qdrant semantic search."""
+    try:
+        results = vectorstore.query(query, n_results=limit)
+        return [
+            {
+                "text": r.get("content", ""),
+                "score": r.get("score", 0.0),
+                "metadata": r.get("metadata", {}),
+            }
+            for r in results
+        ]
+    except Exception:
+        return []
 
 
 def _get_entity(name: str) -> dict | None:
