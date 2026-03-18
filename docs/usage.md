@@ -17,6 +17,14 @@
 
 All commands also available via `ps`.
 
+## Scripts
+
+| Script | Description |
+|---|---|
+| `python scripts/reindex.py` | Wipe Neo4j graph and reset indexed flags — Indexer re-extracts on next poll |
+| `python scripts/test_extraction.py [record_ids...]` | Run extraction prompt against emails (no writes) |
+| `python scripts/migrate_sqlite_to_postgres.py` | One-time SQLite → Postgres migration |
+
 ## Memory Inspection
 
 | Command | Description |

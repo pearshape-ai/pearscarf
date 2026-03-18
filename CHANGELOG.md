@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1
+- Added `scripts/reindex.py` — wipes Neo4j graph and resets Postgres indexed flags for re-extraction
+- Interactive confirmation required before executing
+- No CLI command — standalone script only (`python scripts/reindex.py`)
+- Indexer picks up reset records automatically on next poll cycle
+
 ## 1.4.0
 - Wired extraction pipeline to Neo4j — entities, relationships, and facts now written to the graph
 - Added `neo4j` Python driver dependency and `pearscaff/neo4j_client.py` connection module
