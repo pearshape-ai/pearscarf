@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.0
+- Wired extraction pipeline to Neo4j — entities, relationships, and facts now written to the graph
+- Added `neo4j` Python driver dependency and `pearscaff/neo4j_client.py` connection module
+- Rewrote `graph.py` from Postgres stubs to Neo4j Cypher queries
+- Entity resolution: MERGE on name+label, with email match for persons and domain match for companies
+- Facts stored as `Fact` nodes connected via `HAS_FACT` edges (claim, confidence, source_record, created_at)
+- Dynamic relationship types via APOC (`apoc.create.relationship`)
+- Indexer un-stubbed: calls Claude extraction API, resolves entities, writes to Neo4j, marks indexed
+- Retriever tools un-stubbed: search_entities, facts_lookup, graph_traverse query Neo4j — vector_search stays stubbed
+- Worker search_entities un-stubbed — re-enables graph-aware triage
+- Memory CLI: entity, graph, record commands read from Neo4j — list/search stay stubbed (need vector search)
+- Added `graph_stats()` and `get_nodes_by_source_record()` to graph.py
+- No Qdrant integration, no bi-temporal timestamps, no Postgres schema changes
+
 ## 1.3.2
 - Extraction API call configured for structured output: temperature 0, system/user prompt split
 - Extraction instructions (extraction.md) used as system prompt; record content sent as user message

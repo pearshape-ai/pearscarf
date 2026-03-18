@@ -67,7 +67,7 @@ If both OAuth credentials and a browser session exist, OAuth (API) is used by de
 
 ## Docker Services
 
-Postgres (application data), Qdrant (vector search), pgAdmin (database UI), and Neo4j (future graph backend) run as Docker containers. A `docker-compose.yml` is provided:
+Postgres (application data), Qdrant (vector search), pgAdmin (database UI), and Neo4j (knowledge graph) run as Docker containers. A `docker-compose.yml` is provided:
 
 ```bash
 # Set POSTGRES_PASSWORD in .env first
@@ -87,7 +87,7 @@ POSTGRES_DB=pearscaff
 
 **pgAdmin** is available at `http://localhost:5050`. Default login: `admin@pearscaff.dev` / `admin` (override via `PGADMIN_EMAIL` and `PGADMIN_PASSWORD` in `.env`). To connect to the database, add a server with host `postgres`, port `5432`, and your Postgres credentials.
 
-**Neo4j** is optional — retained for future graph backend evaluation (Graphiti, Cognee). Browser available at `http://localhost:7474`.
+**Neo4j** is required for the extraction pipeline — entities, relationships, and facts are stored here. Set `NEO4J_PASSWORD` in `.env` (default auth: `neo4j/<password>`). Browser available at `http://localhost:7474`.
 
 ## LangSmith Setup (optional — observability)
 

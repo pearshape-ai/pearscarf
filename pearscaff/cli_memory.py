@@ -6,6 +6,7 @@ import time
 
 import click
 
+from pearscaff import graph
 from pearscaff.cli import cli
 
 
@@ -153,18 +154,61 @@ def _search(query: str, limit: int = 10) -> list[dict]:
 
 
 def _get_entity(name: str) -> dict | None:
-    """Look up entity by name. (stubbed)"""
-    return None
+    """Look up entity by name via Neo4j."""
+    results = graph.search_entities(name, limit=1)
+    if not results:
+        return None
+
+    entity = results[0]
+    eid = entity["id"]
+
+    # Get full details
+    full = graph.get_entity(eid)
+    if not full:
+        return entity
+
+    # Add facts
+    facts = graph.get_entity_facts(eid)
+    full["facts"] = [
+        {
+            "attribute": "claim",
+            "value": f.get("claim", ""),
+            "source_record": f.get("source_record", ""),
+        }
+        for f in facts
+    ]
+
+    # Add connections (1 hop)
+    traversal = graph.traverse_graph(eid, max_depth=1)
+    full["connections"] = [
+        {
+            "to_entity": e.get("name", "?"),
+            "relationship": next(
+                (edge["relationship"] for edge in traversal["edges"]
+                 if edge["to"] == e["id"] or edge["from"] == e["id"]),
+                "?",
+            ),
+        }
+        for e in traversal.get("entities", [])
+    ]
+
+    return full
 
 
 def _graph_stats() -> dict:
-    """Get entity/edge/fact counts from Postgres. (stubbed)"""
-    return {"error": "Knowledge graph is being rebuilt. No data available."}
+    """Get entity/edge/fact counts from Neo4j."""
+    try:
+        return graph.graph_stats()
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def _get_memories_for_record(record_id: str) -> list[dict]:
-    """Get facts and edges sourced from a specific record. (stubbed)"""
-    return []
+    """Get facts and edges sourced from a specific record."""
+    try:
+        return graph.get_nodes_by_source_record(record_id)
+    except Exception as e:
+        return [{"type": "error", "message": str(e)}]
 
 
 # ---------------------------------------------------------------------------

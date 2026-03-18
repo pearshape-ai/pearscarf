@@ -1,18 +1,27 @@
 """Indexer — background agent that processes records into the knowledge graph.
 
 Polls for unindexed records and runs LLM extraction → entity resolution →
-graph population → Qdrant embedding.
+Neo4j graph population.
 """
 
 from __future__ import annotations
 
+import json
 import threading
 import traceback
 
-from pearscaff import log
-from pearscaff.db import _get_conn, init_db
+import anthropic
 
-# Extraction system prompt: pearscaff/prompts/extraction.md
+from pearscaff import graph, log
+from pearscaff.config import (
+    ANTHROPIC_API_KEY,
+    EXTRACTION_MAX_TOKENS,
+    EXTRACTION_MODEL,
+    EXTRACTION_TEMPERATURE,
+)
+from pearscaff.db import _get_conn, init_db
+from pearscaff.prompts import load as load_prompt
+from pearscaff.tracing import trace_span
 
 
 class Indexer:
@@ -21,6 +30,8 @@ class Indexer:
     def __init__(self) -> None:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
+        self._system_prompt = load_prompt("extraction")
 
     def _build_content(self, record: dict) -> str:
         """Build the record content string for extraction."""
@@ -52,24 +63,132 @@ class Indexer:
         # Fallback: use raw content from records table
         return record.get("raw") or "(no content)"
 
-    def _extract(self, record_type: str, record_id: str, content: str) -> dict:
-        """LLM extraction of entities, relationships, and facts. (stubbed)"""
-        return {}
+    def _parse_json_response(self, text: str) -> dict | None:
+        """Parse JSON from an LLM response, handling ```json fencing."""
+        text = text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return None
 
-    def _resolve_entity(self, extracted: dict) -> str:
-        """Resolve an extracted entity against the graph. (stubbed)"""
-        return ""
+    def _extract(self, record_type: str, record_id: str, content: str) -> dict:
+        """Call Claude to extract entities, relationships, and facts."""
+        user_message = f"Record ({record_id}, {record_type}):\n\n{content}"
+
+        with trace_span(
+            "indexer_extract",
+            run_type="llm",
+            metadata={"record_id": record_id, "record_type": record_type},
+            inputs={"model": EXTRACTION_MODEL, "prompt_length": len(user_message)},
+        ) as span:
+            response = self._client.messages.create(
+                model=EXTRACTION_MODEL,
+                max_tokens=EXTRACTION_MAX_TOKENS,
+                temperature=EXTRACTION_TEMPERATURE,
+                system=self._system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            if span:
+                span.end(outputs={
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                })
+
+        raw_text = ""
+        for block in response.content:
+            if block.type == "text":
+                raw_text += block.text
+
+        parsed = self._parse_json_response(raw_text)
+        if parsed is None:
+            log.write("indexer", "--", "error", f"JSON parse failed for {record_id}: {raw_text[:200]}")
+            return {}
+
+        return parsed
+
+    def _resolve_entity(self, entity: dict) -> str:
+        """Resolve an extracted entity against the graph. Returns element ID."""
+        entity_type = entity.get("type", "")
+        name = entity.get("name", "")
+        metadata = entity.get("metadata", {})
+
+        if not name:
+            return ""
+
+        # Check for match by email (person) or domain (company)
+        metadata_match = None
+        if entity_type == "person":
+            metadata_match = metadata.get("email")
+        elif entity_type == "company":
+            metadata_match = metadata.get("domain")
+
+        existing = graph.find_entity(entity_type, name, metadata_match)
+        if existing:
+            return existing["id"]
+
+        return graph.create_entity(entity_type, name, metadata)
 
     def _process_record(self, record: dict) -> None:
-        """Process a single record. (stubbed — no extraction or embedding)"""
+        """Process a single record: extract → resolve → write to Neo4j."""
         record_id = record["id"]
+        record_type = record["type"]
 
         log.write("indexer", "--", "action", f"processing {record_id}")
 
-        content = self._build_content(record)  # noqa: F841 — kept for future extraction
+        content = self._build_content(record)
+        if record.get("human_context"):
+            content += f"\n\nAdditional context from human:\n{record['human_context']}"
+
+        # Step 1: Extract
+        extracted = self._extract(record_type, record_id, content)
+        if not extracted:
+            log.write("indexer", "--", "action", f"no extraction result for {record_id}")
+            self._mark_indexed(record_id)
+            return
+
+        # Step 2: Resolve entities — build name → element ID map
+        entity_id_map: dict[str, str] = {}
+        for entity in extracted.get("entities", []):
+            name = entity.get("name", "")
+            if not name:
+                continue
+            eid = self._resolve_entity(entity)
+            if eid:
+                entity_id_map[name] = eid
+
+        # Step 3: Create relationships
+        for rel in extracted.get("relationships", []):
+            from_name = rel.get("from", "")
+            to_name = rel.get("to", "")
+            rel_type = rel.get("type", "")
+            from_id = entity_id_map.get(from_name)
+            to_id = entity_id_map.get(to_name)
+            if from_id and to_id and rel_type:
+                graph.create_edge(from_id, to_id, rel_type, record_id)
+
+        # Step 4: Create facts
+        for fact in extracted.get("facts", []):
+            entity_name = fact.get("entity", "")
+            claim = fact.get("claim", "")
+            confidence = fact.get("confidence", "stated")
+            eid = entity_id_map.get(entity_name)
+            if eid and claim:
+                graph.upsert_fact(eid, claim, confidence, record_id)
+
+        entity_count = len(entity_id_map)
+        rel_count = len(extracted.get("relationships", []))
+        fact_count = len(extracted.get("facts", []))
+        log.write(
+            "indexer", "--", "action",
+            f"indexed {record_id}: {entity_count} entities, {rel_count} relationships, {fact_count} facts",
+        )
 
         self._mark_indexed(record_id)
-        log.write("indexer", "--", "action", f"indexed {record_id} (no extraction)")
 
     def _mark_indexed(self, record_id: str) -> None:
         with _get_conn() as conn:

@@ -1,13 +1,14 @@
 """Retriever expert agent — searches the knowledge graph and vector store for context.
 
-The worker delegates context queries here. Tools are currently stubbed —
-extraction pipeline is being rebuilt.
+The worker delegates context queries here. Entity search, facts lookup, and
+graph traversal query Neo4j. Vector search stays stubbed.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from pearscaff import graph
 from pearscaff.agents.expert import ExpertAgent
 from pearscaff.bus import MessageBus
 from pearscaff.prompts import load as load_prompt
@@ -42,7 +43,20 @@ class SearchEntitiesTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        return "No results (extraction not yet implemented)"
+        query = kwargs["query"]
+        entity_type = kwargs.get("entity_type")
+        results = graph.search_entities(query, entity_type=entity_type, limit=5)
+        if not results:
+            return "No entities found."
+        lines = []
+        for e in results:
+            meta = e.get("metadata", {})
+            meta_str = ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else ""
+            line = f"- {e['name']} ({e['type']}, id={e['id']})"
+            if meta_str:
+                line += f"  [{meta_str}]"
+            lines.append(line)
+        return "\n".join(lines)
 
 
 class FactsLookupTool(BaseTool):
@@ -65,7 +79,16 @@ class FactsLookupTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        return "No facts (extraction not yet implemented)"
+        entity_id = kwargs["entity_id"]
+        facts = graph.get_entity_facts(entity_id)
+        if not facts:
+            return "No facts found for this entity."
+        lines = []
+        for f in facts:
+            conf = f" [{f['confidence']}]" if f.get("confidence") else ""
+            src = f" (from: {f['source_record']})" if f.get("source_record") else ""
+            lines.append(f"- {f['claim']}{conf}{src}")
+        return "\n".join(lines)
 
 
 class GraphTraverseTool(BaseTool):
@@ -92,7 +115,23 @@ class GraphTraverseTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        return "No connections (extraction not yet implemented)"
+        entity_id = kwargs["entity_id"]
+        max_depth = kwargs.get("max_depth", 3)
+        result = graph.traverse_graph(entity_id, max_depth=max_depth)
+        if not result["entities"] and not result["edges"]:
+            return "No connections found."
+        lines = []
+        if result["entities"]:
+            lines.append("Connected entities:")
+            for e in result["entities"]:
+                lines.append(f"  - {e['name']} ({e['type']}, id={e['id']})")
+        if result["edges"]:
+            lines.append("Relationships:")
+            for edge in result["edges"]:
+                lines.append(f"  - [{edge['relationship']}] {edge['from']} -> {edge['to']}")
+        if result["source_records"]:
+            lines.append(f"Source records: {', '.join(result['source_records'])}")
+        return "\n".join(lines)
 
 
 class VectorSearchTool(BaseTool):

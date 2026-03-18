@@ -6,7 +6,7 @@ load_dotenv()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MODEL = os.getenv("MODEL", "claude-sonnet-4-5-20250929")
-MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))
+MAX_TURNS = int(os.getenv("MAX_TURNS", "30"))
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 
 # Extraction
@@ -30,7 +30,7 @@ GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
 GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
 GMAIL_POLL_INTERVAL = int(os.getenv("GMAIL_POLL_INTERVAL", "300"))
 
-# Neo4j (retained for future Graphiti/Cognee evaluation)
+# Neo4j (knowledge graph)
 NEO4J_URL = os.getenv("NEO4J_URL", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")

@@ -169,9 +169,9 @@ Auto-discovered at startup.
 | `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |
 | `GMAIL_REFRESH_TOKEN` | | OAuth refresh token (from `gmail --auth`) |
 | `GMAIL_POLL_INTERVAL` | `300` | Email polling interval in seconds |
-| `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL (optional, for future use) |
-| `NEO4J_USER` | `neo4j` | Neo4j username (optional) |
-| `NEO4J_PASSWORD` | | Neo4j password (optional) |
+| `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL |
+| `NEO4J_USER` | `neo4j` | Neo4j username |
+| `NEO4J_PASSWORD` | (required) | Neo4j password |
 | `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing (`true`/`false`) |
 | `LANGSMITH_API_KEY` | | LangSmith API key (required when tracing enabled) |
 | `LANGSMITH_PROJECT` | `pears` | LangSmith project name |

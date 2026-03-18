@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from pearscaff import log
+from pearscaff import graph, log
 from pearscaff.agents.base import BaseAgent
 from pearscaff.bus import MessageBus
 from pearscaff.prompts import load as load_prompt
@@ -165,7 +165,20 @@ class SearchEntitiesTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        return "No entities found (extraction not yet implemented)"
+        query = kwargs["query"]
+        entity_type = kwargs.get("entity_type")
+        results = graph.search_entities(query, entity_type=entity_type, limit=5)
+        if not results:
+            return "No entities found."
+        lines = []
+        for e in results:
+            meta = e.get("metadata", {})
+            meta_str = ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else ""
+            line = f"- {e['name']} ({e['type']}, id={e['id']})"
+            if meta_str:
+                line += f"  [{meta_str}]"
+            lines.append(line)
+        return "\n".join(lines)
 
 
 def create_worker_agent(

@@ -48,14 +48,12 @@ Worker Agent (reasoning, routing, triage)
     ↓ Postgres messages
 Expert Agents (Gmail API/browser, Retriever)
     ↓
-Indexer (background) → Knowledge Graph (Postgres) + Vector Store (Qdrant)
+Indexer (background) → Knowledge Graph (Neo4j) + Vector Store (Qdrant)
 ```
-
-**Note:** The knowledge graph extraction pipeline is being rebuilt. The Indexer currently marks records as indexed without extracting entities. The Retriever tools return empty results. Email reading, triage, and all agent communication work normally.
 
 Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via Postgres polling. A unified log at `data/logs/session.log` records every action across all agents.
 
-Emails read by the Gmail expert are persisted to a System of Record with deduplication. The worker triages each email — auto-classifying known senders and obvious noise, asking the human when uncertain. A background Indexer extracts entities and facts into a knowledge graph (Postgres) and embeds records in Qdrant for semantic search. The Retriever expert searches the knowledge graph and vector store when the worker needs context.
+Emails read by the Gmail expert are persisted to a System of Record with deduplication. The worker triages each email — auto-classifying known senders and obvious noise, asking the human when uncertain. A background Indexer extracts entities and facts into a knowledge graph (Neo4j) and embeds records in Qdrant for semantic search. The Retriever expert searches the knowledge graph and vector store when the worker needs context.
 
 ## REPL
 
