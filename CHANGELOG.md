@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.2
+- Issues flow through the extraction pipeline — no code changes needed, the Indexer already processes all unindexed relevant records regardless of type
+- Extraction prompt made source-agnostic: "emails" → "records (emails and issues)" throughout
+- Added issue-specific guidance section to extraction prompt: focus on description/comments, extract people from comments, extract commitments/blockers, extract project cross-references
+- Cross-source entity resolution: same person/company/project from emails and issues resolves to one Neo4j node via name + email/domain matching
+
 ## 1.6.1
 - Robust Linear sync: cursor-based pagination for initial load (handles teams with hundreds of issues)
 - Rate limiting: automatic retry with exponential backoff on Linear API 429 responses
