@@ -5,7 +5,23 @@ Thin wrapper around Linear's API for issue management.
 
 from __future__ import annotations
 
+import time
+
 import httpx
+
+_ISSUE_FIELDS = """
+    id identifier title description
+    state { name }
+    priority priorityLabel
+    assignee { name email }
+    project { name }
+    labels { nodes { name } }
+    url createdAt updatedAt
+"""
+
+_ISSUE_FIELDS_WITH_COMMENTS = _ISSUE_FIELDS + """
+    comments { nodes { body user { name } createdAt } }
+"""
 
 
 class LinearClient:
@@ -18,23 +34,73 @@ class LinearClient:
         self._users_cache: list[dict] | None = None
 
     def _query(self, query: str, variables: dict | None = None) -> dict:
-        """Execute a GraphQL query and return the data."""
-        resp = httpx.post(
-            self._url,
-            json={"query": query, "variables": variables or {}},
-            headers={
-                "Authorization": self._api_key,
-                "Content-Type": "application/json",
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        result = resp.json()
-        if "errors" in result:
-            raise RuntimeError(f"Linear API error: {result['errors']}")
-        return result.get("data", {})
+        """Execute a GraphQL query and return the data. Retries on 429."""
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            resp = httpx.post(
+                self._url,
+                json={"query": query, "variables": variables or {}},
+                headers={
+                    "Authorization": self._api_key,
+                    "Content-Type": "application/json",
+                },
+                timeout=30,
+            )
+            if resp.status_code == 429:
+                if attempt < max_retries:
+                    retry_after = int(resp.headers.get("Retry-After", 2 ** attempt))
+                    time.sleep(retry_after)
+                    continue
+            resp.raise_for_status()
+            result = resp.json()
+            if "errors" in result:
+                raise RuntimeError(f"Linear API error: {result['errors']}")
+            return result.get("data", {})
+        raise RuntimeError("Linear API rate limit exceeded after retries")
 
     # --- Issues ---
+
+    def _paginate_issues(
+        self,
+        query_template: str,
+        variables: dict | None = None,
+        page_size: int = 50,
+    ) -> list[dict]:
+        """Fetch all pages of an issues query. Returns flat list of formatted issues."""
+        all_issues: list[dict] = []
+        cursor: str | None = None
+        while True:
+            vars_ = dict(variables or {})
+            vars_["first"] = page_size
+            if cursor:
+                vars_["after"] = cursor
+
+            data = self._query(query_template, variables=vars_)
+            issues_data = data.get("issues", {})
+            nodes = issues_data.get("nodes", [])
+            page_info = issues_data.get("pageInfo", {})
+
+            for node in nodes:
+                issue = self._format_issue(node)
+                comments_raw = node.get("comments", {}).get("nodes", [])
+                if comments_raw:
+                    issue["comments"] = [
+                        {
+                            "body": c.get("body", ""),
+                            "author": (c.get("user") or {}).get("name", ""),
+                            "created_at": c.get("createdAt", ""),
+                        }
+                        for c in comments_raw
+                    ]
+                all_issues.append(issue)
+
+            if not page_info.get("hasNextPage"):
+                break
+            cursor = page_info.get("endCursor")
+            if not cursor:
+                break
+
+        return all_issues
 
     def list_issues(
         self,
@@ -46,73 +112,39 @@ class LinearClient:
         label: str | None = None,
         first: int = 50,
     ) -> list[dict]:
-        """List issues with optional filters."""
-        filters = []
+        """List issues with optional filters. Paginates through all results."""
+        filter_parts: dict = {}
         if team_id:
-            filters.append(f'team: {{id: {{eq: "{team_id}"}}}}')
+            filter_parts["team"] = {"id": {"eq": team_id}}
         if status:
-            filters.append(f'state: {{name: {{eqCaseInsensitive: "{status}"}}}}')
+            filter_parts["state"] = {"name": {"eqCaseInsensitive": status}}
         if assignee:
-            filters.append(f'assignee: {{name: {{eqCaseInsensitive: "{assignee}"}}}}')
+            filter_parts["assignee"] = {"name": {"eqCaseInsensitive": assignee}}
         if project:
-            filters.append(f'project: {{name: {{eqCaseInsensitive: "{project}"}}}}')
+            filter_parts["project"] = {"name": {"eqCaseInsensitive": project}}
         if priority is not None:
-            filters.append(f"priority: {{eq: {priority}}}")
+            filter_parts["priority"] = {"eq": priority}
         if label:
-            filters.append(f'labels: {{name: {{eqCaseInsensitive: "{label}"}}}}')
+            filter_parts["labels"] = {"name": {"eqCaseInsensitive": label}}
 
-        filter_str = ", ".join(filters)
-        filter_arg = f", filter: {{{filter_str}}}" if filter_str else ""
-
-        data = self._query(f"""
-            query {{
-                issues(first: {first}{filter_arg}, orderBy: updatedAt) {{
-                    nodes {{
-                        id
-                        identifier
-                        title
-                        state {{ name }}
-                        priority
-                        priorityLabel
-                        assignee {{ name email }}
-                        project {{ name }}
-                        labels {{ nodes {{ name }} }}
-                        url
-                        createdAt
-                        updatedAt
-                    }}
-                }}
-            }}
-        """)
-        return [self._format_issue(n) for n in data.get("issues", {}).get("nodes", [])]
+        query = """
+            query($filter: IssueFilter, $first: Int, $after: String) {
+                issues(filter: $filter, first: $first, after: $after, orderBy: updatedAt) {
+                    nodes {""" + _ISSUE_FIELDS_WITH_COMMENTS + """}
+                    pageInfo { hasNextPage endCursor }
+                }
+            }
+        """
+        return self._paginate_issues(
+            query, variables={"filter": filter_parts or None}, page_size=first,
+        )
 
     def get_issue(self, identifier: str) -> dict | None:
         """Get a specific issue by identifier (e.g. 'ENG-42')."""
         data = self._query("""
             query($filter: IssueFilter) {
                 issues(filter: $filter, first: 1) {
-                    nodes {
-                        id
-                        identifier
-                        title
-                        description
-                        state { name }
-                        priority
-                        priorityLabel
-                        assignee { name email }
-                        project { name }
-                        labels { nodes { name } }
-                        url
-                        createdAt
-                        updatedAt
-                        comments {
-                            nodes {
-                                body
-                                user { name }
-                                createdAt
-                            }
-                        }
-                    }
+                    nodes {""" + _ISSUE_FIELDS_WITH_COMMENTS + """}
                 }
             }
         """, variables={
@@ -122,7 +154,6 @@ class LinearClient:
         if not nodes:
             return None
         issue = self._format_issue(nodes[0])
-        # Add comments
         comments = nodes[0].get("comments", {}).get("nodes", [])
         issue["comments"] = [
             {
@@ -289,32 +320,22 @@ class LinearClient:
     def list_updated_since(
         self, since: str, team_id: str | None = None, first: int = 50
     ) -> list[dict]:
-        """List issues updated since a given ISO timestamp."""
-        filter_parts = {"updatedAt": {"gt": since}}
+        """List issues updated since a given ISO timestamp. Paginates through all results."""
+        filter_parts: dict = {"updatedAt": {"gt": since}}
         if team_id:
             filter_parts["team"] = {"id": {"eq": team_id}}
 
-        data = self._query("""
-            query($filter: IssueFilter, $first: Int) {
-                issues(filter: $filter, first: $first, orderBy: updatedAt) {
-                    nodes {
-                        id
-                        identifier
-                        title
-                        state { name }
-                        priority
-                        priorityLabel
-                        assignee { name email }
-                        project { name }
-                        labels { nodes { name } }
-                        url
-                        createdAt
-                        updatedAt
-                    }
+        query = """
+            query($filter: IssueFilter, $first: Int, $after: String) {
+                issues(filter: $filter, first: $first, after: $after, orderBy: updatedAt) {
+                    nodes {""" + _ISSUE_FIELDS_WITH_COMMENTS + """}
+                    pageInfo { hasNextPage endCursor }
                 }
             }
-        """, variables={"filter": filter_parts, "first": first})
-        return [self._format_issue(n) for n in data.get("issues", {}).get("nodes", [])]
+        """
+        return self._paginate_issues(
+            query, variables={"filter": filter_parts}, page_size=first,
+        )
 
     # --- Resolution helpers ---
 

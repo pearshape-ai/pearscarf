@@ -297,11 +297,13 @@ class SaveIssueTool(BaseTool):
             "linear_id": {"type": "string", "description": "Linear's unique issue ID"},
             "identifier": {"type": "string", "description": "Human-readable ID, e.g. 'ENG-42'"},
             "title": {"type": "string", "description": "Issue title"},
+            "description": {"type": "string", "description": "Issue description"},
             "status": {"type": "string", "description": "Issue status"},
             "priority": {"type": "string", "description": "Issue priority"},
             "assignee": {"type": "string", "description": "Assignee name"},
             "project": {"type": "string", "description": "Project name"},
             "labels": {"type": "array", "items": {"type": "string"}, "description": "Label names"},
+            "comments": {"type": "array", "items": {"type": "object"}, "description": "Issue comments"},
             "url": {"type": "string", "description": "Issue URL"},
         },
         "required": ["linear_id", "title"],
@@ -315,11 +317,13 @@ class SaveIssueTool(BaseTool):
             linear_id=kwargs["linear_id"],
             identifier=kwargs.get("identifier", ""),
             title=kwargs["title"],
+            description=kwargs.get("description", ""),
             status=kwargs.get("status", ""),
             priority=kwargs.get("priority", ""),
             assignee=kwargs.get("assignee", ""),
             project=kwargs.get("project", ""),
             labels=kwargs.get("labels"),
+            comments=kwargs.get("comments"),
             url=kwargs.get("url", ""),
         )
         if is_new:
@@ -409,6 +413,28 @@ def create_linear_expert_for_runner(
 # ---------------------------------------------------------------------------
 
 
+def _save_issue_from_poll(issue: dict) -> tuple[str, bool]:
+    """Save a polled issue to the SOR. Returns (record_id, is_new)."""
+    from pearscaff import store
+
+    return store.save_issue(
+        source="linear_expert",
+        linear_id=issue["id"],
+        identifier=issue.get("identifier", ""),
+        title=issue.get("title", ""),
+        description=issue.get("description", ""),
+        status=issue.get("status", ""),
+        priority=issue.get("priority", ""),
+        assignee=issue.get("assignee", ""),
+        project=issue.get("project", ""),
+        labels=issue.get("labels"),
+        comments=issue.get("comments"),
+        url=issue.get("url", ""),
+        linear_created_at=issue.get("created_at", ""),
+        linear_updated_at=issue.get("updated_at", ""),
+    )
+
+
 def start_issue_polling(
     bus: MessageBus,
     client: LinearClient,
@@ -416,11 +442,10 @@ def start_issue_polling(
 ) -> threading.Thread:
     """Start a background daemon thread that polls Linear for new/updated issues.
 
-    Each new issue gets saved to the SOR and creates a session for the worker.
+    First run does a bulk load with batch triage (one session for all issues).
+    Subsequent runs create individual sessions for new issues.
     Returns the thread (already started).
     """
-    from pearscaff import store
-
     if interval is None:
         interval = LINEAR_POLL_INTERVAL
 
@@ -435,50 +460,68 @@ def start_issue_polling(
         while True:
             try:
                 if synced_at is None:
-                    # First run: load all active issues
-                    issues = client.list_issues(team_id=team_id, first=50)
-                else:
-                    # Subsequent: only updated since last sync
-                    issues = client.list_updated_since(synced_at, team_id=team_id)
+                    # Initial load: fetch all issues (paginated)
+                    issues = client.list_issues(team_id=team_id)
+                    new_records: list[tuple[str, dict]] = []
+                    for issue in issues:
+                        record_id, is_new = _save_issue_from_poll(issue)
+                        if is_new:
+                            new_records.append((record_id, issue))
 
-                for issue in issues:
-                    record_id, is_new = store.save_issue(
-                        source="linear_expert",
-                        linear_id=issue["id"],
-                        identifier=issue.get("identifier", ""),
-                        title=issue.get("title", ""),
-                        status=issue.get("status", ""),
-                        priority=issue.get("priority", ""),
-                        assignee=issue.get("assignee", ""),
-                        project=issue.get("project", ""),
-                        labels=issue.get("labels"),
-                        url=issue.get("url", ""),
-                        linear_created_at=issue.get("created_at", ""),
-                        linear_updated_at=issue.get("updated_at", ""),
-                    )
-
-                    if is_new:
+                    if new_records:
+                        # Batch triage: one session for all initial issues
                         session_id = bus.create_session(
                             "linear_expert",
-                            f"New issue {issue.get('identifier', '')}: {issue.get('title', '')}",
+                            f"Initial Linear sync: {len(new_records)} issues",
                         )
+                        lines = [
+                            f"Initial Linear sync loaded {len(new_records)} issues.\n",
+                            "Here's a summary for triage — classify as relevant or noise:\n",
+                        ]
+                        for rid, iss in new_records:
+                            status = iss.get("status", "")
+                            priority = iss.get("priority", "")
+                            lines.append(
+                                f"- {rid} | {iss.get('identifier', '')} — "
+                                f"{iss.get('title', '')} [{status}, {priority}]"
+                            )
                         bus.send(
                             session_id=session_id,
                             from_agent="linear_expert",
                             to_agent="worker",
-                            content=(
-                                f"New Linear issue {issue.get('identifier', '')}\n"
-                                f"Title: \"{issue.get('title', '')}\"\n"
-                                f"Status: {issue.get('status', '')}\n"
-                                f"Priority: {issue.get('priority', '')}\n"
-                                f"Record: {record_id}\n\n"
-                                f"Is this relevant and why?"
-                            ),
+                            content="\n".join(lines),
                         )
                         log.write(
                             "linear_expert", session_id, "action",
-                            f"Poll: new issue {record_id} — {issue.get('identifier', '')}",
+                            f"Initial sync: {len(new_records)} new issues sent for batch triage",
                         )
+                else:
+                    # Incremental: one session per new issue
+                    issues = client.list_updated_since(synced_at, team_id=team_id)
+                    for issue in issues:
+                        record_id, is_new = _save_issue_from_poll(issue)
+                        if is_new:
+                            session_id = bus.create_session(
+                                "linear_expert",
+                                f"New issue {issue.get('identifier', '')}: {issue.get('title', '')}",
+                            )
+                            bus.send(
+                                session_id=session_id,
+                                from_agent="linear_expert",
+                                to_agent="worker",
+                                content=(
+                                    f"New Linear issue {issue.get('identifier', '')}\n"
+                                    f"Title: \"{issue.get('title', '')}\"\n"
+                                    f"Status: {issue.get('status', '')}\n"
+                                    f"Priority: {issue.get('priority', '')}\n"
+                                    f"Record: {record_id}\n\n"
+                                    f"Is this relevant and why?"
+                                ),
+                            )
+                            log.write(
+                                "linear_expert", session_id, "action",
+                                f"Poll: new issue {record_id} — {issue.get('identifier', '')}",
+                            )
 
                 synced_at = datetime.now(timezone.utc).isoformat()
 

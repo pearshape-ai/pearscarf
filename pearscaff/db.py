@@ -106,15 +106,21 @@ CREATE TABLE IF NOT EXISTS issues (
     linear_id TEXT UNIQUE NOT NULL,
     identifier TEXT,
     title TEXT NOT NULL,
+    description TEXT,
     status TEXT,
     priority TEXT,
     assignee TEXT,
     project TEXT,
     labels JSONB,
+    comments JSONB,
     url TEXT,
     linear_created_at TIMESTAMPTZ,
     linear_updated_at TIMESTAMPTZ
 );
+
+-- Migration: add description and comments to existing issues tables
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS comments JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_issues_linear_id ON issues(linear_id);
 CREATE INDEX IF NOT EXISTS idx_issues_identifier ON issues(identifier);

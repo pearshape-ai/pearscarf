@@ -96,7 +96,7 @@ POSTGRES_DB=pearscaff
 3. Add to `.env`:
    ```
    LINEAR_API_KEY=lin_api_your_key_here
-   LINEAR_TEAM_ID=               # optional — scope polling to a specific team
+   LINEAR_TEAM_ID=               # optional — team name, key, or UUID to scope polling
    ```
 
 Test with:

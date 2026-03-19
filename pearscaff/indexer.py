@@ -60,6 +60,53 @@ class Indexer:
                     parts.append(f"\n{body}")
                 return "\n".join(parts)
 
+        elif record_type == "issue":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT identifier, title, description, status, priority, "
+                    "assignee, project, labels, comments, "
+                    "linear_created_at, linear_updated_at "
+                    "FROM issues WHERE record_id = %s",
+                    (record["id"],),
+                ).fetchone()
+            if row:
+                issue = dict(row)
+                parts = []
+                if issue["identifier"]:
+                    parts.append(f"Issue: {issue['identifier']}")
+                if issue["title"]:
+                    parts.append(f"Title: {issue['title']}")
+                meta = []
+                if issue["status"]:
+                    meta.append(f"Status: {issue['status']}")
+                if issue["priority"]:
+                    meta.append(f"Priority: {issue['priority']}")
+                if issue["assignee"]:
+                    meta.append(f"Assignee: {issue['assignee']}")
+                if meta:
+                    parts.append(" | ".join(meta))
+                if issue["project"]:
+                    parts.append(f"Project: {issue['project']}")
+                labels = issue.get("labels") or []
+                if labels:
+                    parts.append(f"Labels: {', '.join(labels)}")
+                if issue["linear_created_at"]:
+                    parts.append(f"Created: {issue['linear_created_at']}")
+                if issue["linear_updated_at"]:
+                    parts.append(f"Updated: {issue['linear_updated_at']}")
+                if issue["description"]:
+                    desc = issue["description"][:3000]
+                    parts.append(f"\n{desc}")
+                comments = issue.get("comments") or []
+                if comments:
+                    parts.append(f"\nComments ({len(comments)}):")
+                    for c in comments:
+                        author = c.get("author", "Unknown")
+                        date = c.get("created_at", "")
+                        body = c.get("body", "")[:500]
+                        parts.append(f"[{author}, {date}] {body}")
+                return "\n".join(parts)
+
         # Fallback: use raw content from records table
         return record.get("raw") or "(no content)"
 
@@ -140,7 +187,7 @@ class Indexer:
             "type": record.get("type", ""),
             "source": record.get("source", ""),
         }
-        # Add email-specific metadata if available
+        # Add type-specific metadata
         if record.get("type") == "email":
             with _get_conn() as conn:
                 row = conn.execute(
@@ -150,6 +197,15 @@ class Indexer:
             if row:
                 metadata["sender"] = row["sender"] or ""
                 metadata["subject"] = row["subject"] or ""
+        elif record.get("type") == "issue":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT identifier, title FROM issues WHERE record_id = %s",
+                    (record_id,),
+                ).fetchone()
+            if row:
+                metadata["identifier"] = row["identifier"] or ""
+                metadata["title"] = row["title"] or ""
 
         try:
             vectorstore.add_record(record_id, content, metadata)

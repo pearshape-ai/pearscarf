@@ -114,11 +114,13 @@ def save_issue(
     linear_id: str,
     identifier: str = "",
     title: str = "",
+    description: str = "",
     status: str = "",
     priority: str = "",
     assignee: str = "",
     project: str = "",
     labels: list[str] | None = None,
+    comments: list[dict] | None = None,
     url: str = "",
     linear_created_at: str = "",
     linear_updated_at: str = "",
@@ -142,12 +144,13 @@ def save_issue(
         if existing:
             record_id = existing["record_id"]
             conn.execute(
-                "UPDATE issues SET identifier = %s, title = %s, status = %s, "
-                "priority = %s, assignee = %s, project = %s, labels = %s, "
-                "url = %s, linear_updated_at = %s "
+                "UPDATE issues SET identifier = %s, title = %s, description = %s, "
+                "status = %s, priority = %s, assignee = %s, project = %s, "
+                "labels = %s, comments = %s, url = %s, linear_updated_at = %s "
                 "WHERE record_id = %s",
-                (identifier, title, status, priority, assignee, project,
-                 Jsonb(labels or []), url, linear_updated_at or None, record_id),
+                (identifier, title, description, status, priority, assignee, project,
+                 Jsonb(labels or []), Jsonb(comments or []), url,
+                 linear_updated_at or None, record_id),
             )
             conn.commit()
             return record_id, False
@@ -160,11 +163,12 @@ def save_issue(
             (record_id, "issue", source, now, raw),
         )
         conn.execute(
-            "INSERT INTO issues (record_id, linear_id, identifier, title, status, "
-            "priority, assignee, project, labels, url, linear_created_at, linear_updated_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (record_id, linear_id, identifier, title, status, priority, assignee,
-             project, Jsonb(labels or []), url,
+            "INSERT INTO issues (record_id, linear_id, identifier, title, description, status, "
+            "priority, assignee, project, labels, comments, url, "
+            "linear_created_at, linear_updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (record_id, linear_id, identifier, title, description, status, priority,
+             assignee, project, Jsonb(labels or []), Jsonb(comments or []), url,
              linear_created_at or None, linear_updated_at or None),
         )
         conn.commit()
@@ -176,9 +180,9 @@ def get_issue(record_id: str) -> dict | None:
     init_db()
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.status, "
-            "i.priority, i.assignee, i.project, i.labels, i.url, "
-            "i.linear_created_at, i.linear_updated_at, r.source, r.created_at "
+            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.description, "
+            "i.status, i.priority, i.assignee, i.project, i.labels, i.comments, "
+            "i.url, i.linear_created_at, i.linear_updated_at, r.source, r.created_at "
             "FROM issues i JOIN records r ON i.record_id = r.id "
             "WHERE i.record_id = %s",
             (record_id,),
@@ -191,9 +195,9 @@ def get_issue_by_linear_id(linear_id: str) -> dict | None:
     init_db()
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.status, "
-            "i.priority, i.assignee, i.project, i.labels, i.url, "
-            "i.linear_created_at, i.linear_updated_at, r.source, r.created_at "
+            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.description, "
+            "i.status, i.priority, i.assignee, i.project, i.labels, i.comments, "
+            "i.url, i.linear_created_at, i.linear_updated_at, r.source, r.created_at "
             "FROM issues i JOIN records r ON i.record_id = r.id "
             "WHERE i.linear_id = %s",
             (linear_id,),
@@ -206,9 +210,9 @@ def list_issues(limit: int = 20) -> list[dict]:
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.status, "
-            "i.priority, i.assignee, i.project, i.url, "
-            "i.linear_updated_at, r.source, r.created_at "
+            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.description, "
+            "i.status, i.priority, i.assignee, i.project, i.labels, i.comments, "
+            "i.url, i.linear_updated_at, r.source, r.created_at "
             "FROM issues i JOIN records r ON i.record_id = r.id "
             "ORDER BY r.created_at DESC LIMIT %s",
             (limit,),
@@ -240,8 +244,12 @@ def get_pending_records(limit: int = 10) -> list[dict]:
     with _get_conn() as conn:
         rows = conn.execute(
             "SELECT r.id, r.type, r.source, r.created_at, "
-            "e.sender, e.subject, e.body "
-            "FROM records r LEFT JOIN emails e ON r.id = e.record_id "
+            "e.sender, e.subject, e.body, "
+            "i.identifier, i.title AS issue_title, i.status AS issue_status, "
+            "i.priority AS issue_priority, i.assignee AS issue_assignee "
+            "FROM records r "
+            "LEFT JOIN emails e ON r.id = e.record_id "
+            "LEFT JOIN issues i ON r.id = i.record_id "
             "WHERE r.classification IS NULL "
             "ORDER BY r.created_at DESC LIMIT %s",
             (limit,),

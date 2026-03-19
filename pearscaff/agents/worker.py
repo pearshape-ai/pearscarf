@@ -180,6 +180,13 @@ class LookupIssueTool(BaseTool):
             parts.append(f"Project: {issue['project']}")
         if issue.get("url"):
             parts.append(f"URL: {issue['url']}")
+        if issue.get("description"):
+            parts.append(f"\nDescription:\n{issue['description'][:1000]}")
+        comments = issue.get("comments") or []
+        if comments:
+            parts.append(f"\nComments ({len(comments)}):")
+            for c in comments[:10]:
+                parts.append(f"  [{c.get('author', '')}] {c.get('body', '')[:200]}")
         return "\n".join(parts)
 
 

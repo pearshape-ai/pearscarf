@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.1
+- Robust Linear sync: cursor-based pagination for initial load (handles teams with hundreds of issues)
+- Rate limiting: automatic retry with exponential backoff on Linear API 429 responses
+- Issue comments synced as part of the issue record (`comments` JSONB column)
+- Issue descriptions stored (`description` TEXT column) — both new columns with migration for existing databases
+- `_build_content` for issues in Indexer — assembles title + description + metadata + threaded comments for extraction
+- Qdrant embedding includes issue-specific metadata (identifier, title)
+- Batch triage for initial bulk load: one session with all issues summarized instead of N individual sessions
+- Worker prompt updated with batch classification instructions
+- `LookupIssueTool` and `get_pending_records` now include description and comments
+- No graph writes — still SOR only
+
 ## 1.6.0
 - Linear expert agent with full read/write via GraphQL API
 - Tools: list, get, create, update, comment, search issues — with name-to-ID resolution for teams, users, projects, labels
