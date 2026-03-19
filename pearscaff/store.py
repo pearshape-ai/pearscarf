@@ -99,6 +99,123 @@ def list_emails(limit: int = 20) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+# --- Issues ---
+
+
+def _next_issue_id() -> str:
+    with _get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) as c FROM records WHERE type = 'issue'").fetchone()
+        num = row["c"] + 1
+        return f"issue_{num:03d}"
+
+
+def save_issue(
+    source: str,
+    linear_id: str,
+    identifier: str = "",
+    title: str = "",
+    status: str = "",
+    priority: str = "",
+    assignee: str = "",
+    project: str = "",
+    labels: list[str] | None = None,
+    url: str = "",
+    linear_created_at: str = "",
+    linear_updated_at: str = "",
+    raw: str = "",
+) -> tuple[str, bool]:
+    """Save or update an issue in the SOR.
+
+    Returns (record_id, is_new). If the issue already exists (same linear_id),
+    updates its fields and returns (existing_record_id, False).
+    """
+    init_db()
+    from psycopg.types.json import Jsonb
+
+    with _get_conn() as conn:
+        # Check for existing issue
+        existing = conn.execute(
+            "SELECT record_id FROM issues WHERE linear_id = %s",
+            (linear_id,),
+        ).fetchone()
+
+        if existing:
+            record_id = existing["record_id"]
+            conn.execute(
+                "UPDATE issues SET identifier = %s, title = %s, status = %s, "
+                "priority = %s, assignee = %s, project = %s, labels = %s, "
+                "url = %s, linear_updated_at = %s "
+                "WHERE record_id = %s",
+                (identifier, title, status, priority, assignee, project,
+                 Jsonb(labels or []), url, linear_updated_at or None, record_id),
+            )
+            conn.commit()
+            return record_id, False
+
+        record_id = _next_issue_id()
+        now = _now()
+
+        conn.execute(
+            "INSERT INTO records (id, type, source, created_at, raw) VALUES (%s, %s, %s, %s, %s)",
+            (record_id, "issue", source, now, raw),
+        )
+        conn.execute(
+            "INSERT INTO issues (record_id, linear_id, identifier, title, status, "
+            "priority, assignee, project, labels, url, linear_created_at, linear_updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (record_id, linear_id, identifier, title, status, priority, assignee,
+             project, Jsonb(labels or []), url,
+             linear_created_at or None, linear_updated_at or None),
+        )
+        conn.commit()
+        return record_id, True
+
+
+def get_issue(record_id: str) -> dict | None:
+    """Look up an issue by record_id."""
+    init_db()
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.status, "
+            "i.priority, i.assignee, i.project, i.labels, i.url, "
+            "i.linear_created_at, i.linear_updated_at, r.source, r.created_at "
+            "FROM issues i JOIN records r ON i.record_id = r.id "
+            "WHERE i.record_id = %s",
+            (record_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_issue_by_linear_id(linear_id: str) -> dict | None:
+    """Look up an issue by Linear's unique ID."""
+    init_db()
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.status, "
+            "i.priority, i.assignee, i.project, i.labels, i.url, "
+            "i.linear_created_at, i.linear_updated_at, r.source, r.created_at "
+            "FROM issues i JOIN records r ON i.record_id = r.id "
+            "WHERE i.linear_id = %s",
+            (linear_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def list_issues(limit: int = 20) -> list[dict]:
+    """List recent issues from the SOR."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT i.record_id, i.linear_id, i.identifier, i.title, i.status, "
+            "i.priority, i.assignee, i.project, i.url, "
+            "i.linear_updated_at, r.source, r.created_at "
+            "FROM issues i JOIN records r ON i.record_id = r.id "
+            "ORDER BY r.created_at DESC LIMIT %s",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def classify_record(
     record_id: str,
     classification: str,

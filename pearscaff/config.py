@@ -30,6 +30,11 @@ GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
 GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
 GMAIL_POLL_INTERVAL = int(os.getenv("GMAIL_POLL_INTERVAL", "300"))
 
+# Linear
+LINEAR_API_KEY = os.getenv("LINEAR_API_KEY", "")
+LINEAR_POLL_INTERVAL = int(os.getenv("LINEAR_POLL_INTERVAL", "300"))
+LINEAR_TEAM_ID = os.getenv("LINEAR_TEAM_ID", "")
+
 # Neo4j (knowledge graph)
 NEO4J_URL = os.getenv("NEO4J_URL", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")

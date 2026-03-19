@@ -89,6 +89,27 @@ POSTGRES_DB=pearscaff
 
 **Neo4j** is required for the extraction pipeline — entities, relationships, and facts are stored here. Set `NEO4J_PASSWORD` in `.env` (default auth: `neo4j/<password>`). Browser available at `http://localhost:7474`.
 
+## Linear Setup (optional — issue management)
+
+1. Go to [Linear Settings → API](https://linear.app/settings/api)
+2. Create a personal API key
+3. Add to `.env`:
+   ```
+   LINEAR_API_KEY=lin_api_your_key_here
+   LINEAR_TEAM_ID=               # optional — scope polling to a specific team
+   ```
+
+Test with:
+```bash
+pearscaff expert linear
+```
+
+Enable automatic issue syncing with `--poll-linear`:
+```bash
+pearscaff run --poll-linear
+pearscaff discord --poll-linear
+```
+
 ## LangSmith Setup (optional — observability)
 
 Opt-in tracing for LLM calls, tool executions, and cost tracking.

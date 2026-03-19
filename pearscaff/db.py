@@ -101,6 +101,24 @@ CREATE TABLE IF NOT EXISTS emails (
 
 CREATE INDEX IF NOT EXISTS idx_emails_message_id ON emails(message_id);
 
+CREATE TABLE IF NOT EXISTS issues (
+    record_id TEXT PRIMARY KEY REFERENCES records(id),
+    linear_id TEXT UNIQUE NOT NULL,
+    identifier TEXT,
+    title TEXT NOT NULL,
+    status TEXT,
+    priority TEXT,
+    assignee TEXT,
+    project TEXT,
+    labels JSONB,
+    url TEXT,
+    linear_created_at TIMESTAMPTZ,
+    linear_updated_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_issues_linear_id ON issues(linear_id);
+CREATE INDEX IF NOT EXISTS idx_issues_identifier ON issues(identifier);
+
 -- Knowledge Graph
 CREATE TABLE IF NOT EXISTS entity_types (
     id TEXT PRIMARY KEY,

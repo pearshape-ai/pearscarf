@@ -141,6 +141,48 @@ class ClassifyRecordTool(BaseTool):
         return f"Record {kwargs['record_id']} classified as {kwargs['classification']}."
 
 
+class LookupIssueTool(BaseTool):
+    """Worker uses this to look up previously stored issues."""
+
+    name = "lookup_issue"
+    description = (
+        "Look up a previously stored Linear issue by its record ID. "
+        "Returns the full issue details (title, status, priority, assignee)."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "record_id": {
+                "type": "string",
+                "description": "The issue record ID, e.g. 'issue_001'",
+            },
+        },
+        "required": ["record_id"],
+    }
+
+    def execute(self, **kwargs: Any) -> str:
+        from pearscaff import store
+
+        record_id = kwargs["record_id"]
+        issue = store.get_issue(record_id)
+        if not issue:
+            return f"No issue found with record_id '{record_id}'."
+        parts = [
+            f"Record: {issue['record_id']}",
+            f"Identifier: {issue['identifier']}",
+            f"Title: {issue['title']}",
+            f"Status: {issue['status']}",
+            f"Priority: {issue['priority']}",
+        ]
+        if issue.get("assignee"):
+            parts.append(f"Assignee: {issue['assignee']}")
+        if issue.get("project"):
+            parts.append(f"Project: {issue['project']}")
+        if issue.get("url"):
+            parts.append(f"URL: {issue['url']}")
+        return "\n".join(parts)
+
+
 class SearchEntitiesTool(BaseTool):
     """Worker uses this to search the knowledge graph for known entities."""
 
@@ -195,6 +237,7 @@ def create_worker_agent(
     send_tool._session_id = session_id
     registry.register(send_tool)
     registry.register(LookupEmailTool())
+    registry.register(LookupIssueTool())
     registry.register(ClassifyRecordTool())
     registry.register(SearchEntitiesTool())
 

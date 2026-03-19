@@ -6,13 +6,16 @@
 |---|---|
 | `pearscaff run` | Full system: worker + experts + session REPL |
 | `pearscaff run --poll-email` | Full system with automatic email polling |
+| `pearscaff run --poll-linear` | Full system with automatic Linear issue polling |
 | `pearscaff discord` | Full system with Discord frontend |
 | `pearscaff discord --poll-email` | Discord mode with automatic email polling |
+| `pearscaff discord --poll-linear` | Discord mode with automatic Linear issue polling |
 | `pearscaff chat` | Direct chat (no session bus) |
 | `pearscaff gmail --auth` | Run Gmail OAuth flow for API-based access |
 | `pearscaff expert gmail` | Standalone Gmail expert |
 | `pearscaff expert gmail --login` | Log into Gmail via browser (legacy) |
 | `pearscaff expert gmail --auth` | Gmail OAuth setup (same as `gmail --auth`) |
+| `pearscaff expert linear` | Standalone Linear expert |
 | `pearscaff extract-test [record_ids...]` | Run extraction prompt against emails (no writes) |
 
 All commands also available via `ps`.
@@ -163,7 +166,7 @@ Auto-discovered at startup.
 |---|---|---|
 | `ANTHROPIC_API_KEY` | (required) | Anthropic API key |
 | `MODEL` | `claude-sonnet-4-5-20250929` | Model identifier |
-| `MAX_TURNS` | `10` | Max tool-call loop iterations |
+| `MAX_TURNS` | `30` | Max tool-call loop iterations |
 | `EXTRACTION_MODEL` | (same as `MODEL`) | Model for entity extraction (overridable) |
 | `EXTRACTION_MAX_TOKENS` | `2048` | Max output tokens for extraction calls |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
@@ -177,6 +180,9 @@ Auto-discovered at startup.
 | `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |
 | `GMAIL_REFRESH_TOKEN` | | OAuth refresh token (from `gmail --auth`) |
 | `GMAIL_POLL_INTERVAL` | `300` | Email polling interval in seconds |
+| `LINEAR_API_KEY` | | Linear API key (required for Linear expert) |
+| `LINEAR_POLL_INTERVAL` | `300` | Linear issue polling interval in seconds |
+| `LINEAR_TEAM_ID` | | Optional team ID to scope polling |
 | `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL |
 | `NEO4J_USER` | `neo4j` | Neo4j username |
 | `NEO4J_PASSWORD` | (required) | Neo4j password |

@@ -16,6 +16,7 @@ cp .env.example .env          # add ANTHROPIC_API_KEY + POSTGRES_PASSWORD
 pearscaff gmail --auth             # Gmail OAuth setup (or: expert gmail --login for browser)
 pearscaff run                      # start the full system
 pearscaff run --poll-email         # start with automatic email polling
+pearscaff run --poll-linear        # start with automatic Linear issue polling
 ```
 
 ## Commands
@@ -30,6 +31,7 @@ pearscaff chat                     # direct chat (no session bus)
 pearscaff gmail --auth             # Gmail OAuth setup for API access
 pearscaff expert gmail --login     # Gmail browser login (legacy)
 pearscaff expert gmail             # standalone Gmail expert
+pearscaff expert linear            # standalone Linear expert
 pearscaff memory list              # list stored memories
 pearscaff memory search "query"    # search memories
 pearscaff memory entity "name"     # look up entity + connections
@@ -46,7 +48,7 @@ REPL / Discord (human)
     ↓ Postgres messages
 Worker Agent (reasoning, routing, triage)
     ↓ Postgres messages
-Expert Agents (Gmail API/browser, Retriever)
+Expert Agents (Gmail API/browser, Linear API, Retriever)
     ↓
 Indexer (background) → Knowledge Graph (Neo4j) + Vector Store (Qdrant)
 ```

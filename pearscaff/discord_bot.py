@@ -161,11 +161,12 @@ class PearscaffBot(discord.Client):
             await asyncio.sleep(1)
 
 
-def run_bot(poll_email: bool = False) -> None:
+def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
     if not DISCORD_BOT_TOKEN:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 
     from pearscaff.experts.gmail import start_email_polling
+    from pearscaff.experts.linear import create_linear_expert_for_runner, start_issue_polling
     from pearscaff.experts.retriever import create_retriever_for_runner
     from pearscaff.indexer import Indexer
 
@@ -187,6 +188,23 @@ def run_bot(poll_email: bool = False) -> None:
             )
         start_email_polling(bus, mcp_client)
         print("Email polling started.")
+
+    # Start Linear expert runner (if configured)
+    linear_factory, linear_client = create_linear_expert_for_runner(bus=bus)
+    linear_runner = None
+    if linear_factory:
+        linear_runner = AgentRunner("linear_expert", linear_factory, bus)
+        linear_runner.start()
+        print("Linear expert started.")
+
+        if poll_linear:
+            start_issue_polling(bus, linear_client)
+            print("Linear polling started.")
+    elif poll_linear:
+        raise SystemExit(
+            "Linear polling requires LINEAR_API_KEY.\n"
+            "Set LINEAR_API_KEY in .env."
+        )
 
     # Start Retriever expert runner
     retriever_factory = create_retriever_for_runner(bus=bus)
@@ -215,6 +233,8 @@ def run_bot(poll_email: bool = False) -> None:
         indexer.stop()
         retriever_runner.stop()
         worker_runner.stop()
+        if linear_runner:
+            linear_runner.stop()
         gmail_runner.stop()
         if gmail_manager:
             gmail_manager.close()

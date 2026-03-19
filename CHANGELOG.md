@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0
+- Linear expert agent with full read/write via GraphQL API
+- Tools: list, get, create, update, comment, search issues — with name-to-ID resolution for teams, users, projects, labels
+- `issues` table in Postgres (System of Record) with dedup/upsert on `linear_id`
+- Issue polling loop (`--poll-linear`) — syncs issues from Linear, creates sessions for worker triage
+- Worker system prompt updated with `linear_expert` as delegation target
+- `LookupIssueTool` added to worker for stored issue lookup
+- `pearscaff expert linear` standalone command for direct interaction
+- Config: `LINEAR_API_KEY`, `LINEAR_POLL_INTERVAL`, `LINEAR_TEAM_ID`
+- No graph/vector integration for issues (SOR only)
+
 ## 1.5.0
 - Un-stubbed `vectorstore.py` — `add_record` embeds via sentence-transformers and upserts to Qdrant; `query` does semantic similarity search
 - Indexer embeds email content in Qdrant after Neo4j extraction (Qdrant failures don't block indexing)

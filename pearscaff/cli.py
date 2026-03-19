@@ -28,12 +28,15 @@ def cli() -> None:
 @cli.command()
 @click.option("--poll-email", is_flag=True, default=False,
               help="Enable email polling loop (requires Gmail OAuth credentials)")
-def run(poll_email: bool) -> None:
+@click.option("--poll-linear", is_flag=True, default=False,
+              help="Enable Linear issue polling loop (requires LINEAR_API_KEY)")
+def run(poll_email: bool, poll_linear: bool) -> None:
     """Start the full system: worker + experts + REPL."""
     from pearscaff.agents.runner import AgentRunner
     from pearscaff.agents.worker import create_worker_agent
     from pearscaff.bus import MessageBus
     from pearscaff.experts.gmail import create_gmail_expert_for_runner, start_email_polling
+    from pearscaff.experts.linear import create_linear_expert_for_runner, start_issue_polling
     from pearscaff.experts.retriever import create_retriever_for_runner
     from pearscaff.indexer import Indexer
     from pearscaff.repl import SessionRepl
@@ -58,6 +61,25 @@ def run(poll_email: bool) -> None:
         start_email_polling(bus, mcp_client)
         sys.stdout.write("Email polling started.\r\n")
         sys.stdout.flush()
+
+    # Start Linear expert runner (if configured)
+    linear_factory, linear_client = create_linear_expert_for_runner(bus=bus)
+    linear_runner = None
+    if linear_factory:
+        linear_runner = AgentRunner("linear_expert", linear_factory, bus)
+        linear_runner.start()
+        sys.stdout.write("Linear expert started.\r\n")
+        sys.stdout.flush()
+
+        if poll_linear:
+            start_issue_polling(bus, linear_client)
+            sys.stdout.write("Linear polling started.\r\n")
+            sys.stdout.flush()
+    elif poll_linear:
+        raise SystemExit(
+            "Linear polling requires LINEAR_API_KEY.\n"
+            "Set LINEAR_API_KEY in .env."
+        )
 
     # Start Retriever expert runner
     retriever_factory = create_retriever_for_runner(bus=bus)
@@ -89,6 +111,8 @@ def run(poll_email: bool) -> None:
         indexer.stop()
         retriever_runner.stop()
         worker_runner.stop()
+        if linear_runner:
+            linear_runner.stop()
         gmail_runner.stop()
         if gmail_manager:
             gmail_manager.close()
@@ -97,11 +121,13 @@ def run(poll_email: bool) -> None:
 @cli.command()
 @click.option("--poll-email", is_flag=True, default=False,
               help="Enable email polling loop (requires Gmail OAuth credentials)")
-def discord(poll_email: bool) -> None:
+@click.option("--poll-linear", is_flag=True, default=False,
+              help="Enable Linear issue polling loop (requires LINEAR_API_KEY)")
+def discord(poll_email: bool, poll_linear: bool) -> None:
     """Run the full system with Discord as the frontend."""
     from pearscaff.discord_bot import run_bot
 
-    run_bot(poll_email=poll_email)
+    run_bot(poll_email=poll_email, poll_linear=poll_linear)
 
 
 @cli.command()
@@ -180,6 +206,70 @@ def gmail(login: bool, auth: bool) -> None:
         click.echo("\nbye.")
     finally:
         manager.close()
+
+
+@expert.command("linear")
+def linear() -> None:
+    """Linear expert — standalone mode for direct interaction."""
+    from pearscaff.experts.linear import create_linear_expert_for_runner
+    from pearscaff.linear_client import LinearClient
+    from pearscaff.config import LINEAR_API_KEY
+
+    if not LINEAR_API_KEY:
+        raise SystemExit("LINEAR_API_KEY is not set in .env.")
+
+    from pearscaff.experts.linear import _create_linear_client
+    from pearscaff.prompts import load as load_prompt
+    from pearscaff.tools import ToolRegistry
+    from pearscaff.agents.expert import ExpertAgent
+
+    client = _create_linear_client()
+
+    from pearscaff.experts.linear import (
+        LinearListIssuesTool, LinearGetIssueTool, LinearCreateIssueTool,
+        LinearUpdateIssueTool, LinearAddCommentTool, LinearSearchIssuesTool,
+        SaveIssueTool,
+    )
+
+    registry = ToolRegistry()
+    registry.register(LinearListIssuesTool(client))
+    registry.register(LinearGetIssueTool(client))
+    registry.register(LinearCreateIssueTool(client))
+    registry.register(LinearUpdateIssueTool(client))
+    registry.register(LinearAddCommentTool(client))
+    registry.register(LinearSearchIssuesTool(client))
+    registry.register(SaveIssueTool())
+
+    def on_tool_call(name, args):
+        click.echo(click.style(f"  [tool] {name}", fg="cyan") + f"({args})")
+
+    def on_text(text):
+        click.echo(click.style("  [thinking] ", fg="yellow") + text)
+
+    def on_tool_result(name, result):
+        preview = result[:200] + "..." if len(result) > 200 else result
+        click.echo(click.style(f"  [result] {name}", fg="green") + f": {preview}")
+
+    agent = ExpertAgent(
+        domain="linear",
+        domain_prompt=load_prompt("linear"),
+        tool_registry=registry,
+        on_tool_call=on_tool_call,
+        on_text=on_text,
+        on_tool_result=on_tool_result,
+    )
+
+    click.echo("Linear expert — standalone (type 'exit' or Ctrl+C to quit)\n")
+
+    try:
+        while True:
+            user_input = click.prompt("you", prompt_suffix=" > ")
+            if user_input.strip().lower() in ("exit", "quit"):
+                break
+            response = agent.run(user_input)
+            click.echo(f"\n{click.style('expert', fg='magenta')} > {response}\n")
+    except (KeyboardInterrupt, EOFError):
+        click.echo("\nbye.")
 
 
 @cli.command("gmail")
