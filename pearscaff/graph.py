@@ -221,26 +221,45 @@ def create_edge(
     to_entity: str,
     relationship: str,
     source_record: str,
+    valid_at: str | None = None,
 ) -> str:
     """Create a relationship between two entities. Returns the relationship element ID."""
     rel_type = relationship.upper()
+    ts = _now()
+    props = {
+        "source_record": source_record,
+        "created_at": ts,
+        "valid_at": valid_at or ts,
+        "invalid_at": None,
+    }
 
     with get_session() as session:
         # Use APOC for dynamic relationship type
         result = session.run(
             "MATCH (a) WHERE elementId(a) = $from_id "
             "MATCH (b) WHERE elementId(b) = $to_id "
-            "CALL apoc.create.relationship(a, $rel_type, {source_record: $source, created_at: $ts}, b) "
+            "CALL apoc.create.relationship(a, $rel_type, $props, b) "
             "YIELD rel "
             "RETURN elementId(rel) AS rid",
             from_id=from_entity,
             to_id=to_entity,
             rel_type=rel_type,
-            source=source_record,
-            ts=_now(),
+            props=props,
         )
         record = result.single()
         return record["rid"] if record else ""
+
+
+def invalidate_edge(edge_id: str, invalid_at: str | None = None) -> None:
+    """Set invalid_at on an existing relationship."""
+    ts = invalid_at or _now()
+    with get_session() as session:
+        session.run(
+            "MATCH ()-[r]->() WHERE elementId(r) = $rid "
+            "SET r.invalid_at = $ts",
+            rid=edge_id,
+            ts=ts,
+        )
 
 
 # --- Facts ---
@@ -251,30 +270,62 @@ def upsert_fact(
     claim: str,
     confidence: str,
     source_record: str,
+    valid_at: str | None = None,
 ) -> str:
-    """Create or update a Fact node connected to an entity. Returns the Fact element ID."""
+    """Invalidate-and-create: close the old fact (if any) and create a new one.
+
+    Returns the new Fact element ID.
+    """
+    ts = _now()
+    vat = valid_at or ts
+
     with get_session() as session:
+        # Step 1: Find existing current fact with same claim on this entity
+        existing = session.run(
+            "MATCH (n)-[:HAS_FACT]->(f:Fact {claim: $claim}) "
+            "WHERE elementId(n) = $eid AND f.invalid_at IS NULL "
+            "RETURN elementId(f) AS fid",
+            eid=entity_id,
+            claim=claim,
+        ).single()
+
+        # Step 2: Invalidate old fact if it exists
+        if existing:
+            session.run(
+                "MATCH (f:Fact) WHERE elementId(f) = $fid "
+                "SET f.invalid_at = $ts",
+                fid=existing["fid"],
+                ts=vat,
+            )
+
+        # Step 3: Create new fact
         result = session.run(
             "MATCH (n) WHERE elementId(n) = $eid "
-            "MERGE (n)-[:HAS_FACT]->(f:Fact {claim: $claim}) "
-            "ON CREATE SET f.confidence = $confidence, f.source_record = $source, f.created_at = $ts "
-            "ON MATCH SET f.confidence = $confidence, f.source_record = $source "
+            "CREATE (n)-[:HAS_FACT]->(f:Fact {"
+            "  claim: $claim, confidence: $confidence, "
+            "  source_record: $source, created_at: $created, "
+            "  valid_at: $valid_at, invalid_at: null"
+            "}) "
             "RETURN elementId(f) AS fid",
             eid=entity_id,
             claim=claim,
             confidence=confidence,
             source=source_record,
-            ts=_now(),
+            created=ts,
+            valid_at=vat,
         )
         record = result.single()
         return record["fid"] if record else ""
 
 
-def get_entity_facts(entity_id: str) -> list[dict]:
-    """Get all facts for an entity."""
+def get_entity_facts(entity_id: str, current_only: bool = True) -> list[dict]:
+    """Get facts for an entity. By default only current (non-invalidated) facts."""
     with get_session() as session:
+        where = "WHERE elementId(n) = $eid"
+        if current_only:
+            where += " AND f.invalid_at IS NULL"
         result = session.run(
-            "MATCH (n)-[:HAS_FACT]->(f:Fact) WHERE elementId(n) = $eid "
+            f"MATCH (n)-[:HAS_FACT]->(f:Fact) {where} "
             "RETURN f, elementId(f) AS fid",
             eid=entity_id,
         )
@@ -287,6 +338,8 @@ def get_entity_facts(entity_id: str) -> list[dict]:
                 "confidence": fnode.get("confidence", ""),
                 "source_record": fnode.get("source_record", ""),
                 "created_at": fnode.get("created_at", ""),
+                "valid_at": fnode.get("valid_at", ""),
+                "invalid_at": fnode.get("invalid_at"),
             })
         return facts
 
@@ -294,12 +347,19 @@ def get_entity_facts(entity_id: str) -> list[dict]:
 # --- Traversal ---
 
 
-def traverse_graph(entity_id: str, max_depth: int = 3) -> dict:
-    """Walk relationships from an entity up to max_depth hops."""
+def traverse_graph(entity_id: str, max_depth: int = 3, current_only: bool = True) -> dict:
+    """Walk relationships from an entity up to max_depth hops.
+
+    When current_only is True (default), only traverse edges where invalid_at IS NULL.
+    """
     with get_session() as session:
+        where_clause = "WHERE elementId(start) = $eid AND NOT connected:Fact"
+        if current_only:
+            where_clause += " AND ALL(r IN relationships(path) WHERE r.invalid_at IS NULL)"
+
         result = session.run(
-            "MATCH path = (start)-[*1..$depth]-(connected) "
-            "WHERE elementId(start) = $eid AND NOT connected:Fact "
+            f"MATCH path = (start)-[*1..$depth]-(connected) "
+            f"{where_clause} "
             "UNWIND relationships(path) AS r "
             "WITH start, connected, r, startNode(r) AS sn, endNode(r) AS en "
             "RETURN DISTINCT "
@@ -308,6 +368,8 @@ def traverse_graph(entity_id: str, max_depth: int = 3) -> dict:
             "  labels(connected) AS connected_labels, "
             "  type(r) AS rel_type, "
             "  r.source_record AS source_record, "
+            "  r.valid_at AS valid_at, "
+            "  r.invalid_at AS invalid_at, "
             "  elementId(sn) AS from_id, "
             "  elementId(en) AS to_id",
             eid=entity_id,
@@ -340,6 +402,8 @@ def traverse_graph(entity_id: str, max_depth: int = 3) -> dict:
                 "to": record["to_id"],
                 "relationship": record["rel_type"],
                 "source_record": record["source_record"],
+                "valid_at": record["valid_at"] or "",
+                "invalid_at": record["invalid_at"],
             })
 
             if record["source_record"]:
@@ -372,6 +436,9 @@ def graph_stats() -> dict:
         result = session.run("MATCH (f:Fact) RETURN count(f) AS c")
         total_facts = result.single()["c"]
 
+        result = session.run("MATCH (f:Fact) WHERE f.invalid_at IS NULL RETURN count(f) AS c")
+        current_facts = result.single()["c"]
+
         # Count relationships by type (exclude HAS_FACT)
         result = session.run(
             "MATCH ()-[r]->() WHERE type(r) <> 'HAS_FACT' "
@@ -387,6 +454,7 @@ def graph_stats() -> dict:
             "total_entities": total_entities,
             "total_edges": total_edges,
             "total_facts": total_facts,
+            "current_facts": current_facts,
             "entity_counts": entity_counts,
             "rel_counts": rel_counts,
         }
@@ -404,7 +472,8 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
         result = session.run(
             "MATCH (a)-[r]->(b) "
             "WHERE r.source_record = $rid AND type(r) <> 'HAS_FACT' "
-            "RETURN a.name AS from_name, type(r) AS relationship, b.name AS to_name",
+            "RETURN a.name AS from_name, type(r) AS relationship, b.name AS to_name, "
+            "r.valid_at AS valid_at, r.invalid_at AS invalid_at",
             rid=record_id,
         )
         for record in result:
@@ -413,13 +482,16 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
                 "from": record["from_name"] or "?",
                 "relationship": record["relationship"],
                 "to": record["to_name"] or "?",
+                "valid_at": record["valid_at"] or "",
+                "invalid_at": record["invalid_at"],
             })
 
         # Facts with this source_record
         result = session.run(
             "MATCH (n)-[:HAS_FACT]->(f:Fact) "
             "WHERE f.source_record = $rid "
-            "RETURN n.name AS entity_name, f.claim AS claim, f.confidence AS confidence",
+            "RETURN n.name AS entity_name, f.claim AS claim, f.confidence AS confidence, "
+            "f.valid_at AS valid_at, f.invalid_at AS invalid_at",
             rid=record_id,
         )
         for record in result:
@@ -428,6 +500,44 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
                 "entity_name": record["entity_name"] or "?",
                 "attribute": "claim",
                 "value": record["claim"] or "",
+                "valid_at": record["valid_at"] or "",
+                "invalid_at": record["invalid_at"],
             })
 
     return items
+
+
+# --- Temporal migration ---
+
+
+def retrofit_temporal() -> dict:
+    """Add temporal timestamps to existing edges and facts that lack them.
+
+    Sets valid_at = created_at (or now), invalid_at = null. Returns counts.
+    One-time migration for pre-1.7.0 data.
+    """
+    ts = _now()
+    with get_session() as session:
+        # Retrofit relationships (non-HAS_FACT)
+        result = session.run(
+            "MATCH ()-[r]->() "
+            "WHERE r.valid_at IS NULL AND type(r) <> 'HAS_FACT' "
+            "SET r.valid_at = coalesce(r.created_at, $ts), "
+            "    r.invalid_at = null "
+            "RETURN count(r) AS c",
+            ts=ts,
+        )
+        edges = result.single()["c"]
+
+        # Retrofit facts
+        result = session.run(
+            "MATCH (n)-[:HAS_FACT]->(f:Fact) "
+            "WHERE f.valid_at IS NULL "
+            "SET f.valid_at = coalesce(f.created_at, $ts), "
+            "    f.invalid_at = null "
+            "RETURN count(f) AS c",
+            ts=ts,
+        )
+        facts = result.single()["c"]
+
+        return {"edges_retrofitted": edges, "facts_retrofitted": facts}

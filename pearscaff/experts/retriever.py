@@ -64,8 +64,8 @@ class FactsLookupTool(BaseTool):
 
     name = "facts_lookup"
     description = (
-        "Get all stored facts (attributes and values) for a known entity. "
-        "Use after identifying an entity with search_entities."
+        "Get stored facts for a known entity. By default shows only current facts. "
+        "Set include_superseded=true to see full history with temporal markers."
     )
     input_schema = {
         "type": "object",
@@ -74,20 +74,30 @@ class FactsLookupTool(BaseTool):
                 "type": "string",
                 "description": "Entity ID, e.g. 'person_001' or 'company_001'",
             },
+            "include_superseded": {
+                "type": "boolean",
+                "description": "Include superseded (historical) facts. Default false.",
+            },
         },
         "required": ["entity_id"],
     }
 
     def execute(self, **kwargs: Any) -> str:
         entity_id = kwargs["entity_id"]
-        facts = graph.get_entity_facts(entity_id)
+        include_superseded = kwargs.get("include_superseded", False)
+        facts = graph.get_entity_facts(entity_id, current_only=not include_superseded)
         if not facts:
             return "No facts found for this entity."
         lines = []
         for f in facts:
             conf = f" [{f['confidence']}]" if f.get("confidence") else ""
             src = f" (from: {f['source_record']})" if f.get("source_record") else ""
-            lines.append(f"- {f['claim']}{conf}{src}")
+            temporal = ""
+            if f.get("invalid_at"):
+                temporal = f" [was: {f['valid_at']} -> {f['invalid_at']}]"
+            elif f.get("valid_at"):
+                temporal = f" [since: {f['valid_at']}]"
+            lines.append(f"- {f['claim']}{conf}{src}{temporal}")
         return "\n".join(lines)
 
 
@@ -97,7 +107,9 @@ class GraphTraverseTool(BaseTool):
     name = "graph_traverse"
     description = (
         "Walk the knowledge graph from an entity to find connected entities, "
-        "relationships, and source records. Traverses up to max_depth hops."
+        "relationships, and source records. Traverses up to max_depth hops. "
+        "By default only current (non-invalidated) relationships. "
+        "Set include_historical=true to include past relationships."
     )
     input_schema = {
         "type": "object",
@@ -110,6 +122,10 @@ class GraphTraverseTool(BaseTool):
                 "type": "integer",
                 "description": "Maximum hops to traverse (default 3)",
             },
+            "include_historical": {
+                "type": "boolean",
+                "description": "Include invalidated relationships. Default false.",
+            },
         },
         "required": ["entity_id"],
     }
@@ -117,7 +133,10 @@ class GraphTraverseTool(BaseTool):
     def execute(self, **kwargs: Any) -> str:
         entity_id = kwargs["entity_id"]
         max_depth = kwargs.get("max_depth", 3)
-        result = graph.traverse_graph(entity_id, max_depth=max_depth)
+        include_historical = kwargs.get("include_historical", False)
+        result = graph.traverse_graph(
+            entity_id, max_depth=max_depth, current_only=not include_historical,
+        )
         if not result["entities"] and not result["edges"]:
             return "No connections found."
         lines = []
@@ -128,7 +147,14 @@ class GraphTraverseTool(BaseTool):
         if result["edges"]:
             lines.append("Relationships:")
             for edge in result["edges"]:
-                lines.append(f"  - [{edge['relationship']}] {edge['from']} -> {edge['to']}")
+                temporal = ""
+                if edge.get("invalid_at"):
+                    temporal = f" [was: {edge['valid_at']} -> {edge['invalid_at']}]"
+                elif edge.get("valid_at"):
+                    temporal = f" [since: {edge['valid_at']}]"
+                lines.append(
+                    f"  - [{edge['relationship']}] {edge['from']} -> {edge['to']}{temporal}"
+                )
         if result["source_records"]:
             lines.append(f"Source records: {', '.join(result['source_records'])}")
         return "\n".join(lines)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.0
+- Bi-temporal timestamps on all graph edges and facts: `valid_at`, `invalid_at`, `created_at`, `source_record`
+- Facts use invalidate-and-create instead of update-in-place — old facts get `invalid_at` set, new fact created with `valid_at`
+- Same invalidation model for relationships via `invalidate_edge`
+- Issue change records pass `changed_at` as `valid_at` so graph timestamps reflect when the change actually happened in Linear
+- Retriever `facts_lookup` defaults to current facts; `include_superseded=true` shows full history with temporal markers
+- Retriever `graph_traverse` defaults to current relationships; `include_historical=true` includes past connections
+- `ps memory entity` shows temporal info: `[was]` marker on superseded facts, `(since ...)` on current ones
+- `ps memory graph` shows current vs total fact counts when they differ
+- `ps memory record` shows temporal info on facts and relationships
+- `retrofit_temporal()` migration function sets `valid_at = created_at` on pre-existing data
+- `scripts/retrofit_temporal.py` — one-time migration script for upgrading from pre-1.7.0
+
 ## 1.6.4
 - Print `PearScaff vX.Y.Z` version banner on startup for `ps run` and `ps discord`
 

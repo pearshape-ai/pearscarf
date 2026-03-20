@@ -282,6 +282,17 @@ class Indexer:
             if eid:
                 entity_id_map[name] = eid
 
+        # For issue_change records, use changed_at as the temporal valid_at
+        valid_at = None
+        if record_type == "issue_change":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT changed_at FROM issue_changes WHERE record_id = %s",
+                    (record_id,),
+                ).fetchone()
+                if row and row["changed_at"]:
+                    valid_at = str(row["changed_at"])
+
         # Step 3: Create relationships
         for rel in extracted.get("relationships", []):
             from_name = rel.get("from", "")
@@ -290,7 +301,7 @@ class Indexer:
             from_id = entity_id_map.get(from_name)
             to_id = entity_id_map.get(to_name)
             if from_id and to_id and rel_type:
-                graph.create_edge(from_id, to_id, rel_type, record_id)
+                graph.create_edge(from_id, to_id, rel_type, record_id, valid_at=valid_at)
 
         # Step 4: Create facts
         for fact in extracted.get("facts", []):
@@ -299,7 +310,7 @@ class Indexer:
             confidence = fact.get("confidence", "stated")
             eid = entity_id_map.get(entity_name)
             if eid and claim:
-                graph.upsert_fact(eid, claim, confidence, record_id)
+                graph.upsert_fact(eid, claim, confidence, record_id, valid_at=valid_at)
 
         # Step 5: Embed in Qdrant
         self._embed_record(record, content)

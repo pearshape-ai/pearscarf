@@ -7,7 +7,7 @@ Together, these agents become the operational backbone for companies.
 
 The graph is the connective tissue of the system. Every piece of data — emails, issues, knowledge — gets decomposed into entities and relationships that evolve over time. The extraction agent does the work, the ontology agent ensures the system learns what to look for, and the safety controls prevent runaway writes.
 
-- **Fact-as-an-edge** — adopt bi-temporal timestamps on all entity relationships to track how facts evolve over time
+- ~~**Fact-as-an-edge** — adopt bi-temporal timestamps on all entity relationships to track how facts evolve over time~~ (done — v1.7.0)
 - **Entity extraction agent** — runs on every incoming record, extracts entities and relationships with confidence scores, driven by an editable ontology prompt
 - **Ontology agent** — handles uncertain entities via HIL, updates the extraction prompt from human feedback, runs evals to verify improvements
 - **Safety controls** — staging before graph commits, heavy HIL early on, nightly backups

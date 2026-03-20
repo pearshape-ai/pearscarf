@@ -82,7 +82,13 @@ def format_entity(entity_data: dict | None) -> list[str]:
         lines.append("  Facts:")
         for f in facts:
             source = f" [from: {f['source_record']}]" if f.get("source_record") else ""
-            lines.append(f"    {f['attribute']}: {f['value']}{source}")
+            if f.get("invalid_at"):
+                marker = click.style(" [was]", fg="red", dim=True)
+                valid_range = f" ({f.get('valid_at', '?')} -> {f['invalid_at']})"
+            else:
+                marker = ""
+                valid_range = f" (since {f.get('valid_at', '?')})" if f.get("valid_at") else ""
+            lines.append(f"    {f['attribute']}: {f['value']}{marker}{valid_range}{source}")
 
     connections = entity_data.get("connections", [])
     if connections:
@@ -105,7 +111,12 @@ def format_graph_stats(stats: dict) -> list[str]:
     lines = []
     lines.append(f"  Entities: {stats.get('total_entities', 0)}")
     lines.append(f"  Edges: {stats.get('total_edges', 0)}")
-    lines.append(f"  Facts: {stats.get('total_facts', 0)}")
+    total_facts = stats.get("total_facts", 0)
+    current_facts = stats.get("current_facts", total_facts)
+    if current_facts != total_facts:
+        lines.append(f"  Facts: {current_facts} current, {total_facts} total")
+    else:
+        lines.append(f"  Facts: {total_facts}")
 
     entity_counts = stats.get("entity_counts", {})
     if entity_counts:
@@ -129,10 +140,16 @@ def format_record_memories(memories: list[dict]) -> list[str]:
     lines = []
     for i, m in enumerate(memories, 1):
         mem_type = m.get("type", "memory")
+        temporal = ""
+        if m.get("invalid_at"):
+            temporal = click.style(" [was]", fg="red", dim=True)
+            temporal += f" ({m.get('valid_at', '?')} -> {m['invalid_at']})"
+        elif m.get("valid_at"):
+            temporal = f" (since {m['valid_at']})"
         if mem_type == "fact":
-            lines.append(f"  {i}. [fact] {m.get('entity_name', '?')}.{m['attribute']} = {m['value']}")
+            lines.append(f"  {i}. [fact] {m.get('entity_name', '?')}.{m['attribute']} = {m['value']}{temporal}")
         elif mem_type == "relationship":
-            lines.append(f"  {i}. [rel] {m.get('from', '?')} --{m['relationship']}--> {m.get('to', '?')}")
+            lines.append(f"  {i}. [rel] {m.get('from', '?')} --{m['relationship']}--> {m.get('to', '?')}{temporal}")
         else:
             lines.append(f"  {i}. {m}")
     return lines
@@ -196,13 +213,15 @@ def _get_entity(name: str) -> dict | None:
     if not full:
         return entity
 
-    # Add facts
-    facts = graph.get_entity_facts(eid)
+    # Add facts (include superseded for full history view)
+    facts = graph.get_entity_facts(eid, current_only=False)
     full["facts"] = [
         {
             "attribute": "claim",
             "value": f.get("claim", ""),
             "source_record": f.get("source_record", ""),
+            "valid_at": f.get("valid_at", ""),
+            "invalid_at": f.get("invalid_at"),
         }
         for f in facts
     ]

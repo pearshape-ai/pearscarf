@@ -27,6 +27,7 @@ All commands also available via `ps`.
 | `python scripts/reindex_all.py` | Wipe Neo4j graph and reset indexed flags — Indexer re-extracts on next poll |
 | `python scripts/test_extraction.py [record_ids...]` | Run extraction prompt against emails (no writes) |
 | `python scripts/migrate_sqlite_to_postgres.py` | One-time SQLite → Postgres migration |
+| `python scripts/retrofit_temporal.py` | One-time migration: add temporal timestamps to pre-1.7.0 graph data |
 
 ## Memory Inspection
 
@@ -37,9 +38,9 @@ All commands also available via `ps`.
 | `ps memory list -f` | Watch for new records in real-time (Ctrl+C to stop) |
 | `ps memory list -f --interval 5` | Follow with custom poll interval (seconds) |
 | `ps memory search "query"` | Semantic search across stored records (Qdrant) |
-| `ps memory entity "name"` | Look up entity and its connections (Neo4j) |
-| `ps memory graph` | Graph overview and stats (Neo4j) |
-| `ps memory record <id>` | Entities and facts extracted from a specific record (Neo4j) |
+| `ps memory entity "name"` | Look up entity, connections, and temporal fact history (Neo4j) |
+| `ps memory graph` | Graph overview and stats including current vs total facts (Neo4j) |
+| `ps memory record <id>` | Entities and facts extracted from a specific record with temporal info (Neo4j) |
 
 Same commands available in the REPL via `/memory`:
 
