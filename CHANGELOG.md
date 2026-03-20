@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.6.4
+- Print `PearScaff vX.Y.Z` version banner on startup for `ps run` and `ps discord`
+
 ## 1.6.3
 - Issue change history captured from Linear's `issueHistory` API (status, assignee, priority transitions)
 - New `issue_changes` table in Postgres — each change is its own record in the SOR (type `issue_change`)

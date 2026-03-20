@@ -162,6 +162,9 @@ class PearscaffBot(discord.Client):
 
 
 def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
+    from pearscaff import __version__
+    print(f"PearScaff v{__version__}")
+
     if not DISCORD_BOT_TOKEN:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 

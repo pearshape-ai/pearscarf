@@ -41,6 +41,8 @@ def run(poll_email: bool, poll_linear: bool) -> None:
     from pearscaff.indexer import Indexer
     from pearscaff.repl import SessionRepl
 
+    click.echo(f"PearScaff v{__version__}")
+
     bus = MessageBus()
 
     # Start Gmail expert runner
