@@ -337,6 +337,101 @@ class LinearClient:
             query, variables={"filter": filter_parts}, page_size=first,
         )
 
+    # --- History ---
+
+    _PRIORITY_LABELS = {0: "No priority", 1: "Urgent", 2: "High", 3: "Medium", 4: "Low"}
+
+    def get_issue_history(
+        self, issue_id: str, since: str | None = None
+    ) -> list[dict]:
+        """Fetch meaningful history entries (status, assignee, priority changes) for an issue.
+
+        If `since` is provided (ISO timestamp), only returns entries created after that time.
+        Returns list of dicts with: id, created_at, actor, field, from_value, to_value.
+        """
+        all_entries: list[dict] = []
+        cursor: str | None = None
+        while True:
+            vars_: dict = {"issueId": issue_id, "first": 50}
+            if cursor:
+                vars_["after"] = cursor
+
+            data = self._query("""
+                query($issueId: String!, $first: Int, $after: String) {
+                    issue(id: $issueId) {
+                        history(first: $first, after: $after) {
+                            nodes {
+                                id
+                                createdAt
+                                actor { name email }
+                                fromState { name }
+                                toState { name }
+                                fromAssignee { name }
+                                toAssignee { name }
+                                fromPriority
+                                toPriority
+                            }
+                            pageInfo { hasNextPage endCursor }
+                        }
+                    }
+                }
+            """, variables=vars_)
+
+            issue_data = data.get("issue", {})
+            history = issue_data.get("history", {})
+            nodes = history.get("nodes", [])
+            page_info = history.get("pageInfo", {})
+
+            for node in nodes:
+                created_at = node.get("createdAt", "")
+                if since and created_at <= since:
+                    continue
+
+                actor_name = (node.get("actor") or {}).get("name", "")
+
+                # Status change
+                if node.get("fromState") or node.get("toState"):
+                    all_entries.append({
+                        "id": node["id"],
+                        "created_at": created_at,
+                        "actor": actor_name,
+                        "field": "status",
+                        "from_value": (node.get("fromState") or {}).get("name", ""),
+                        "to_value": (node.get("toState") or {}).get("name", ""),
+                    })
+
+                # Assignee change
+                if node.get("fromAssignee") or node.get("toAssignee"):
+                    all_entries.append({
+                        "id": node["id"] + "_assignee",
+                        "created_at": created_at,
+                        "actor": actor_name,
+                        "field": "assignee",
+                        "from_value": (node.get("fromAssignee") or {}).get("name", ""),
+                        "to_value": (node.get("toAssignee") or {}).get("name", ""),
+                    })
+
+                # Priority change
+                from_p = node.get("fromPriority")
+                to_p = node.get("toPriority")
+                if (from_p is not None or to_p is not None) and from_p != to_p:
+                    all_entries.append({
+                        "id": node["id"] + "_priority",
+                        "created_at": created_at,
+                        "actor": actor_name,
+                        "field": "priority",
+                        "from_value": self._PRIORITY_LABELS.get(from_p, str(from_p)) if from_p is not None else "",
+                        "to_value": self._PRIORITY_LABELS.get(to_p, str(to_p)) if to_p is not None else "",
+                    })
+
+            if not page_info.get("hasNextPage"):
+                break
+            cursor = page_info.get("endCursor")
+            if not cursor:
+                break
+
+        return all_entries
+
     # --- Resolution helpers ---
 
     def list_teams(self) -> list[dict]:

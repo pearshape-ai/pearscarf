@@ -93,6 +93,15 @@ When the record is an issue (indicated by "Issue:" prefix in the content):
 - **Extract commitments and blockers from comments.** "Blocked on Acme's API key" → fact on the project entity. "Pushing to next sprint" → fact about timeline.
 - **Extract project references.** Issues often reference other projects or initiatives in description/comments. These cross-references are high-value for the graph.
 
+## Change-specific guidance
+
+When the record is an issue change (indicated by "Change:" in the content):
+
+- **Extract the transition as a fact.** A status change from "In Progress" to "In Review" on "Acme API Integration" → fact: "Moved to In Review" on the project entity. A priority escalation from "Medium" to "Urgent" → fact: "Priority escalated to Urgent".
+- **Reference the person who made the change.** If "Changed by: Michael Chen", extract or reference the person entity. Create a relationship like person **mentioned** project if one doesn't already exist from the issue extraction.
+- **Don't create new entities from structured fields.** The issue, project, and person are already known from the parent issue extraction. Reuse the same entity names.
+- **Keep it minimal.** A single change record should produce at most one fact and zero or one new relationship. Don't over-extract.
+
 ## Output format
 
 Respond with exactly this JSON structure and nothing else — no markdown fences, no preamble, no explanation:

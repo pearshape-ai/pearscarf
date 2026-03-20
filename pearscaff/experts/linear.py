@@ -413,6 +413,32 @@ def create_linear_expert_for_runner(
 # ---------------------------------------------------------------------------
 
 
+def _sync_issue_changes(
+    client: LinearClient,
+    issue: dict,
+    issue_record_id: str,
+    since: str | None,
+) -> int:
+    """Fetch and save history changes for an issue. Returns count of new changes saved."""
+    from pearscaff import store
+
+    changes = client.get_issue_history(issue["id"], since=since)
+    saved = 0
+    for change in changes:
+        record_id = store.save_issue_change(
+            issue_record_id=issue_record_id,
+            field=change["field"],
+            from_value=change.get("from_value", ""),
+            to_value=change.get("to_value", ""),
+            linear_history_id=change.get("id"),
+            changed_by=change.get("actor", ""),
+            changed_at=change.get("created_at", ""),
+        )
+        if record_id:
+            saved += 1
+    return saved
+
+
 def _save_issue_from_poll(issue: dict) -> tuple[str, bool]:
     """Save a polled issue to the SOR. Returns (record_id, is_new)."""
     from pearscaff import store
@@ -496,10 +522,29 @@ def start_issue_polling(
                             f"Initial sync: {len(new_records)} new issues sent for batch triage",
                         )
                 else:
-                    # Incremental: one session per new issue
+                    # Incremental: one session per new issue + fetch changes
                     issues = client.list_updated_since(synced_at, team_id=team_id)
                     for issue in issues:
                         record_id, is_new = _save_issue_from_poll(issue)
+
+                        # Fetch history changes for updated issues
+                        try:
+                            n_changes = _sync_issue_changes(
+                                client, issue, record_id, since=synced_at,
+                            )
+                            if n_changes:
+                                log.write(
+                                    "linear_expert", "--", "action",
+                                    f"Poll: {n_changes} change(s) for "
+                                    f"{issue.get('identifier', '')}",
+                                )
+                        except Exception as exc:
+                            log.write(
+                                "linear_expert", "--", "error",
+                                f"History fetch failed for "
+                                f"{issue.get('identifier', '')}: {exc}",
+                            )
+
                         if is_new:
                             session_id = bus.create_session(
                                 "linear_expert",

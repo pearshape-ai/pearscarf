@@ -107,6 +107,35 @@ class Indexer:
                         parts.append(f"[{author}, {date}] {body}")
                 return "\n".join(parts)
 
+        elif record_type == "issue_change":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT ic.field, ic.from_value, ic.to_value, "
+                    "ic.changed_by, ic.changed_at, "
+                    "i.identifier, i.title "
+                    "FROM issue_changes ic "
+                    "JOIN issues i ON ic.issue_record_id = i.record_id "
+                    "WHERE ic.record_id = %s",
+                    (record["id"],),
+                ).fetchone()
+            if row:
+                change = dict(row)
+                parts = []
+                ident = change.get("identifier") or ""
+                title = change.get("title") or ""
+                if ident or title:
+                    parts.append(f"Issue: {ident} — {title}")
+                parts.append(f"Change: {change['field']}")
+                if change["from_value"]:
+                    parts.append(f"From: {change['from_value']}")
+                if change["to_value"]:
+                    parts.append(f"To: {change['to_value']}")
+                if change["changed_by"]:
+                    parts.append(f"Changed by: {change['changed_by']}")
+                if change["changed_at"]:
+                    parts.append(f"At: {change['changed_at']}")
+                return "\n".join(parts)
+
         # Fallback: use raw content from records table
         return record.get("raw") or "(no content)"
 
@@ -206,6 +235,19 @@ class Indexer:
             if row:
                 metadata["identifier"] = row["identifier"] or ""
                 metadata["title"] = row["title"] or ""
+        elif record.get("type") == "issue_change":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT ic.field, ic.changed_by, i.identifier "
+                    "FROM issue_changes ic "
+                    "JOIN issues i ON ic.issue_record_id = i.record_id "
+                    "WHERE ic.record_id = %s",
+                    (record_id,),
+                ).fetchone()
+            if row:
+                metadata["field"] = row["field"] or ""
+                metadata["changed_by"] = row["changed_by"] or ""
+                metadata["identifier"] = row["identifier"] or ""
 
         try:
             vectorstore.add_record(record_id, content, metadata)

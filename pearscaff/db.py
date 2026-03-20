@@ -125,6 +125,20 @@ ALTER TABLE issues ADD COLUMN IF NOT EXISTS comments JSONB;
 CREATE INDEX IF NOT EXISTS idx_issues_linear_id ON issues(linear_id);
 CREATE INDEX IF NOT EXISTS idx_issues_identifier ON issues(identifier);
 
+CREATE TABLE IF NOT EXISTS issue_changes (
+    record_id TEXT PRIMARY KEY REFERENCES records(id),
+    issue_record_id TEXT NOT NULL,
+    linear_history_id TEXT UNIQUE,
+    field TEXT NOT NULL,
+    from_value TEXT,
+    to_value TEXT,
+    changed_by TEXT,
+    changed_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_issue_changes_issue ON issue_changes(issue_record_id);
+CREATE INDEX IF NOT EXISTS idx_issue_changes_linear_id ON issue_changes(linear_history_id);
+
 -- Knowledge Graph
 CREATE TABLE IF NOT EXISTS entity_types (
     id TEXT PRIMARY KEY,

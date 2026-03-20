@@ -99,6 +99,60 @@ def list_emails(limit: int = 20) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+# --- Issue Changes ---
+
+
+def _next_change_id() -> str:
+    with _get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) as c FROM records WHERE type = 'issue_change'").fetchone()
+        num = row["c"] + 1
+        return f"change_{num:03d}"
+
+
+def save_issue_change(
+    issue_record_id: str,
+    field: str,
+    from_value: str = "",
+    to_value: str = "",
+    linear_history_id: str | None = None,
+    changed_by: str = "",
+    changed_at: str = "",
+) -> str | None:
+    """Save an issue change to the SOR.
+
+    Returns record_id (e.g. 'change_001'), or None if duplicate (same linear_history_id).
+    Auto-classified as 'relevant' since the parent issue was already triaged.
+    """
+    init_db()
+    with _get_conn() as conn:
+        # Dedup on linear_history_id
+        if linear_history_id:
+            existing = conn.execute(
+                "SELECT record_id FROM issue_changes WHERE linear_history_id = %s",
+                (linear_history_id,),
+            ).fetchone()
+            if existing:
+                return None
+
+        record_id = _next_change_id()
+        now = _now()
+
+        conn.execute(
+            "INSERT INTO records (id, type, source, created_at, classification) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (record_id, "issue_change", "linear_expert", now, "relevant"),
+        )
+        conn.execute(
+            "INSERT INTO issue_changes (record_id, issue_record_id, linear_history_id, "
+            "field, from_value, to_value, changed_by, changed_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (record_id, issue_record_id, linear_history_id, field,
+             from_value, to_value, changed_by, changed_at or now),
+        )
+        conn.commit()
+        return record_id
+
+
 # --- Issues ---
 
 

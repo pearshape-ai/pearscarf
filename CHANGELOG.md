@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.3
+- Issue change history captured from Linear's `issueHistory` API (status, assignee, priority transitions)
+- New `issue_changes` table in Postgres — each change is its own record in the SOR (type `issue_change`)
+- `get_issue_history` method in LinearClient with cursor pagination, parses from/to state/assignee/priority
+- Changes fetched during incremental polls only (not initial bulk load) via `_sync_issue_changes` helper
+- Auto-classified as `relevant` — parent issue already triaged, changes inherit relevance
+- Indexer `_build_content` for issue changes — includes parent issue context (identifier, title) + change details
+- Qdrant embedding with change-specific metadata (field, changed_by, issue identifier)
+- Extraction prompt updated with change-specific guidance: extract transitions as facts, reference actors, keep minimal
+- Dedup on `linear_history_id` (UNIQUE) — safe across repeated poll cycles
+- No bi-temporal timestamps — facts accumulate as regular Fact nodes in Neo4j
+
 ## 1.6.2
 - Issues flow through the extraction pipeline — no code changes needed, the Indexer already processes all unindexed relevant records regardless of type
 - Extraction prompt made source-agnostic: "emails" → "records (emails and issues)" throughout
