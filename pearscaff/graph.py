@@ -6,7 +6,9 @@ The Indexer writes to the graph (Neo4j). The worker and other agents read from i
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
+from pearscaff.config import TIMEZONE
 from pearscaff.neo4j_client import get_session
 
 # Label map: extraction entity type string → Neo4j node label
@@ -20,6 +22,46 @@ _LABELS = {
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def utc_to_local_date(utc_dt: str | datetime) -> str:
+    """Convert a UTC datetime to a local date string (e.g. '2026-03-21').
+
+    Uses the configured TIMEZONE to determine which calendar day
+    a UTC timestamp falls on locally.
+    """
+    if isinstance(utc_dt, str):
+        utc_dt = datetime.fromisoformat(utc_dt)
+    if utc_dt.tzinfo is None:
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+    local_dt = utc_dt.astimezone(ZoneInfo(TIMEZONE))
+    return local_dt.date().isoformat()
+
+
+def get_or_create_day(date_str: str) -> str:
+    """Find or create a Day node for the given date. Returns the element ID.
+
+    date_str should be an ISO date string like '2026-03-21'.
+    """
+    with get_session() as session:
+        result = session.run(
+            "MERGE (d:Day {date: $date}) "
+            "ON CREATE SET d.created_at = $ts "
+            "RETURN elementId(d) AS did",
+            date=date_str,
+            ts=_now(),
+        )
+        record = result.single()
+        return record["did"] if record else ""
+
+
+def ensure_constraints() -> None:
+    """Create Neo4j indexes and constraints if they don't exist."""
+    with get_session() as session:
+        session.run(
+            "CREATE CONSTRAINT day_date_unique IF NOT EXISTS "
+            "FOR (d:Day) REQUIRE d.date IS UNIQUE"
+        )
 
 
 # --- Entities ---
