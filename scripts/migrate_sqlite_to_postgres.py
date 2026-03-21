@@ -38,15 +38,11 @@ TABLES = [
     "discord_threads",
     "records",
     "emails",
-    "entities",
-    "edges",
-    "facts",
 ]
 
 # Columns that need JSON string → Python object for JSONB
 JSON_COLUMNS = {
     "messages": ["data"],
-    "entities": ["metadata"],
 }
 
 # Columns that need INTEGER 0/1 → BOOLEAN

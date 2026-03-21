@@ -138,41 +138,6 @@ CREATE TABLE IF NOT EXISTS issue_changes (
 
 CREATE INDEX IF NOT EXISTS idx_issue_changes_issue ON issue_changes(issue_record_id);
 CREATE INDEX IF NOT EXISTS idx_issue_changes_linear_id ON issue_changes(linear_history_id);
-
--- Knowledge Graph
-CREATE TABLE IF NOT EXISTS entities (
-    id TEXT PRIMARY KEY,
-    type TEXT NOT NULL,
-    name TEXT NOT NULL,
-    metadata JSONB,
-    created_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
-CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
-
-CREATE TABLE IF NOT EXISTS edges (
-    id TEXT PRIMARY KEY,
-    from_entity TEXT NOT NULL REFERENCES entities(id),
-    to_entity TEXT NOT NULL REFERENCES entities(id),
-    relationship TEXT NOT NULL,
-    source_record TEXT REFERENCES records(id),
-    created_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_entity);
-CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_entity);
-
-CREATE TABLE IF NOT EXISTS facts (
-    id TEXT PRIMARY KEY,
-    entity_id TEXT NOT NULL REFERENCES entities(id),
-    attribute TEXT NOT NULL,
-    value TEXT NOT NULL,
-    source_record TEXT REFERENCES records(id),
-    updated_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity_id);
 """
 
 def init_db() -> None:

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.1
+- Removed legacy Postgres graph tables: `entities`, `edges`, `facts` — empty/stale since v1.2.3, graph lives in Neo4j since v1.4.0
+- Removed from SQLite→Postgres migration script
+- Updated `docs/architecture.md`: storage diagram shows Neo4j, Knowledge Graph section describes bi-temporal Neo4j model
+
 ## 1.8.0
 - Removed `entity_types` Postgres table — dead since v1.3.2 when entity types moved to extraction prompt markdown
 - Removed `list_entity_types()` from `graph.py` and its Postgres imports

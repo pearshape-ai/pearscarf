@@ -26,10 +26,11 @@
 ┌───▼─────────────▼──────────────▼────────────────┐
 │                  Storage                         │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
-│  │ Postgres │ │ Graph    │ │ Qdrant         │ │
+│  │ Postgres │ │ Neo4j    │ │ Qdrant           │ │
 │  │ records  │ │ entities │ │ vector embeddings│ │
-│  │ emails   │ │ edges    │ │                  │ │
-│  │ sessions │ │ facts    │ │                  │ │
+│  │ emails   │ │ relations│ │                  │ │
+│  │ issues   │ │ facts    │ │                  │ │
+│  │ sessions │ │          │ │                  │ │
 │  └──────────┘ └──────────┘ └──────────────────┘ │
 └─────────────────────────────────────────────────┘
 ```
@@ -80,7 +81,7 @@ New email arrives
 └──────┬───────┘
        │
        ├── Step 1: Entity match?
-       │   └── Yes: "Acme Corp" found in entities table
+       │   └── Yes: "Acme Corp" found in Neo4j graph
        │
        ├── Step 2: Facts lookup
        │   └── total_spend_q3: $13k, payment_terms: net 30
@@ -203,11 +204,6 @@ discord_threads(session_id, thread_id, channel_id)
 -- System of Record
 records(id, type, source, created_at, raw, indexed, classification, classification_reason, human_context)
 emails(record_id, message_id, sender, recipient, subject, body, received_at)
-
--- Knowledge Graph
-entities(id, type, name, metadata, created_at)
-edges(id, from_entity, to_entity, relationship, source_record, created_at)
-facts(id, entity_id, attribute, value, source_record, updated_at)
 ```
 
 Postgres with connection pooling (psycopg_pool) for concurrent reads/writes across threads.
@@ -239,11 +235,11 @@ Human responses are captured as `human_context` on the record. The Indexer appen
 
 > **Note:** The extraction pipeline is in transition. The Indexer and Retriever are currently placeholder stubs — they start and run but do not extract or search. The graph tables and Qdrant collection remain in the schema for the upcoming extraction rebuild.
 
-The Indexer processes records into a knowledge graph of entities, relationships, and facts.
+The Indexer processes records into a knowledge graph of entities, relationships, and facts. All graph data lives in Neo4j (no Postgres graph tables).
 
-- **`entities`** — Graph nodes. Sequential IDs per type (`person_001`, `company_001`). Metadata stored as JSONB.
-- **`edges`** — Graph relationships between entities (e.g. `person_001 --works_at--> company_001`). Linked to source record.
-- **`facts`** — Living state attributes on entities (e.g. person's email, role). Upserted — same entity+attribute updates rather than duplicates.
+- **Entities** — nodes with labels (Person, Company, Project, Event). Merged on name + email/domain.
+- **Relationships** — typed edges between entities (e.g. WORKS_AT, CUSTOMER_OF). Bi-temporal: `valid_at`, `invalid_at`.
+- **Facts** — `Fact` nodes connected via `HAS_FACT` edges. Bi-temporal: old facts invalidated, new facts created.
 - **`graph.py`** — CRUD module: `find_entity()`, `create_entity()`, `create_edge()`, `upsert_fact()`.
 
 ### Indexer (`indexer.py`)
