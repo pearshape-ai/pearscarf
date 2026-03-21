@@ -334,6 +334,7 @@ class Indexer:
 
     def _loop(self) -> None:
         init_db()
+        graph.ensure_constraints()
         while not self._stop.is_set():
             try:
                 with _get_conn() as conn:

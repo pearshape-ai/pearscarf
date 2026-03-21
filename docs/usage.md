@@ -184,6 +184,7 @@ Auto-discovered at startup.
 | `LINEAR_API_KEY` | | Linear API key (required for Linear expert) |
 | `LINEAR_POLL_INTERVAL` | `300` | Linear issue polling interval in seconds |
 | `LINEAR_TEAM_ID` | | Optional team name, key, or UUID to scope polling |
+| `TIMEZONE` | `America/Los_Angeles` | Local timezone for Day node date derivation |
 | `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL |
 | `NEO4J_USER` | `neo4j` | Neo4j username |
 | `NEO4J_PASSWORD` | (required) | Neo4j password |

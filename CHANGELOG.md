@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.2
+- Day nodes in Neo4j — represent calendar days, will serve as endpoints for single-entity facts
+- `get_or_create_day(date_str)` in `graph.py` — lazy MERGE on `(:Day {date})`, one node per calendar date
+- `utc_to_local_date(utc_dt)` helper — converts UTC timestamps to local dates using configured timezone
+- `ensure_constraints()` — creates uniqueness constraint on `Day.date`, called once at Indexer startup
+- `TIMEZONE` config var (default `America/Los_Angeles`) — controls UTC→local date conversion for Day node assignment
+- No fact→Day wiring yet — infrastructure only
+
 ## 1.8.1
 - Removed legacy Postgres graph tables: `entities`, `edges`, `facts` — empty/stale since v1.2.3, graph lives in Neo4j since v1.4.0
 - Removed from SQLite→Postgres migration script
