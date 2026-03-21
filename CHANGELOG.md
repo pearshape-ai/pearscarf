@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0
+- Removed `entity_types` Postgres table — dead since v1.3.2 when entity types moved to extraction prompt markdown
+- Removed `list_entity_types()` from `graph.py` and its Postgres imports
+- Removed `_SEED_ENTITY_TYPES` constant and seed execution from `db.py`
+- Removed `entity_types` from SQLite→Postgres migration script
+- Updated `docs/architecture.md` to reflect current extraction pipeline
+
 ## 1.7.0
 - Bi-temporal timestamps on all graph edges and facts: `valid_at`, `invalid_at`, `created_at`, `source_record`
 - Facts use invalidate-and-create instead of update-in-place — old facts get `invalid_at` set, new fact created with `valid_at`

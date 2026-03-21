@@ -1,14 +1,12 @@
 """Knowledge graph CRUD — entities, edges, facts.
 
 The Indexer writes to the graph (Neo4j). The worker and other agents read from it.
-list_entity_types() still reads from Postgres.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from pearscaff.db import _get_conn, init_db
 from pearscaff.neo4j_client import get_session
 
 # Label map: extraction entity type string → Neo4j node label
@@ -22,24 +20,6 @@ _LABELS = {
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-# --- Entity types (Postgres) ---
-
-
-def list_entity_types() -> list[dict]:
-    """Return all registered entity types."""
-    init_db()
-    with _get_conn() as conn:
-        rows = conn.execute(
-            "SELECT id, name, description, extract_fields, added_at FROM entity_types"
-        ).fetchall()
-        result = []
-        for r in rows:
-            d = dict(r)
-            d["extract_fields"] = d["extract_fields"] if d["extract_fields"] else []
-            result.append(d)
-        return result
 
 
 # --- Entities ---

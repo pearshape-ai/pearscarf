@@ -205,7 +205,6 @@ records(id, type, source, created_at, raw, indexed, classification, classificati
 emails(record_id, message_id, sender, recipient, subject, body, received_at)
 
 -- Knowledge Graph
-entity_types(id, name, description, extract_fields, added_at)
 entities(id, type, name, metadata, created_at)
 edges(id, from_entity, to_entity, relationship, source_record, created_at)
 facts(id, entity_id, attribute, value, source_record, updated_at)
@@ -242,7 +241,6 @@ Human responses are captured as `human_context` on the record. The Indexer appen
 
 The Indexer processes records into a knowledge graph of entities, relationships, and facts.
 
-- **`entity_types`** — Registry of extractable types (person, company). Seeded on first run. Drives the LLM extraction prompt.
 - **`entities`** — Graph nodes. Sequential IDs per type (`person_001`, `company_001`). Metadata stored as JSONB.
 - **`edges`** — Graph relationships between entities (e.g. `person_001 --works_at--> company_001`). Linked to source record.
 - **`facts`** — Living state attributes on entities (e.g. person's email, role). Upserted — same entity+attribute updates rather than duplicates.
@@ -253,7 +251,7 @@ The Indexer processes records into a knowledge graph of entities, relationships,
 Background daemon thread that polls `records WHERE indexed = 0` every 5 seconds. For each unindexed record:
 
 1. Reads full content from typed table (e.g. emails)
-2. Builds extraction prompt from `entity_types` registry
+2. Loads extraction prompt from `pearscaff/prompts/extraction.md`
 3. Calls LLM for structured JSON extraction
 4. Resolves entities against existing graph (exact name + metadata match)
 5. Creates edges and upserts facts

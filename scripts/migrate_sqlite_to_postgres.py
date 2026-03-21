@@ -36,7 +36,6 @@ TABLES = [
     "sessions",
     "messages",
     "discord_threads",
-    "entity_types",
     "records",
     "emails",
     "entities",
@@ -48,7 +47,6 @@ TABLES = [
 JSON_COLUMNS = {
     "messages": ["data"],
     "entities": ["metadata"],
-    "entity_types": ["extract_fields"],
 }
 
 # Columns that need INTEGER 0/1 → BOOLEAN

@@ -140,14 +140,6 @@ CREATE INDEX IF NOT EXISTS idx_issue_changes_issue ON issue_changes(issue_record
 CREATE INDEX IF NOT EXISTS idx_issue_changes_linear_id ON issue_changes(linear_history_id);
 
 -- Knowledge Graph
-CREATE TABLE IF NOT EXISTS entity_types (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    extract_fields JSONB,
-    added_at TIMESTAMPTZ NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS entities (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
@@ -183,23 +175,9 @@ CREATE TABLE IF NOT EXISTS facts (
 CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity_id);
 """
 
-_SEED_ENTITY_TYPES = """
-INSERT INTO entity_types (id, name, description, extract_fields, added_at)
-VALUES
-    ('et_person', 'person',
-     'A human being. Look for names, email addresses, roles, titles.',
-     '["name", "email", "role"]', '2026-03-01'),
-    ('et_company', 'company',
-     'A business or organization. Look for company names, domains, industries.',
-     '["name", "domain"]', '2026-03-01')
-ON CONFLICT DO NOTHING;
-"""
-
-
 def init_db() -> None:
     with _get_conn() as conn:
         conn.execute(_SCHEMA)
-        conn.execute(_SEED_ENTITY_TYPES)
         conn.commit()
 
 
