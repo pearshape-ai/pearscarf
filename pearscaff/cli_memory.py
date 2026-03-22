@@ -110,7 +110,9 @@ def format_graph_stats(stats: dict) -> list[str]:
 
     lines = []
     lines.append(f"  Entities: {stats.get('total_entities', 0)}")
-    lines.append(f"  Edges: {stats.get('total_edges', 0)}")
+    day_nodes = stats.get("day_nodes", 0)
+    if day_nodes:
+        lines.append(f"  Day nodes: {day_nodes}")
     total_facts = stats.get("total_facts", 0)
     current_facts = stats.get("current_facts", total_facts)
     if current_facts != total_facts:
@@ -124,11 +126,11 @@ def format_graph_stats(stats: dict) -> list[str]:
         for etype, count in entity_counts.items():
             lines.append(f"    {etype}: {count}")
 
-    rel_counts = stats.get("rel_counts", {})
-    if rel_counts:
-        lines.append("  Relationship types:")
-        for rel, count in rel_counts.items():
-            lines.append(f"    {rel}: {count}")
+    cat_counts = stats.get("category_counts", {})
+    if cat_counts:
+        lines.append("  Fact categories:")
+        for cat, count in cat_counts.items():
+            lines.append(f"    {cat}: {count}")
 
     return lines
 
@@ -139,19 +141,16 @@ def format_record_memories(memories: list[dict]) -> list[str]:
         return ["No memories found for this record."]
     lines = []
     for i, m in enumerate(memories, 1):
-        mem_type = m.get("type", "memory")
         temporal = ""
         if m.get("invalid_at"):
             temporal = click.style(" [was]", fg="red", dim=True)
             temporal += f" ({m.get('valid_at', '?')} -> {m['invalid_at']})"
         elif m.get("valid_at"):
             temporal = f" (since {m['valid_at']})"
-        if mem_type == "fact":
-            lines.append(f"  {i}. [fact] {m.get('entity_name', '?')}.{m['attribute']} = {m['value']}{temporal}")
-        elif mem_type == "relationship":
-            lines.append(f"  {i}. [rel] {m.get('from', '?')} --{m['relationship']}--> {m.get('to', '?')}{temporal}")
-        else:
-            lines.append(f"  {i}. {m}")
+        cat = m.get("category", "?")
+        lines.append(
+            f"  {i}. [{cat}] {m.get('from', '?')} → {m.get('to', '?')}: {m.get('fact', '')}{temporal}"
+        )
     return lines
 
 
@@ -213,12 +212,12 @@ def _get_entity(name: str) -> dict | None:
     if not full:
         return entity
 
-    # Add facts (include superseded for full history view)
-    facts = graph.get_entity_facts(eid, current_only=False)
+    # Add facts (include historical for full history view)
+    facts = graph.get_facts_for_entity(eid, include_invalid=True)
     full["facts"] = [
         {
-            "attribute": "claim",
-            "value": f.get("claim", ""),
+            "attribute": f.get("category", "?"),
+            "value": f.get("fact", ""),
             "source_record": f.get("source_record", ""),
             "valid_at": f.get("valid_at", ""),
             "invalid_at": f.get("invalid_at"),
@@ -227,17 +226,17 @@ def _get_entity(name: str) -> dict | None:
     ]
 
     # Add connections (1 hop)
-    traversal = graph.traverse_graph(eid, max_depth=1)
+    traversal = graph.traverse_fact_edges(eid, max_depth=1)
     full["connections"] = [
         {
-            "to_entity": e.get("name", "?"),
+            "to_entity": n.get("name", "?"),
             "relationship": next(
-                (edge["relationship"] for edge in traversal["edges"]
-                 if edge["to"] == e["id"] or edge["from"] == e["id"]),
+                (edge["category"] for edge in traversal["edges"]
+                 if edge["to"] == n["id"] or edge["from"] == n["id"]),
                 "?",
             ),
         }
-        for e in traversal.get("entities", [])
+        for n in traversal.get("nodes", [])
     ]
 
     return full

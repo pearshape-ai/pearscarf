@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.6
+- Retriever rewired to fact-edge model: `FactsLookupTool` calls `get_facts_for_entity`, groups results by category
+- `GraphTraverseTool` walks fact-edges via new `traverse_fact_edges`, supports optional category filter
+- New `DayLookupTool` — queries facts anchored to a specific Day node via `get_facts_for_day`
+- `traverse_fact_edges` in graph.py — replaces `traverse_graph`, walks fact-edges with category/temporal filtering, includes Day nodes in results
+- `graph_stats` updated to count fact-edges by category and Day nodes
+- `get_nodes_by_source_record` updated to query fact-edges instead of old Fact nodes and generic edges
+- Removed dead functions from graph.py: `get_entity_facts`, `traverse_graph`, `retrofit_temporal`
+- Retriever prompt rewritten with tool selection guidance, fact category explanations, and temporal marker docs
+- `cli_memory.py` updated to use new graph functions
+
 ## 1.8.5
 - Indexer rewired to fact-edge model: `create_fact_edge` replaces `create_edge` + `upsert_fact`
 - Single-entity facts (to_entity null) anchored to Day nodes via `get_or_create_day`
