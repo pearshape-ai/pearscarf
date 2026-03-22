@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.5
+- Indexer rewired to fact-edge model: `create_fact_edge` replaces `create_edge` + `upsert_fact`
+- Single-entity facts (to_entity null) anchored to Day nodes via `get_or_create_day`
+- Two-entity facts written as typed edges between entity nodes
+- Entity name mismatches in extraction output logged as warnings and skipped gracefully
+- Removed dead functions from graph.py: `create_edge`, `invalidate_edge`, `upsert_fact`
+- No retriever, memory CLI, or prompt changes
+
 ## 1.8.4
 - Extraction prompt rewritten: three-array output (entities, relationships, facts) → two-array output (entities, facts with categories)
 - Every fact now has `category`, `fact`, `from_entity`, `to_entity`, `confidence`, `valid_at` — unifying old relationships and facts
