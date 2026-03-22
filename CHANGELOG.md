@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.3
+- Fact-as-edge model: facts are now edges between entity/Day nodes instead of separate Fact nodes
+- 13 fact categories across structural (WORKS_AT, FOUNDED, MANAGES, PART_OF, MEMBER_OF), activity (COMMUNICATED, MENTIONED_IN, STATUS_CHANGED), claims (COMMITTED_TO, DECIDED, BLOCKED_BY, EVALUATED), and meta (IDENTIFIED_AS)
+- `create_fact_edge` — creates a typed relationship with fact text, confidence, source, and bi-temporal timestamps
+- `invalidate_fact_edge` — sets `invalid_at` on a fact-edge (history preserved)
+- `get_facts_for_entity` — reads fact-edges for an entity, filterable by current/all
+- `get_facts_for_day` — reads fact-edges anchored to a Day node
+- Old model functions (`create_edge`, `upsert_fact`, etc.) coexist — no migration yet
+
 ## 1.8.2
 - Day nodes in Neo4j — represent calendar days, will serve as endpoints for single-entity facts
 - `get_or_create_day(date_str)` in `graph.py` — lazy MERGE on `(:Day {date})`, one node per calendar date
