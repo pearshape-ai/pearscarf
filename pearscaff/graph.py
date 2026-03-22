@@ -19,6 +19,19 @@ _LABELS = {
     "event": "Event",
 }
 
+# Fact-edge categories — relationship types used for the new fact-as-edge model.
+# Structural (stable), Activity (time-bound), Claims (business facts), Meta.
+FACT_CATEGORIES = {
+    # Structural
+    "WORKS_AT", "FOUNDED", "MANAGES", "PART_OF", "MEMBER_OF",
+    # Activity
+    "COMMUNICATED", "MENTIONED_IN", "STATUS_CHANGED",
+    # Claims
+    "COMMITTED_TO", "DECIDED", "BLOCKED_BY", "EVALUATED",
+    # Meta
+    "IDENTIFIED_AS",
+}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -362,6 +375,154 @@ def get_entity_facts(entity_id: str, current_only: bool = True) -> list[dict]:
                 "created_at": fnode.get("created_at", ""),
                 "valid_at": fnode.get("valid_at", ""),
                 "invalid_at": fnode.get("invalid_at"),
+            })
+        return facts
+
+
+# --- Fact edges (new model) ---
+
+
+def create_fact_edge(
+    from_node_id: str,
+    to_node_id: str,
+    category: str,
+    fact: str,
+    confidence: str,
+    source_record: str,
+    source_type: str,
+    valid_at: str | None = None,
+) -> str:
+    """Create a fact-edge between two nodes (entity or Day). Returns the edge element ID.
+
+    category must be one of FACT_CATEGORIES (e.g. WORKS_AT, MENTIONED_IN).
+    """
+    ts = _now()
+    rel_type = category.upper()
+    props = {
+        "fact": fact,
+        "category": rel_type,
+        "confidence": confidence,
+        "source_record": source_record,
+        "source_type": source_type,
+        "valid_at": valid_at or ts,
+        "created_at": ts,
+        "invalid_at": None,
+    }
+
+    with get_session() as session:
+        result = session.run(
+            "MATCH (a) WHERE elementId(a) = $from_id "
+            "MATCH (b) WHERE elementId(b) = $to_id "
+            "CALL apoc.create.relationship(a, $rel_type, $props, b) "
+            "YIELD rel "
+            "RETURN elementId(rel) AS rid",
+            from_id=from_node_id,
+            to_id=to_node_id,
+            rel_type=rel_type,
+            props=props,
+        )
+        record = result.single()
+        return record["rid"] if record else ""
+
+
+def invalidate_fact_edge(edge_id: str, invalid_at: str | None = None) -> None:
+    """Set invalid_at on a fact-edge. Preserves the edge — history is kept."""
+    ts = invalid_at or _now()
+    with get_session() as session:
+        session.run(
+            "MATCH ()-[r]->() WHERE elementId(r) = $rid "
+            "SET r.invalid_at = $ts",
+            rid=edge_id,
+            ts=ts,
+        )
+
+
+def get_facts_for_entity(
+    entity_id: str, include_invalid: bool = False,
+) -> list[dict]:
+    """Get all fact-edges connected to an entity (as source or target).
+
+    By default only current facts (invalid_at IS NULL).
+    """
+    with get_session() as session:
+        where = "WHERE elementId(n) = $eid AND r.fact IS NOT NULL"
+        if not include_invalid:
+            where += " AND r.invalid_at IS NULL"
+
+        result = session.run(
+            f"MATCH (n)-[r]-(other) {where} "
+            "RETURN elementId(r) AS rid, type(r) AS category, "
+            "r.fact AS fact, r.confidence AS confidence, "
+            "r.source_record AS source_record, r.source_type AS source_type, "
+            "r.valid_at AS valid_at, r.invalid_at AS invalid_at, r.created_at AS created_at, "
+            "elementId(other) AS other_id, other.name AS other_name, "
+            "other.date AS other_date, labels(other) AS other_labels",
+            eid=entity_id,
+        )
+
+        facts = []
+        for record in result:
+            other_labels = record["other_labels"] or []
+            if "Day" in other_labels:
+                other_display = record["other_date"] or "?"
+            else:
+                other_display = record["other_name"] or "?"
+            facts.append({
+                "id": record["rid"],
+                "category": record["category"],
+                "fact": record["fact"],
+                "confidence": record["confidence"] or "",
+                "source_record": record["source_record"] or "",
+                "source_type": record["source_type"] or "",
+                "valid_at": record["valid_at"] or "",
+                "invalid_at": record["invalid_at"],
+                "created_at": record["created_at"] or "",
+                "other_id": record["other_id"],
+                "other_name": other_display,
+            })
+        return facts
+
+
+def get_facts_for_day(date_str: str) -> list[dict]:
+    """Get all fact-edges connected to a Day node.
+
+    Only returns single-entity facts anchored to this day.
+    Two-entity facts that happened on this day are found via valid_at filtering.
+    """
+    with get_session() as session:
+        result = session.run(
+            "MATCH (entity)-[r]-(d:Day {date: $date}) "
+            "WHERE r.fact IS NOT NULL "
+            "RETURN elementId(r) AS rid, type(r) AS category, "
+            "r.fact AS fact, r.confidence AS confidence, "
+            "r.source_record AS source_record, r.source_type AS source_type, "
+            "r.valid_at AS valid_at, r.invalid_at AS invalid_at, r.created_at AS created_at, "
+            "elementId(entity) AS entity_id, entity.name AS entity_name, "
+            "labels(entity) AS entity_labels",
+            date=date_str,
+        )
+
+        facts = []
+        for record in result:
+            labels = record["entity_labels"] or []
+            etype = "unknown"
+            for ext_type, lbl in _LABELS.items():
+                if lbl in labels:
+                    etype = ext_type
+                    break
+            facts.append({
+                "id": record["rid"],
+                "category": record["category"],
+                "fact": record["fact"],
+                "confidence": record["confidence"] or "",
+                "source_record": record["source_record"] or "",
+                "source_type": record["source_type"] or "",
+                "valid_at": record["valid_at"] or "",
+                "invalid_at": record["invalid_at"],
+                "created_at": record["created_at"] or "",
+                "entity_id": record["entity_id"],
+                "entity_name": record["entity_name"] or "?",
+                "entity_type": etype,
             })
         return facts
 
