@@ -153,7 +153,7 @@ class Indexer:
             return None
 
     def _extract(self, record_type: str, record_id: str, content: str) -> dict:
-        """Call Claude to extract entities, relationships, and facts."""
+        """Call Claude to extract entities and facts."""
         user_message = f"Record ({record_id}, {record_type}):\n\n{content}"
 
         with trace_span(
@@ -293,34 +293,68 @@ class Indexer:
                 if row and row["changed_at"]:
                     valid_at = str(row["changed_at"])
 
-        # Step 3: Create relationships
-        for rel in extracted.get("relationships", []):
-            from_name = rel.get("from", "")
-            to_name = rel.get("to", "")
-            rel_type = rel.get("type", "")
-            from_id = entity_id_map.get(from_name)
-            to_id = entity_id_map.get(to_name)
-            if from_id and to_id and rel_type:
-                graph.create_edge(from_id, to_id, rel_type, record_id, valid_at=valid_at)
-
-        # Step 4: Create facts
+        # Step 3: Write facts to Neo4j
         for fact in extracted.get("facts", []):
-            entity_name = fact.get("entity", "")
-            claim = fact.get("claim", "")
+            category = fact.get("category", "")
+            fact_text = fact.get("fact", "")
             confidence = fact.get("confidence", "stated")
-            eid = entity_id_map.get(entity_name)
-            if eid and claim:
-                graph.upsert_fact(eid, claim, confidence, record_id, valid_at=valid_at)
+            from_name = fact.get("from_entity", "")
+            to_name = fact.get("to_entity")  # None for single-entity facts
+            fact_valid_at = fact.get("valid_at")
 
-        # Step 5: Embed in Qdrant
+            if not from_name or not fact_text or not category:
+                continue
+
+            from_id = entity_id_map.get(from_name)
+            if not from_id:
+                log.write(
+                    "indexer", "--", "warning",
+                    f"fact references unknown from_entity '{from_name}' in {record_id}, skipping",
+                )
+                continue
+
+            if to_name:
+                # Two-entity fact: from_entity → to_entity
+                to_id = entity_id_map.get(to_name)
+                if not to_id:
+                    log.write(
+                        "indexer", "--", "warning",
+                        f"fact references unknown to_entity '{to_name}' in {record_id}, skipping",
+                    )
+                    continue
+                graph.create_fact_edge(
+                    from_id, to_id, category, fact_text, confidence,
+                    record_id, record_type,
+                    valid_at=fact_valid_at or valid_at,
+                )
+            else:
+                # Single-entity fact: from_entity → Day node
+                if fact_valid_at:
+                    day_date = fact_valid_at[:10]
+                else:
+                    record_ts = record.get("created_at", "")
+                    day_date = graph.utc_to_local_date(str(record_ts)) if record_ts else None
+                if day_date:
+                    day_id = graph.get_or_create_day(day_date)
+                    graph.create_fact_edge(
+                        from_id, day_id, category, fact_text, confidence,
+                        record_id, record_type,
+                        valid_at=fact_valid_at or valid_at,
+                    )
+                else:
+                    log.write(
+                        "indexer", "--", "warning",
+                        f"cannot determine Day for single-entity fact in {record_id}, skipping",
+                    )
+
+        # Step 4: Embed in Qdrant
         self._embed_record(record, content)
 
         entity_count = len(entity_id_map)
-        rel_count = len(extracted.get("relationships", []))
         fact_count = len(extracted.get("facts", []))
         log.write(
             "indexer", "--", "action",
-            f"indexed {record_id}: {entity_count} entities, {rel_count} relationships, {fact_count} facts",
+            f"indexed {record_id}: {entity_count} entities, {fact_count} facts",
         )
 
         self._mark_indexed(record_id)
