@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.4
+- Extraction prompt rewritten: three-array output (entities, relationships, facts) → two-array output (entities, facts with categories)
+- Every fact now has `category`, `fact`, `from_entity`, `to_entity`, `confidence`, `valid_at` — unifying old relationships and facts
+- 13 fact categories documented in prompt: structural, activity, claims, meta
+- `extract_test.py` updated: entities listed with metadata, facts grouped by category, validation warnings for entity name mismatches and unrecognized categories
+- Old format (relationships array) detected and flagged with warning
+- No indexer or graph changes — extraction output not wired to graph writes yet
+
 ## 1.8.3
 - Fact-as-edge model: facts are now edges between entity/Day nodes instead of separate Fact nodes
 - 13 fact categories across structural (WORKS_AT, FOUNDED, MANAGES, PART_OF, MEMBER_OF), activity (COMMUNICATED, MENTIONED_IN, STATUS_CHANGED), claims (COMMITTED_TO, DECIDED, BLOCKED_BY, EVALUATED), and meta (IDENTIFIED_AS)
