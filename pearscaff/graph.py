@@ -251,35 +251,6 @@ def search_entities(
 # --- Fact Edges ---
 
 
-def get_entity_facts(entity_id: str, current_only: bool = True) -> list[dict]:
-    """Get facts for an entity. By default only current (non-invalidated) facts."""
-    with get_session() as session:
-        where = "WHERE elementId(n) = $eid"
-        if current_only:
-            where += " AND f.invalid_at IS NULL"
-        result = session.run(
-            f"MATCH (n)-[:HAS_FACT]->(f:Fact) {where} "
-            "RETURN f, elementId(f) AS fid",
-            eid=entity_id,
-        )
-        facts = []
-        for record in result:
-            fnode = record["f"]
-            facts.append({
-                "id": record["fid"],
-                "claim": fnode.get("claim", ""),
-                "confidence": fnode.get("confidence", ""),
-                "source_record": fnode.get("source_record", ""),
-                "created_at": fnode.get("created_at", ""),
-                "valid_at": fnode.get("valid_at", ""),
-                "invalid_at": fnode.get("invalid_at"),
-            })
-        return facts
-
-
-# --- Fact edges (new model) ---
-
-
 def create_fact_edge(
     from_node_id: str,
     to_node_id: str,
@@ -428,15 +399,33 @@ def get_facts_for_day(date_str: str) -> list[dict]:
 # --- Traversal ---
 
 
-def traverse_graph(entity_id: str, max_depth: int = 3, current_only: bool = True) -> dict:
-    """Walk relationships from an entity up to max_depth hops.
+def traverse_fact_edges(
+    entity_id: str,
+    max_depth: int = 3,
+    current_only: bool = True,
+    categories: list[str] | None = None,
+) -> dict:
+    """Walk fact-edges from an entity up to max_depth hops.
 
-    When current_only is True (default), only traverse edges where invalid_at IS NULL.
+    Returns connected entities/Day nodes and the fact-edges connecting them.
+    When current_only is True (default), only traverses edges where invalid_at IS NULL.
+    Optional categories filter limits traversal to specific fact categories.
     """
     with get_session() as session:
-        where_clause = "WHERE elementId(start) = $eid AND NOT connected:Fact"
+        where_parts = ["elementId(start) = $eid"]
         if current_only:
-            where_clause += " AND ALL(r IN relationships(path) WHERE r.invalid_at IS NULL)"
+            where_parts.append(
+                "ALL(r IN relationships(path) WHERE r.invalid_at IS NULL)"
+            )
+        if categories:
+            where_parts.append(
+                "ALL(r IN relationships(path) WHERE type(r) IN $cats)"
+            )
+        where_clause = "WHERE " + " AND ".join(where_parts)
+
+        params: dict = {"eid": entity_id, "depth": max_depth}
+        if categories:
+            params["cats"] = [c.upper() for c in categories]
 
         result = session.run(
             f"MATCH path = (start)-[*1..$depth]-(connected) "
@@ -446,43 +435,55 @@ def traverse_graph(entity_id: str, max_depth: int = 3, current_only: bool = True
             "RETURN DISTINCT "
             "  elementId(connected) AS connected_id, "
             "  connected.name AS connected_name, "
+            "  connected.date AS connected_date, "
             "  labels(connected) AS connected_labels, "
-            "  type(r) AS rel_type, "
+            "  type(r) AS category, "
+            "  r.fact AS fact, "
+            "  r.confidence AS confidence, "
             "  r.source_record AS source_record, "
+            "  r.source_type AS source_type, "
             "  r.valid_at AS valid_at, "
             "  r.invalid_at AS invalid_at, "
             "  elementId(sn) AS from_id, "
             "  elementId(en) AS to_id",
-            eid=entity_id,
-            depth=max_depth,
+            **params,
         )
 
-        entities = []
+        nodes = []
         edges = []
         source_records = set()
-        seen_entities = set()
+        seen_nodes = set()
 
         for record in result:
             cid = record["connected_id"]
-            if cid not in seen_entities:
-                seen_entities.add(cid)
-                labels = record["connected_labels"]
-                etype = "unknown"
-                for ext_type, lbl in _LABELS.items():
-                    if lbl in labels:
-                        etype = ext_type
-                        break
-                entities.append({
-                    "id": cid,
-                    "type": etype,
-                    "name": record["connected_name"] or "",
-                })
+            if cid not in seen_nodes:
+                seen_nodes.add(cid)
+                labels = record["connected_labels"] or []
+                if "Day" in labels:
+                    nodes.append({
+                        "id": cid,
+                        "type": "day",
+                        "name": record["connected_date"] or "?",
+                    })
+                else:
+                    etype = "unknown"
+                    for ext_type, lbl in _LABELS.items():
+                        if lbl in labels:
+                            etype = ext_type
+                            break
+                    nodes.append({
+                        "id": cid,
+                        "type": etype,
+                        "name": record["connected_name"] or "?",
+                    })
 
             edges.append({
                 "from": record["from_id"],
                 "to": record["to_id"],
-                "relationship": record["rel_type"],
-                "source_record": record["source_record"],
+                "category": record["category"],
+                "fact": record["fact"] or "",
+                "confidence": record["confidence"] or "",
+                "source_record": record["source_record"] or "",
                 "valid_at": record["valid_at"] or "",
                 "invalid_at": record["invalid_at"],
             })
@@ -491,7 +492,7 @@ def traverse_graph(entity_id: str, max_depth: int = 3, current_only: bool = True
                 source_records.add(record["source_record"])
 
         return {
-            "entities": entities,
+            "nodes": nodes,
             "edges": edges,
             "source_records": list(source_records),
         }
@@ -501,9 +502,9 @@ def traverse_graph(entity_id: str, max_depth: int = 3, current_only: bool = True
 
 
 def graph_stats() -> dict:
-    """Count nodes by label, relationships by type, total facts."""
+    """Count nodes by label, fact-edges by category."""
     with get_session() as session:
-        # Count nodes by label (exclude Fact nodes)
+        # Count entity nodes by label
         entity_counts = {}
         total_entities = 0
         for ext_type, label in _LABELS.items():
@@ -513,31 +514,32 @@ def graph_stats() -> dict:
                 entity_counts[ext_type] = count
             total_entities += count
 
-        # Count facts
-        result = session.run("MATCH (f:Fact) RETURN count(f) AS c")
-        total_facts = result.single()["c"]
+        # Count Day nodes
+        result = session.run("MATCH (d:Day) RETURN count(d) AS c")
+        day_count = result.single()["c"]
 
-        result = session.run("MATCH (f:Fact) WHERE f.invalid_at IS NULL RETURN count(f) AS c")
-        current_facts = result.single()["c"]
-
-        # Count relationships by type (exclude HAS_FACT)
+        # Count fact-edges by category
         result = session.run(
-            "MATCH ()-[r]->() WHERE type(r) <> 'HAS_FACT' "
-            "RETURN type(r) AS rel_type, count(r) AS c ORDER BY c DESC"
+            "MATCH ()-[r]->() WHERE r.fact IS NOT NULL "
+            "RETURN type(r) AS category, count(r) AS c, "
+            "sum(CASE WHEN r.invalid_at IS NULL THEN 1 ELSE 0 END) AS current_c "
+            "ORDER BY c DESC"
         )
-        rel_counts = {}
-        total_edges = 0
+        cat_counts = {}
+        total_facts = 0
+        current_facts = 0
         for record in result:
-            rel_counts[record["rel_type"]] = record["c"]
-            total_edges += record["c"]
+            cat_counts[record["category"]] = record["c"]
+            total_facts += record["c"]
+            current_facts += record["current_c"]
 
         return {
             "total_entities": total_entities,
-            "total_edges": total_edges,
+            "day_nodes": day_count,
             "total_facts": total_facts,
             "current_facts": current_facts,
             "entity_counts": entity_counts,
-            "rel_counts": rel_counts,
+            "category_counts": cat_counts,
         }
 
 
@@ -545,80 +547,33 @@ def graph_stats() -> dict:
 
 
 def get_nodes_by_source_record(record_id: str) -> list[dict]:
-    """Find all relationships and facts sourced from a specific record."""
-    items = []
-
+    """Find all fact-edges sourced from a specific record."""
     with get_session() as session:
-        # Relationships with this source_record
         result = session.run(
             "MATCH (a)-[r]->(b) "
-            "WHERE r.source_record = $rid AND type(r) <> 'HAS_FACT' "
-            "RETURN a.name AS from_name, type(r) AS relationship, b.name AS to_name, "
-            "r.valid_at AS valid_at, r.invalid_at AS invalid_at",
+            "WHERE r.source_record = $rid AND r.fact IS NOT NULL "
+            "RETURN a.name AS from_name, a.date AS from_date, labels(a) AS from_labels, "
+            "type(r) AS category, r.fact AS fact, r.confidence AS confidence, "
+            "r.valid_at AS valid_at, r.invalid_at AS invalid_at, "
+            "b.name AS to_name, b.date AS to_date, labels(b) AS to_labels",
             rid=record_id,
         )
+        items = []
         for record in result:
-            items.append({
-                "type": "relationship",
-                "from": record["from_name"] or "?",
-                "relationship": record["relationship"],
-                "to": record["to_name"] or "?",
-                "valid_at": record["valid_at"] or "",
-                "invalid_at": record["invalid_at"],
-            })
-
-        # Facts with this source_record
-        result = session.run(
-            "MATCH (n)-[:HAS_FACT]->(f:Fact) "
-            "WHERE f.source_record = $rid "
-            "RETURN n.name AS entity_name, f.claim AS claim, f.confidence AS confidence, "
-            "f.valid_at AS valid_at, f.invalid_at AS invalid_at",
-            rid=record_id,
-        )
-        for record in result:
+            from_labels = record["from_labels"] or []
+            to_labels = record["to_labels"] or []
+            from_display = record["from_date"] if "Day" in from_labels else (record["from_name"] or "?")
+            to_display = record["to_date"] if "Day" in to_labels else (record["to_name"] or "?")
             items.append({
                 "type": "fact",
-                "entity_name": record["entity_name"] or "?",
-                "attribute": "claim",
-                "value": record["claim"] or "",
+                "category": record["category"],
+                "fact": record["fact"] or "",
+                "from": from_display,
+                "to": to_display,
+                "confidence": record["confidence"] or "",
                 "valid_at": record["valid_at"] or "",
                 "invalid_at": record["invalid_at"],
             })
-
-    return items
-
-
-# --- Temporal migration ---
+        return items
 
 
-def retrofit_temporal() -> dict:
-    """Add temporal timestamps to existing edges and facts that lack them.
-
-    Sets valid_at = created_at (or now), invalid_at = null. Returns counts.
-    One-time migration for pre-1.7.0 data.
-    """
-    ts = _now()
-    with get_session() as session:
-        # Retrofit relationships (non-HAS_FACT)
-        result = session.run(
-            "MATCH ()-[r]->() "
-            "WHERE r.valid_at IS NULL AND type(r) <> 'HAS_FACT' "
-            "SET r.valid_at = coalesce(r.created_at, $ts), "
-            "    r.invalid_at = null "
-            "RETURN count(r) AS c",
-            ts=ts,
-        )
-        edges = result.single()["c"]
-
-        # Retrofit facts
-        result = session.run(
-            "MATCH (n)-[:HAS_FACT]->(f:Fact) "
-            "WHERE f.valid_at IS NULL "
-            "SET f.valid_at = coalesce(f.created_at, $ts), "
-            "    f.invalid_at = null "
-            "RETURN count(f) AS c",
-            ts=ts,
-        )
-        facts = result.single()["c"]
-
-        return {"edges_retrofitted": edges, "facts_retrofitted": facts}

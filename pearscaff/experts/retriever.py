@@ -64,19 +64,20 @@ class FactsLookupTool(BaseTool):
 
     name = "facts_lookup"
     description = (
-        "Get stored facts for a known entity. By default shows only current facts. "
-        "Set include_superseded=true to see full history with temporal markers."
+        "Get stored facts for a known entity. Returns fact-edges grouped by category. "
+        "By default shows only current facts. "
+        "Set include_historical=true to see full history with temporal markers."
     )
     input_schema = {
         "type": "object",
         "properties": {
             "entity_id": {
                 "type": "string",
-                "description": "Entity ID, e.g. 'person_001' or 'company_001'",
+                "description": "Entity element ID from search_entities results",
             },
-            "include_superseded": {
+            "include_historical": {
                 "type": "boolean",
-                "description": "Include superseded (historical) facts. Default false.",
+                "description": "Include invalidated (historical) facts. Default false.",
             },
         },
         "required": ["entity_id"],
@@ -84,47 +85,60 @@ class FactsLookupTool(BaseTool):
 
     def execute(self, **kwargs: Any) -> str:
         entity_id = kwargs["entity_id"]
-        include_superseded = kwargs.get("include_superseded", False)
-        facts = graph.get_entity_facts(entity_id, current_only=not include_superseded)
+        include_historical = kwargs.get("include_historical", False)
+        facts = graph.get_facts_for_entity(entity_id, include_invalid=include_historical)
         if not facts:
             return "No facts found for this entity."
-        lines = []
+
+        # Group by category
+        by_cat: dict[str, list] = {}
         for f in facts:
-            conf = f" [{f['confidence']}]" if f.get("confidence") else ""
-            src = f" (from: {f['source_record']})" if f.get("source_record") else ""
-            temporal = ""
-            if f.get("invalid_at"):
-                temporal = f" [was: {f['valid_at']} -> {f['invalid_at']}]"
-            elif f.get("valid_at"):
-                temporal = f" [since: {f['valid_at']}]"
-            lines.append(f"- {f['claim']}{conf}{src}{temporal}")
+            by_cat.setdefault(f["category"], []).append(f)
+
+        lines = []
+        for cat, cat_facts in sorted(by_cat.items()):
+            lines.append(f"{cat}:")
+            for f in cat_facts:
+                other = f" → {f['other_name']}" if f.get("other_name") else ""
+                temporal = ""
+                if f.get("invalid_at"):
+                    temporal = f" [was: {f['valid_at']} → {f['invalid_at']}]"
+                elif f.get("valid_at"):
+                    temporal = f" [since: {f['valid_at']}]"
+                conf = f" [{f['confidence']}]" if f.get("confidence") else ""
+                lines.append(f"  - {f['fact']}{other}{conf}{temporal}")
         return "\n".join(lines)
 
 
 class GraphTraverseTool(BaseTool):
-    """Traverse the knowledge graph from an entity to find connections."""
+    """Traverse the knowledge graph from an entity to find connections via fact-edges."""
 
     name = "graph_traverse"
     description = (
-        "Walk the knowledge graph from an entity to find connected entities, "
-        "relationships, and source records. Traverses up to max_depth hops. "
-        "By default only current (non-invalidated) relationships. "
-        "Set include_historical=true to include past relationships."
+        "Walk fact-edges from an entity to find connected entities and Day nodes. "
+        "Traverses up to max_depth hops. Returns categories, fact text, and connected nodes. "
+        "By default only current (non-invalidated) edges. "
+        "Set include_historical=true to include past connections."
     )
     input_schema = {
         "type": "object",
         "properties": {
             "entity_id": {
                 "type": "string",
-                "description": "Starting entity ID, e.g. 'company_001'",
+                "description": "Starting entity element ID",
             },
             "max_depth": {
                 "type": "integer",
-                "description": "Maximum hops to traverse (default 3)",
+                "description": "Maximum hops to traverse (default 2)",
             },
             "include_historical": {
                 "type": "boolean",
-                "description": "Include invalidated relationships. Default false.",
+                "description": "Include invalidated edges. Default false.",
+            },
+            "categories": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional: only traverse these fact categories (e.g. ['WORKS_AT', 'MANAGES'])",
             },
         },
         "required": ["entity_id"],
@@ -132,31 +146,73 @@ class GraphTraverseTool(BaseTool):
 
     def execute(self, **kwargs: Any) -> str:
         entity_id = kwargs["entity_id"]
-        max_depth = kwargs.get("max_depth", 3)
+        max_depth = kwargs.get("max_depth", 2)
         include_historical = kwargs.get("include_historical", False)
-        result = graph.traverse_graph(
-            entity_id, max_depth=max_depth, current_only=not include_historical,
+        categories = kwargs.get("categories")
+        result = graph.traverse_fact_edges(
+            entity_id,
+            max_depth=max_depth,
+            current_only=not include_historical,
+            categories=categories,
         )
-        if not result["entities"] and not result["edges"]:
+        if not result["nodes"] and not result["edges"]:
             return "No connections found."
         lines = []
-        if result["entities"]:
-            lines.append("Connected entities:")
-            for e in result["entities"]:
-                lines.append(f"  - {e['name']} ({e['type']}, id={e['id']})")
+        if result["nodes"]:
+            lines.append("Connected nodes:")
+            for n in result["nodes"]:
+                if n["type"] == "day":
+                    lines.append(f"  - [Day] {n['name']}")
+                else:
+                    lines.append(f"  - {n['name']} ({n['type']}, id={n['id']})")
         if result["edges"]:
-            lines.append("Relationships:")
+            lines.append("Fact-edges:")
             for edge in result["edges"]:
                 temporal = ""
                 if edge.get("invalid_at"):
-                    temporal = f" [was: {edge['valid_at']} -> {edge['invalid_at']}]"
+                    temporal = f" [was: {edge['valid_at']} → {edge['invalid_at']}]"
                 elif edge.get("valid_at"):
                     temporal = f" [since: {edge['valid_at']}]"
                 lines.append(
-                    f"  - [{edge['relationship']}] {edge['from']} -> {edge['to']}{temporal}"
+                    f"  - [{edge['category']}] {edge['fact']}{temporal}"
                 )
         if result["source_records"]:
             lines.append(f"Source records: {', '.join(result['source_records'])}")
+        return "\n".join(lines)
+
+
+class DayLookupTool(BaseTool):
+    """Look up all facts anchored to a specific date."""
+
+    name = "day_lookup"
+    description = (
+        "Get all single-entity facts anchored to a specific Day node. "
+        "Use for 'what happened on date X' queries. "
+        "Note: only returns facts explicitly anchored to the Day, not two-entity facts "
+        "that happened on that date."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "date": {
+                "type": "string",
+                "description": "ISO date string, e.g. '2026-03-21'",
+            },
+        },
+        "required": ["date"],
+    }
+
+    def execute(self, **kwargs: Any) -> str:
+        date_str = kwargs["date"]
+        facts = graph.get_facts_for_day(date_str)
+        if not facts:
+            return f"No facts found for {date_str}."
+        lines = [f"Facts for {date_str}:"]
+        for f in facts:
+            conf = f" [{f['confidence']}]" if f.get("confidence") else ""
+            lines.append(
+                f"  - [{f['category']}] {f['entity_name']} ({f['entity_type']}): {f['fact']}{conf}"
+            )
         return "\n".join(lines)
 
 
@@ -218,6 +274,7 @@ def create_retriever_for_runner(
         registry.register(SearchEntitiesTool())
         registry.register(FactsLookupTool())
         registry.register(GraphTraverseTool())
+        registry.register(DayLookupTool())
         registry.register(VectorSearchTool())
 
         return ExpertAgent(
