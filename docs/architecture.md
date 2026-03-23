@@ -334,7 +334,7 @@ The log is append-only and thread-safe. Entries without a session use `[--]`.
 
 ## Versioning
 
-The version string lives in `pearscarf/__init__.py` as `__version__`. `pyproject.toml` reads it dynamically via hatchling. Available via `pearscarf --version` / `ps --version` and printed in the REPL on startup.
+The version string lives in `pearscarf/__init__.py` as `__version__`. `pyproject.toml` reads it dynamically via hatchling. Available via `pearscarf --version` / `psc --version` and printed in the REPL on startup.
 
 ## Configuration
 

@@ -1,9 +1,15 @@
 # Changelog
 
+## 1.9.1
+- CLI short alias changed from `ps` to `psc` — avoids conflict with macOS/Linux `ps` (process status) command
+- Full `pearscarf` command unchanged
+- After updating: run `uv pip install -e .` to register new entry point
+- Update README with project description and details
+
 ## 1.9.0
 - **Project renamed from PearScaff to PearScarf**
 - Python package: `pearscaff` → `pearscarf` (all imports updated)
-- CLI entry point: `pearscaff` command → `pearscarf` command (`ps` alias unchanged)
+- CLI entry point: `pearscaff` command → `pearscarf` command (`psc` short alias)
 - Postgres defaults: user/database `pearscaff` → `pearscarf` (existing installs: update `.env` and recreate DB, or keep old values in `.env`)
 - Docker compose defaults updated
 - All documentation, prompts, and error messages updated
@@ -73,14 +79,14 @@
 - Issue change records pass `changed_at` as `valid_at` so graph timestamps reflect when the change actually happened in Linear
 - Retriever `facts_lookup` defaults to current facts; `include_superseded=true` shows full history with temporal markers
 - Retriever `graph_traverse` defaults to current relationships; `include_historical=true` includes past connections
-- `ps memory entity` shows temporal info: `[was]` marker on superseded facts, `(since ...)` on current ones
-- `ps memory graph` shows current vs total fact counts when they differ
-- `ps memory record` shows temporal info on facts and relationships
+- `psc memory entity` shows temporal info: `[was]` marker on superseded facts, `(since ...)` on current ones
+- `psc memory graph` shows current vs total fact counts when they differ
+- `psc memory record` shows temporal info on facts and relationships
 - `retrofit_temporal()` migration function sets `valid_at = created_at` on pre-existing data
 - `scripts/retrofit_temporal.py` — one-time migration script for upgrading from pre-1.7.0
 
 ## 1.6.4
-- Print `PearScarf vX.Y.Z` version banner on startup for `ps run` and `ps discord`
+- Print `PearScarf vX.Y.Z` version banner on startup for `psc run` and `psc discord`
 
 ## 1.6.3
 - Issue change history captured from Linear's `issueHistory` API (status, assignee, priority transitions)
@@ -216,8 +222,8 @@
 - Fixed Qdrant exit traceback (neutered `__del__`, explicit atexit cleanup)
 
 ## 1.1.2
-- Memory inspection CLI: `ps memory list/search/entity/graph/record`
-- `ps memory list -f` — tail-style real-time memory watching
+- Memory inspection CLI: `psc memory list/search/entity/graph/record`
+- `psc memory list -f` — tail-style real-time memory watching
 - Same commands in REPL via `/memory`
 - Direct Neo4j graph queries for entity lookup and stats (Mem0 backend)
 - SQLite backend: entity lookup, graph stats, record-level memory tracing
@@ -281,7 +287,7 @@
 
 ## 0.4.0
 - Unified session logging (actions, tool calls, reasoning, thinking, errors)
-- Versioning (ps --version)
+- Versioning (psc --version)
 - REPL UX improvements
 
 ## 0.3.0

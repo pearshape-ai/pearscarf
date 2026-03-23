@@ -1,11 +1,45 @@
-# pearscarf
-
 <p align="center">
   <img width="271" height="294" alt="PearScarf logo" src="https://github.com/user-attachments/assets/ecaf3cc6-a8a1-4af9-a5ee-545b7e9d38ef" />
 </p>
-Operational infrastructure that grows itself.
 
-Multi-agent system with async communication over Postgres. A worker agent handles reasoning and routing, expert agents access domain services through APIs or headless browsers.
+<h1 align="center">PearScarf</h1>
+
+<p align="center">
+  Context engine for team of agents.
+</p>
+
+<p align="center">
+  <a href="docs/roadmap.md">Roadmap</a> · <a href="docs/architecture.md">Architecture</a> · <a href="docs/getting-started.md">Getting Started</a> · <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+---
+
+PearScarf is a context engine for team of agents. It watches your data sources (Gmail, Linear, Notion, etc), extracts what matters, and maintains a living knowledge graph — so your operational agents have access and use the context that matters instead of rebuilding it from scratch. 200 tokens instead of 10,000.
+
+**Fully promptable.** Entity types, fact categories, extraction rules — all plain-language prompts you can edit. PearScarf fits your world, not the other way around.
+
+## How it works
+
+```
+Data Sources (Gmail, Linear, ...)
+    ↓ polling
+PearScarf observes → extracts entities & facts → maintains temporal graph
+    ↓
+Any agent queries PearScarf for context
+    ↓
+Structured answer with provenance, confidence, and history
+```
+
+## What's inside
+
+- **Worker agent** — reasoning, routing, human-in-the-loop triage
+- **Expert agents** — Gmail (OAuth API), Linear (GraphQL API), more to come
+- **Extraction pipeline** — LLM-powered entity and fact extraction, driven by editable prompts
+- **Temporal knowledge graph** — Neo4j with entities, Day nodes, and categorized fact-edges carrying provenance and timestamps
+- **Vector search** — Qdrant for semantic similarity when the query is fuzzy
+- **System of Record** — Postgres for raw data, sessions, and agent communication
+- **Observability** — every LLM call and graph write traced via LangSmith
+- **Discord & REPL interfaces** — interact with the system through chat
 
 ## Quick Start
 
@@ -13,52 +47,35 @@ Multi-agent system with async communication over Postgres. A worker agent handle
 uv sync
 source .venv/bin/activate
 playwright install chromium
-docker compose up -d           # start Postgres, Qdrant, Neo4j
+docker compose up -d           # Postgres, Qdrant, Neo4j
 cp .env.example .env          # add ANTHROPIC_API_KEY + POSTGRES_PASSWORD
 
-pearscarf gmail --auth             # Gmail OAuth setup (or: expert gmail --login for browser)
-pearscarf run                      # start the full system
-pearscarf run --poll-email         # start with automatic email polling
-pearscarf run --poll-linear        # start with automatic Linear issue polling
+psc gmail --auth               # Gmail OAuth setup
+psc run                        # start the full system
+psc run --poll-email           # start with automatic email polling
+psc run --poll-linear          # start with automatic Linear issue polling
 ```
 
 ## Commands
 
 ```bash
-pearscarf --version                # print version
-pearscarf run                      # worker + experts + session REPL
-pearscarf run --poll-email         # full system + automatic email polling
-pearscarf discord                  # worker + experts + Discord bot
-pearscarf discord --poll-email     # Discord + email polling
-pearscarf chat                     # direct chat (no session bus)
-pearscarf gmail --auth             # Gmail OAuth setup for API access
-pearscarf expert gmail --login     # Gmail browser login (legacy)
-pearscarf expert gmail             # standalone Gmail expert
-pearscarf expert linear            # standalone Linear expert
-pearscarf memory list              # list stored memories
-pearscarf memory search "query"    # search memories
-pearscarf memory entity "name"     # look up entity + connections
-pearscarf memory graph             # graph stats overview
-pearscarf memory record <id>       # memories from a specific record
+psc --version                  # print version
+psc run                        # worker + experts + session REPL
+psc run --poll-email           # full system + email polling
+psc run --poll-linear          # full system + Linear polling
+psc discord                    # worker + experts + Discord bot
+psc discord --poll-email       # Discord + email polling
+psc chat                       # direct chat (no session bus)
+psc gmail --auth               # Gmail OAuth setup for API access
+psc expert gmail               # standalone Gmail expert
+psc expert linear              # standalone Linear expert
+psc extract-test <record_id>   # test extraction on a specific record
+psc memory list                # list stored memories
+psc memory search "query"      # search memories
+psc memory entity "name"       # look up entity + connections
+psc memory graph               # graph stats overview
+psc memory record <id>         # memories from a specific record
 ```
-
-Also available as `ps --version`, `ps run`, `ps discord`, etc.
-
-## Architecture
-
-```
-REPL / Discord (human)
-    ↓ Postgres messages
-Worker Agent (reasoning, routing, triage)
-    ↓ Postgres messages
-Expert Agents (Gmail API/browser, Linear API, Retriever)
-    ↓
-Indexer (background) → Knowledge Graph (Neo4j) + Vector Store (Qdrant)
-```
-
-Sessions track conversations. Worker delegates to experts via explicit `send_message` tool calls. Experts reply via a `reply` tool. No auto-replies — agents decide when and to whom to communicate, preventing infinite message loops. All communication is async via Postgres polling. A unified log at `data/logs/session.log` records every action across all agents.
-
-Emails read by the Gmail expert are persisted to a System of Record with deduplication. The worker triages each email — auto-classifying known senders and obvious noise, asking the human when uncertain. A background Indexer extracts entities and facts into a knowledge graph (Neo4j) and embeds records in Qdrant for semantic search. The Retriever expert searches the knowledge graph and vector store when the worker needs context.
 
 ## REPL
 
@@ -75,9 +92,14 @@ Non-blocking prompt with message attribution and live activity indicator:
 
 Commands: `/sessions`, `/switch <id>`, `/new`, `/history [id]`, `/memory`
 
+## Trust by design
+
+Every fact traces to its source. Nothing is silently overwritten. The system asks when it's uncertain. Humans can correct it when it's wrong. See [Trust & Human Control](docs/roadmap.md#trust--human-control) in the roadmap.
+
 ## Docs
 
 - [Getting Started](docs/getting-started.md)
 - [Usage](docs/usage.md)
 - [Architecture](docs/architecture.md)
+- [Roadmap](docs/roadmap.md)
 - [Changelog](CHANGELOG.md)

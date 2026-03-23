@@ -33,14 +33,14 @@ All commands also available via `ps`.
 
 | Command | Description |
 |---|---|
-| `ps memory list` | List recent records from Qdrant (default limit 10) |
-| `ps memory list --limit 20` | List with custom limit |
-| `ps memory list -f` | Watch for new records in real-time (Ctrl+C to stop) |
-| `ps memory list -f --interval 5` | Follow with custom poll interval (seconds) |
-| `ps memory search "query"` | Semantic search across stored records (Qdrant) |
-| `ps memory entity "name"` | Look up entity, connections, and temporal fact history (Neo4j) |
-| `ps memory graph` | Graph overview and stats including current vs total facts (Neo4j) |
-| `ps memory record <id>` | Entities and facts extracted from a specific record with temporal info (Neo4j) |
+| `psc memory list` | List recent records from Qdrant (default limit 10) |
+| `psc memory list --limit 20` | List with custom limit |
+| `psc memory list -f` | Watch for new records in real-time (Ctrl+C to stop) |
+| `psc memory list -f --interval 5` | Follow with custom poll interval (seconds) |
+| `psc memory search "query"` | Semantic search across stored records (Qdrant) |
+| `psc memory entity "name"` | Look up entity, connections, and temporal fact history (Neo4j) |
+| `psc memory graph` | Graph overview and stats including current vs total facts (Neo4j) |
+| `psc memory record <id>` | Entities and facts extracted from a specific record with temporal info (Neo4j) |
 
 Same commands available in the REPL via `/memory`:
 

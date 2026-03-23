@@ -22,7 +22,7 @@ dependencies = [
 
 [project.scripts]
 pearscarf = "pearscarf.cli:cli"
-ps = "pearscarf.cli:cli"
+psc = "pearscarf.cli:cli"
 
 [build-system]
 requires = ["hatchling"]
