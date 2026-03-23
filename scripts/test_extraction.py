@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from pearscaff.extract_test import run_extraction
+from pearscarf.extract_test import run_extraction
 
 record_ids = sys.argv[1:] if len(sys.argv) > 1 else None
 run_extraction(record_ids)

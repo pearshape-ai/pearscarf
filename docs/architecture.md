@@ -110,7 +110,7 @@ New email arrives
 ## Overview
 
 ```
-pearscaff/
+pearscarf/
 ├── agents/
 │   ├── base.py           # BaseAgent — agentic loop on raw Anthropic SDK
 │   ├── worker.py          # WorkerAgent — context-aware, routes to experts
@@ -247,7 +247,7 @@ The Indexer processes records into a knowledge graph of entities, relationships,
 Background daemon thread that polls `records WHERE indexed = 0` every 5 seconds. For each unindexed record:
 
 1. Reads full content from typed table (e.g. emails)
-2. Loads extraction prompt from `pearscaff/prompts/extraction.md`
+2. Loads extraction prompt from `pearscarf/prompts/extraction.md`
 3. Calls LLM for structured JSON extraction
 4. Resolves entities against existing graph (exact name + metadata match)
 5. Creates edges and upserts facts
@@ -295,7 +295,7 @@ Polling loop that runs in a background thread. Polls the bus every 1 second, dis
 
 ## Interfaces
 
-### REPL (`pearscaff run`)
+### REPL (`pearscarf run`)
 
 Non-blocking session-aware prompt: `[ses_001] you >`. Uses raw terminal I/O so agent responses stream in above the prompt while the user types. Three background threads:
 
@@ -304,15 +304,15 @@ Non-blocking session-aware prompt: `[ses_001] you >`. Uses raw terminal I/O so a
 
 Commands: `/sessions`, `/switch <id>`, `/new`, `/history [id]`.
 
-### Discord (`pearscaff discord`)
+### Discord (`pearscarf discord`)
 
 Thread-per-session mapping. New messages create threads. Expert events auto-create threads. All follow-ups within a thread stay in the same session.
 
-### Direct Chat (`pearscaff chat`)
+### Direct Chat (`pearscarf chat`)
 
 Simple direct mode without the session bus. Useful for quick testing.
 
-### Standalone Expert (`pearscaff expert gmail`)
+### Standalone Expert (`pearscarf expert gmail`)
 
 Direct interaction with the Gmail expert without the bus. Useful for debugging.
 
@@ -334,7 +334,7 @@ The log is append-only and thread-safe. Entries without a session use `[--]`.
 
 ## Versioning
 
-The version string lives in `pearscaff/__init__.py` as `__version__`. `pyproject.toml` reads it dynamically via hatchling. Available via `pearscaff --version` / `ps --version` and printed in the REPL on startup.
+The version string lives in `pearscarf/__init__.py` as `__version__`. `pyproject.toml` reads it dynamically via hatchling. Available via `pearscarf --version` / `ps --version` and printed in the REPL on startup.
 
 ## Configuration
 
@@ -346,6 +346,6 @@ The version string lives in `pearscaff/__init__.py` as `__version__`. `pyproject
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
 | `POSTGRES_HOST` | `localhost` | Postgres host |
 | `POSTGRES_PORT` | `5432` | Postgres port |
-| `POSTGRES_USER` | `pearscaff` | Postgres user |
+| `POSTGRES_USER` | `pearscarf` | Postgres user |
 | `POSTGRES_PASSWORD` | (required) | Postgres password |
-| `POSTGRES_DB` | `pearscaff` | Postgres database name |
+| `POSTGRES_DB` | `pearscarf` | Postgres database name |

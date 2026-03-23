@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.0
+- **Project renamed from PearScaff to PearScarf**
+- Python package: `pearscaff` → `pearscarf` (all imports updated)
+- CLI entry point: `pearscaff` command → `pearscarf` command (`ps` alias unchanged)
+- Postgres defaults: user/database `pearscaff` → `pearscarf` (existing installs: update `.env` and recreate DB, or keep old values in `.env`)
+- Docker compose defaults updated
+- All documentation, prompts, and error messages updated
+- No functional changes, no schema changes, no data migration needed
+- After updating: run `pip install -e .` to register new entry points
+
 ## 1.8.6
 - Retriever rewired to fact-edge model: `FactsLookupTool` calls `get_facts_for_entity`, groups results by category
 - `GraphTraverseTool` walks fact-edges via new `traverse_fact_edges`, supports optional category filter
@@ -70,7 +80,7 @@
 - `scripts/retrofit_temporal.py` — one-time migration script for upgrading from pre-1.7.0
 
 ## 1.6.4
-- Print `PearScaff vX.Y.Z` version banner on startup for `ps run` and `ps discord`
+- Print `PearScarf vX.Y.Z` version banner on startup for `ps run` and `ps discord`
 
 ## 1.6.3
 - Issue change history captured from Linear's `issueHistory` API (status, assignee, priority transitions)
@@ -109,7 +119,7 @@
 - Issue polling loop (`--poll-linear`) — syncs issues from Linear, creates sessions for worker triage
 - Worker system prompt updated with `linear_expert` as delegation target
 - `LookupIssueTool` added to worker for stored issue lookup
-- `pearscaff expert linear` standalone command for direct interaction
+- `pearscarf expert linear` standalone command for direct interaction
 - Config: `LINEAR_API_KEY`, `LINEAR_POLL_INTERVAL`, `LINEAR_TEAM_ID`
 - No graph/vector integration for issues (SOR only)
 
@@ -129,7 +139,7 @@
 
 ## 1.4.0
 - Wired extraction pipeline to Neo4j — entities, relationships, and facts now written to the graph
-- Added `neo4j` Python driver dependency and `pearscaff/neo4j_client.py` connection module
+- Added `neo4j` Python driver dependency and `pearscarf/neo4j_client.py` connection module
 - Rewrote `graph.py` from Postgres stubs to Neo4j Cypher queries
 - Entity resolution: MERGE on name+label, with email match for persons and domain match for companies
 - Facts stored as `Fact` nodes connected via `HAS_FACT` edges (claim, confidence, source_record, created_at)
@@ -148,14 +158,14 @@
 - Removed entity_types_block DB lookup — entity types now defined directly in the extraction prompt
 
 ## 1.3.1
-- Added extraction prompt testing utility (pearscaff extract-test / scripts/test_extraction.py)
+- Added extraction prompt testing utility (pearscarf extract-test / scripts/test_extraction.py)
 - Runs extraction prompt against stored emails, prints results — no writes to graph or vector store
 - Supports single record, multiple records, or all relevant emails
 - LangSmith tracing support when enabled
 
 ## 1.3.0
-- Extracted all system prompts from Python code into standalone markdown files under pearscaff/prompts/
-- Added prompt loader utility (pearscaff.prompts.load)
+- Extracted all system prompts from Python code into standalone markdown files under pearscarf/prompts/
+- Added prompt loader utility (pearscarf.prompts.load)
 - Worker, Gmail expert (browser + MCP), Retriever, and extraction prompts are now editable without touching Python
 - No prompt content changes
 
@@ -238,7 +248,7 @@
 - Email polling loop with --poll-email flag (configurable interval)
 - New email notifications on Discord and REPL
 - MCP as default transport when configured, headless browser as fallback
-- pearscaff gmail --auth command for OAuth setup
+- pearscarf gmail --auth command for OAuth setup
 
 ## 0.10.0
 - Roadmap and vision docs update

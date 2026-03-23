@@ -10,7 +10,7 @@
 
 ```bash
 git clone <repo-url>
-cd pearscaff
+cd pearscarf
 uv sync
 source .venv/bin/activate
 playwright install chromium
@@ -46,7 +46,7 @@ API-based access via OAuth2. Enables email polling.
    ```
 6. Run the auth flow:
    ```bash
-   pearscaff gmail --auth
+   pearscarf gmail --auth
    ```
 7. Complete the consent screen in your browser. The refresh token is printed — add it to `.env`:
    ```
@@ -58,7 +58,7 @@ API-based access via OAuth2. Enables email polling.
 Uses a Playwright browser to navigate Gmail's web UI:
 
 ```bash
-pearscaff expert gmail --login
+pearscarf expert gmail --login
 ```
 
 Log in, complete 2FA, then press Enter in the terminal. Session saved for reuse.
@@ -80,12 +80,12 @@ Add Postgres credentials to `.env`:
 ```
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_USER=pearscaff
+POSTGRES_USER=pearscarf
 POSTGRES_PASSWORD=your-password
-POSTGRES_DB=pearscaff
+POSTGRES_DB=pearscarf
 ```
 
-**pgAdmin** is available at `http://localhost:5050`. Default login: `admin@pearscaff.dev` / `admin` (override via `PGADMIN_EMAIL` and `PGADMIN_PASSWORD` in `.env`). To connect to the database, add a server with host `postgres`, port `5432`, and your Postgres credentials.
+**pgAdmin** is available at `http://localhost:5050`. Default login: `admin@pearscarf.dev` / `admin` (override via `PGADMIN_EMAIL` and `PGADMIN_PASSWORD` in `.env`). To connect to the database, add a server with host `postgres`, port `5432`, and your Postgres credentials.
 
 **Neo4j** is required for the extraction pipeline — entities, relationships, and facts are stored here. Set `NEO4J_PASSWORD` in `.env` (default auth: `neo4j/<password>`). Browser available at `http://localhost:7474`.
 
@@ -101,13 +101,13 @@ POSTGRES_DB=pearscaff
 
 Test with:
 ```bash
-pearscaff expert linear
+pearscarf expert linear
 ```
 
 Enable automatic issue syncing with `--poll-linear`:
 ```bash
-pearscaff run --poll-linear
-pearscaff discord --poll-linear
+pearscarf run --poll-linear
+pearscarf discord --poll-linear
 ```
 
 ## LangSmith Setup (optional — observability)
@@ -130,7 +130,7 @@ When not configured, the system runs with zero tracing overhead.
 ### Full System (recommended)
 
 ```bash
-pearscaff run
+pearscarf run
 ```
 
 Starts worker agent + Gmail expert + session-aware REPL. All communication goes through Postgres.
@@ -145,7 +145,7 @@ Starts worker agent + Gmail expert + session-aware REPL. All communication goes 
 ### Discord Mode
 
 ```bash
-pearscaff discord
+pearscarf discord
 ```
 
 Same system but with Discord as the frontend. Each session maps to a Discord thread.
@@ -153,7 +153,7 @@ Same system but with Discord as the frontend. Each session maps to a Discord thr
 ### Direct Chat (no bus)
 
 ```bash
-pearscaff chat
+pearscarf chat
 ```
 
 Simple direct mode without sessions or agent routing. Good for quick testing.
@@ -161,7 +161,7 @@ Simple direct mode without sessions or agent routing. Good for quick testing.
 ### Standalone Gmail Expert
 
 ```bash
-pearscaff expert gmail
+pearscarf expert gmail
 ```
 
 Direct interaction with the Gmail expert. Useful for debugging browser tools.

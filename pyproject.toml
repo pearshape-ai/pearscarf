@@ -1,5 +1,5 @@
 [project]
-name = "pearscaff"
+name = "pearscarf"
 dynamic = ["version"]
 description = "Operational infrastructure that grows itself"
 requires-python = ">=3.12"
@@ -21,12 +21,12 @@ dependencies = [
 ]
 
 [project.scripts]
-pearscaff = "pearscaff.cli:cli"
-ps = "pearscaff.cli:cli"
+pearscarf = "pearscarf.cli:cli"
+ps = "pearscarf.cli:cli"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "pearscaff/__init__.py"
+path = "pearscarf/__init__.py"

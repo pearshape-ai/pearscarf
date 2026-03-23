@@ -1,6 +1,6 @@
 # Roadmap
 
-PearScaff a self-improving context engine for a team of agents.
+PearScarf a self-improving context engine for a team of agents.
 Together, these agents become the operational backbone for companies.
 
 ## Temporal Entity Graph
@@ -41,20 +41,20 @@ Second data source to prove the system works beyond email. Issues flow through t
 
 ## Framework & Plugin Architecture
 
-PearScaff becomes a framework where expert agents are self-contained plugins. Each plugin brings its own connection, schema, extraction semantics, polling logic, and tools. PearScaff core handles the graph, extraction pipeline, retriever, entity resolution, and Day nodes. Adding a new data source means writing a plugin, not forking the project.
+PearScarf becomes a framework where expert agents are self-contained plugins. Each plugin brings its own connection, schema, extraction semantics, polling logic, and tools. PearScarf core handles the graph, extraction pipeline, retriever, entity resolution, and Day nodes. Adding a new data source means writing a plugin, not forking the project.
 
 - **Plugin interface** — define the contract an expert agent must implement: connection config, record schema, content builder, polling logic, tools
 - **Expert agent packages** — Gmail and Linear become the reference implementations of the plugin interface
-- **Plugin discovery and registration** — drop a plugin in, PearScaff picks it up, starts polling, feeds extraction
+- **Plugin discovery and registration** — drop a plugin in, PearScarf picks it up, starts polling, feeds extraction
 - **Agents generating agents** — an agent can create a new expert agent plugin from a data source description. The system expands its own capabilities.
 
 ## Agentic Framework Integrations
 
-PearScaff is the context layer underneath any agent framework. Agents from any framework query PearScaff for context instead of connecting to raw data sources individually.
+PearScarf is the context layer underneath any agent framework. Agents from any framework query PearScarf for context instead of connecting to raw data sources individually.
 
-- **MCP server** — PearScaff exposes read tools (query_context, goal_briefing, list_entities) and write tools (record_signal) via MCP. Any MCP-compatible agent can consume it.
-- **OpenClaw integration** — PearScaff as shared memory for OpenClaw agents. External systems are the shared bus — PearScaff observes, OpenClaw acts.
-- **LangGraph / other frameworks** — PearScaff as a tool provider. Same MCP interface, different consumers.
+- **MCP server** — PearScarf exposes read tools (query_context, goal_briefing, list_entities) and write tools (record_signal) via MCP. Any MCP-compatible agent can consume it.
+- **OpenClaw integration** — PearScarf as shared memory for OpenClaw agents. External systems are the shared bus — PearScarf observes, OpenClaw acts.
+- **LangGraph / other frameworks** — PearScarf as a tool provider. Same MCP interface, different consumers.
 
 ## Trust & Human Control
 
@@ -73,4 +73,4 @@ Trust is earned through:
 - **Audit log** — a queryable log of every graph mutation. What changed, when, triggered by what record, confirmed by human or auto-applied. This is what makes the system auditable for teams and integrators.
 - **Regression-tested extraction** — prompt changes are evaluated against a ground truth corpus before shipping. The system doesn't silently get worse.
 
-If people can't understand why the system "believes" what it "believes", they won't use it or let their agents use it. If they can't correct it when it's wrong, they won't trust it. PearScaff is built from the ground up with the conviction that transparency and human control are not features — they're prerequisites.
+If people can't understand why the system "believes" what it "believes", they won't use it or let their agents use it. If they can't correct it when it's wrong, they won't trust it. PearScarf is built from the ground up with the conviction that transparency and human control are not features — they're prerequisites.

@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from pearscaff import vectorstore
-from pearscaff.db import _get_conn, init_db
-from pearscaff.neo4j_client import close as neo4j_close, get_session
+from pearscarf import vectorstore
+from pearscarf.db import _get_conn, init_db
+from pearscarf.neo4j_client import close as neo4j_close, get_session
 
 
 def main() -> None:

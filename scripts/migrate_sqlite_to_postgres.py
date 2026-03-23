@@ -4,7 +4,7 @@
 Usage:
     python scripts/migrate_sqlite_to_postgres.py [sqlite_path]
 
-Defaults to data/pearscaff.db if no path given.
+Defaults to data/pearscarf.db if no path given.
 Postgres connection uses POSTGRES_* env vars (loaded from .env).
 """
 
@@ -20,16 +20,16 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from pearscaff.config import (
+from pearscarf.config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
     POSTGRES_PORT,
     POSTGRES_USER,
 )
-from pearscaff.db import init_db
+from pearscarf.db import init_db
 
-SQLITE_PATH = sys.argv[1] if len(sys.argv) > 1 else "data/pearscaff.db"
+SQLITE_PATH = sys.argv[1] if len(sys.argv) > 1 else "data/pearscarf.db"
 
 # Migration order respects foreign keys
 TABLES = [

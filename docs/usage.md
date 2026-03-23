@@ -4,19 +4,19 @@
 
 | Command | Description |
 |---|---|
-| `pearscaff run` | Full system: worker + experts + session REPL |
-| `pearscaff run --poll-email` | Full system with automatic email polling |
-| `pearscaff run --poll-linear` | Full system with automatic Linear issue polling |
-| `pearscaff discord` | Full system with Discord frontend |
-| `pearscaff discord --poll-email` | Discord mode with automatic email polling |
-| `pearscaff discord --poll-linear` | Discord mode with automatic Linear issue polling |
-| `pearscaff chat` | Direct chat (no session bus) |
-| `pearscaff gmail --auth` | Run Gmail OAuth flow for API-based access |
-| `pearscaff expert gmail` | Standalone Gmail expert |
-| `pearscaff expert gmail --login` | Log into Gmail via browser (legacy) |
-| `pearscaff expert gmail --auth` | Gmail OAuth setup (same as `gmail --auth`) |
-| `pearscaff expert linear` | Standalone Linear expert |
-| `pearscaff extract-test [record_ids...]` | Run extraction prompt against emails (no writes) |
+| `pearscarf run` | Full system: worker + experts + session REPL |
+| `pearscarf run --poll-email` | Full system with automatic email polling |
+| `pearscarf run --poll-linear` | Full system with automatic Linear issue polling |
+| `pearscarf discord` | Full system with Discord frontend |
+| `pearscarf discord --poll-email` | Discord mode with automatic email polling |
+| `pearscarf discord --poll-linear` | Discord mode with automatic Linear issue polling |
+| `pearscarf chat` | Direct chat (no session bus) |
+| `pearscarf gmail --auth` | Run Gmail OAuth flow for API-based access |
+| `pearscarf expert gmail` | Standalone Gmail expert |
+| `pearscarf expert gmail --login` | Log into Gmail via browser (legacy) |
+| `pearscarf expert gmail --auth` | Gmail OAuth setup (same as `gmail --auth`) |
+| `pearscarf expert linear` | Standalone Linear expert |
+| `pearscarf extract-test [record_ids...]` | Run extraction prompt against emails (no writes) |
 
 All commands also available via `ps`.
 
@@ -52,7 +52,7 @@ Same commands available in the REPL via `/memory`:
 | `/memory graph` | Graph overview |
 | `/memory record <id>` | Memories from a record |
 
-## Session REPL (`pearscaff run`)
+## Session REPL (`pearscarf run`)
 
 The REPL shows the active session in the prompt:
 
@@ -87,7 +87,7 @@ When an expert creates a new session (e.g. urgent email detected):
 
 Use `/switch ses_003` to interact with that session.
 
-## Discord (`pearscaff discord`)
+## Discord (`pearscarf discord`)
 
 - New message in a channel → creates a new session + Discord thread
 - All follow-up in the thread stays in the same session
@@ -124,8 +124,8 @@ Routes tasks to expert agents (e.g. `gmail_expert` for email operations)
 Enable automatic email checking with `--poll-email`:
 
 ```bash
-pearscaff run --poll-email
-pearscaff discord --poll-email
+pearscarf run --poll-email
+pearscarf discord --poll-email
 ```
 
 Requires Gmail OAuth credentials. Checks every `GMAIL_POLL_INTERVAL` seconds (default: 300).
@@ -138,11 +138,11 @@ Each new email:
 
 ## Adding Custom Worker Tools
 
-Drop a `BaseTool` subclass in `pearscaff/tools/`:
+Drop a `BaseTool` subclass in `pearscarf/tools/`:
 
 ```python
 from typing import Any
-from pearscaff.tools import BaseTool
+from pearscarf.tools import BaseTool
 
 class MyTool(BaseTool):
     name = "my_tool"
@@ -173,9 +173,9 @@ Auto-discovered at startup.
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
 | `POSTGRES_HOST` | `localhost` | Postgres host |
 | `POSTGRES_PORT` | `5432` | Postgres port |
-| `POSTGRES_USER` | `pearscaff` | Postgres user |
+| `POSTGRES_USER` | `pearscarf` | Postgres user |
 | `POSTGRES_PASSWORD` | (required) | Postgres password |
-| `POSTGRES_DB` | `pearscaff` | Postgres database name |
+| `POSTGRES_DB` | `pearscarf` | Postgres database name |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant server URL |
 | `GMAIL_CLIENT_ID` | | Google OAuth client ID |
 | `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |

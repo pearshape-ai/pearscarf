@@ -1,4 +1,4 @@
-# pearscaff
+# pearscarf
 
 <p align="center">
   <img width="271" height="294" alt="PearScarf logo" src="https://github.com/user-attachments/assets/ecaf3cc6-a8a1-4af9-a5ee-545b7e9d38ef" />
@@ -16,30 +16,30 @@ playwright install chromium
 docker compose up -d           # start Postgres, Qdrant, Neo4j
 cp .env.example .env          # add ANTHROPIC_API_KEY + POSTGRES_PASSWORD
 
-pearscaff gmail --auth             # Gmail OAuth setup (or: expert gmail --login for browser)
-pearscaff run                      # start the full system
-pearscaff run --poll-email         # start with automatic email polling
-pearscaff run --poll-linear        # start with automatic Linear issue polling
+pearscarf gmail --auth             # Gmail OAuth setup (or: expert gmail --login for browser)
+pearscarf run                      # start the full system
+pearscarf run --poll-email         # start with automatic email polling
+pearscarf run --poll-linear        # start with automatic Linear issue polling
 ```
 
 ## Commands
 
 ```bash
-pearscaff --version                # print version
-pearscaff run                      # worker + experts + session REPL
-pearscaff run --poll-email         # full system + automatic email polling
-pearscaff discord                  # worker + experts + Discord bot
-pearscaff discord --poll-email     # Discord + email polling
-pearscaff chat                     # direct chat (no session bus)
-pearscaff gmail --auth             # Gmail OAuth setup for API access
-pearscaff expert gmail --login     # Gmail browser login (legacy)
-pearscaff expert gmail             # standalone Gmail expert
-pearscaff expert linear            # standalone Linear expert
-pearscaff memory list              # list stored memories
-pearscaff memory search "query"    # search memories
-pearscaff memory entity "name"     # look up entity + connections
-pearscaff memory graph             # graph stats overview
-pearscaff memory record <id>       # memories from a specific record
+pearscarf --version                # print version
+pearscarf run                      # worker + experts + session REPL
+pearscarf run --poll-email         # full system + automatic email polling
+pearscarf discord                  # worker + experts + Discord bot
+pearscarf discord --poll-email     # Discord + email polling
+pearscarf chat                     # direct chat (no session bus)
+pearscarf gmail --auth             # Gmail OAuth setup for API access
+pearscarf expert gmail --login     # Gmail browser login (legacy)
+pearscarf expert gmail             # standalone Gmail expert
+pearscarf expert linear            # standalone Linear expert
+pearscarf memory list              # list stored memories
+pearscarf memory search "query"    # search memories
+pearscarf memory entity "name"     # look up entity + connections
+pearscarf memory graph             # graph stats overview
+pearscarf memory record <id>       # memories from a specific record
 ```
 
 Also available as `ps --version`, `ps run`, `ps discord`, etc.
