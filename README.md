@@ -1,5 +1,8 @@
 # pearscaff
 
+<p align="center">
+  <img width="271" height="294" alt="PearScarf logo" src="https://github.com/user-attachments/assets/ecaf3cc6-a8a1-4af9-a5ee-545b7e9d38ef" />
+</p>
 Operational infrastructure that grows itself.
 
 Multi-agent system with async communication over Postgres. A worker agent handles reasoning and routing, expert agents access domain services through APIs or headless browsers.
