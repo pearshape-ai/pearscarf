@@ -235,7 +235,7 @@ Human responses are captured as `human_context` on the record. The Indexer appen
 
 > **Note:** The extraction pipeline is in transition. The Indexer and Retriever are currently placeholder stubs — they start and run but do not extract or search. The graph tables and Qdrant collection remain in the schema for the upcoming extraction rebuild.
 
-The Indexer processes records into a knowledge graph of entities, relationships, and facts. All graph data lives in Neo4j (no Postgres graph tables).
+The Indexer processes records into a knowledge graph of entities, relationships, and facts. All graph data lives in Neo4j (no Postgres graph tables). Extraction correctness is measured by the metrics defined in [Eval Metrics](eval-metrics.md).
 
 - **Entities** — nodes with labels (Person, Company, Project, Event). Merged on name + email/domain.
 - **Relationships** — typed edges between entities (e.g. WORKS_AT, CUSTOMER_OF). Bi-temporal: `valid_at`, `invalid_at`.

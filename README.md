@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/roadmap.md">Roadmap</a> · <a href="docs/architecture.md">Architecture</a> · <a href="docs/getting-started.md">Getting Started</a> · <a href="CHANGELOG.md">Changelog</a>
+  <a href="docs/roadmap.md">Roadmap</a> · <a href="docs/architecture.md">Architecture</a> · <a href="docs/eval-metrics.md">Eval Metrics</a> · <a href="docs/getting-started.md">Getting Started</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 ---
@@ -101,5 +101,6 @@ Every fact traces to its source. Nothing is silently overwritten. The system ask
 - [Getting Started](docs/getting-started.md)
 - [Usage](docs/usage.md)
 - [Architecture](docs/architecture.md)
+- [Eval Metrics](docs/eval-metrics.md)
 - [Roadmap](docs/roadmap.md)
 - [Changelog](CHANGELOG.md)

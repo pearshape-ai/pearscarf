@@ -24,7 +24,7 @@ The graph captures relationships and narrative. The structured store captures th
 
 ## Extraction Quality & Eval
 
-Everything depends on extraction quality. The extraction prompt, fact categories, entity normalization, and automated email handling all need to be proven against real data with structured evaluation — not eyeballing.
+Everything depends on extraction quality. The extraction prompt, fact categories, entity normalization, and automated email handling all need to be proven against real data with structured evaluation — not eyeballing. See [Eval Metrics](eval-metrics.md) for the metric definitions, tiers, and ground truth schema.
 
 - **Synthetic test corpus** — generated emails and issues covering edge cases: multi-party threads, entity name variations, contradicting facts, cross-source references, automated notifications. Separate repo with generation scripts.
 - **Ground truth annotations** — expected entities and facts for each test record, manually verified
