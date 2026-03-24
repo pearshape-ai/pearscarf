@@ -28,7 +28,7 @@ Everything depends on extraction quality. The extraction prompt, fact categories
 
 - **Synthetic test corpus** — generated emails and issues covering edge cases: multi-party threads, entity name variations, contradicting facts, cross-source references, automated notifications. Separate repo with generation scripts.
 - **Ground truth annotations** — expected entities and facts for each test record, manually verified
-- **Eval harness** — run extraction against the corpus, diff against expected output, score per entity type and per fact category. Precision, recall, entity resolution accuracy.
+- ~~**Eval harness** — run extraction against the corpus, diff against expected output, score per entity type and per fact category. Precision, recall, entity resolution accuracy.~~ (done — v1.10.0)
 - **Regression testing** — every prompt change runs the full eval. No change ships if scores drop.
 
 ## Linear Integration

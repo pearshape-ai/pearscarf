@@ -70,6 +70,8 @@ psc gmail --auth               # Gmail OAuth setup for API access
 psc expert gmail               # standalone Gmail expert
 psc expert linear              # standalone Linear expert
 psc extract-test <record_id>   # test extraction on a specific record
+psc eval --dataset <path>     # run extraction eval against a dataset
+psc eval --dataset <path> -v  # verbose: print record content + expected/extracted per record
 psc memory list                # list stored memories
 psc memory search "query"      # search memories
 psc memory entity "name"       # look up entity + connections

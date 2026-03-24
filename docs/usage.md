@@ -17,8 +17,10 @@
 | `pearscarf expert gmail --auth` | Gmail OAuth setup (same as `gmail --auth`) |
 | `pearscarf expert linear` | Standalone Linear expert |
 | `pearscarf extract-test [record_ids...]` | Run extraction prompt against emails (no writes) |
+| `pearscarf eval --dataset <path>` | Run extraction eval against a dataset, score and report |
+| `pearscarf eval --dataset <path> -v` | Verbose eval: print record content + expected/extracted per record |
 
-All commands also available via `ps`.
+All commands also available via `psc`.
 
 ## Scripts
 

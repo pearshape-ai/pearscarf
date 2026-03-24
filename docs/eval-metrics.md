@@ -9,6 +9,12 @@ PearScarf performs three sequential operations on every ingested record: relevan
 
 Metrics are computed against a ground truth dataset of synthetic records with fully annotated expected outputs. All metrics are defined over a fixed evaluation window `(dataset_version, pearscarf_version)` to enable reproducible comparison.
 
+### Scope
+
+These metrics cover **extraction quality** — the accuracy of the LLM extraction prompt in producing correct entities and facts from a single record. They are evaluated offline against a synthetic ground truth dataset via `psc eval --dataset <path>`.
+
+**Not covered (future work):** end-to-end graph quality metrics including graph-level entity resolution (merge/split correctness across the full Neo4j graph), temporal edge integrity after indexer processing, and retriever answer quality. These require a running system and are tracked separately.
+
 ---
 
 ## Definitions
