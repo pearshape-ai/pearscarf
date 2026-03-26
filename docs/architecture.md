@@ -119,6 +119,7 @@ pearscarf/
 ├── experts/
 │   ├── __init__.py        # Expert registry
 │   ├── gmail.py           # Gmail expert — headless browser automation
+│   ├── ingest.py          # Ingest expert — file-based data entry (seed files + JSON records)
 │   └── retriever.py       # Retriever expert — knowledge graph + vector search
 ├── knowledge/
 │   └── __init__.py        # KnowledgeStore — file-based markdown storage
