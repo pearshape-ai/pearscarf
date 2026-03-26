@@ -274,6 +274,40 @@ def linear() -> None:
         click.echo("\nbye.")
 
 
+@expert.command("ingest")
+def ingest() -> None:
+    """Ingest expert — standalone mode for file-based data entry."""
+    from pearscarf.experts.ingest import create_ingest_expert
+
+    def on_tool_call(name, args):
+        click.echo(click.style(f"  [tool] {name}", fg="cyan") + f"({args})")
+
+    def on_text(text):
+        click.echo(click.style("  [thinking] ", fg="yellow") + text)
+
+    def on_tool_result(name, result):
+        preview = result[:200] + "..." if len(result) > 200 else result
+        click.echo(click.style(f"  [result] {name}", fg="green") + f": {preview}")
+
+    agent = create_ingest_expert(
+        on_tool_call=on_tool_call,
+        on_text=on_text,
+        on_tool_result=on_tool_result,
+    )
+
+    click.echo("Ingest expert — standalone (type 'exit' or Ctrl+C to quit)\n")
+
+    try:
+        while True:
+            user_input = click.prompt("you", prompt_suffix=" > ")
+            if user_input.strip().lower() in ("exit", "quit"):
+                break
+            response = agent.run(user_input)
+            click.echo(f"\n{click.style('expert', fg='magenta')} > {response}\n")
+    except (KeyboardInterrupt, EOFError):
+        click.echo("\nbye.")
+
+
 @cli.command("gmail")
 @click.option("--auth", is_flag=True, help="Run Gmail OAuth flow for API-based access.")
 def gmail_shortcut(auth: bool) -> None:
