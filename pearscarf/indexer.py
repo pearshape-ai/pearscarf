@@ -32,6 +32,7 @@ class Indexer:
         self._thread: threading.Thread | None = None
         self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
         self._system_prompt = load_prompt("extraction")
+        self._ingest_system_prompt = load_prompt("ingest_extraction")
 
     def _build_content(self, record: dict) -> str:
         """Build the record content string for extraction."""
@@ -136,6 +137,10 @@ class Indexer:
                     parts.append(f"At: {change['changed_at']}")
                 return "\n".join(parts)
 
+        elif record_type == "ingest":
+            # Seed files store raw content directly in records.raw
+            return record.get("raw") or "(no content)"
+
         # Fallback: use raw content from records table
         return record.get("raw") or "(no content)"
 
@@ -156,6 +161,12 @@ class Indexer:
         """Call Claude to extract entities and facts."""
         user_message = f"Record ({record_id}, {record_type}):\n\n{content}"
 
+        system_prompt = (
+            self._ingest_system_prompt
+            if record_type == "ingest"
+            else self._system_prompt
+        )
+
         with trace_span(
             "indexer_extract",
             run_type="llm",
@@ -166,7 +177,7 @@ class Indexer:
                 model=EXTRACTION_MODEL,
                 max_tokens=EXTRACTION_MAX_TOKENS,
                 temperature=EXTRACTION_TEMPERATURE,
-                system=self._system_prompt,
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             )
             if span:

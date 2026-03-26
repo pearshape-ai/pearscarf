@@ -99,6 +99,40 @@ def list_emails(limit: int = 20) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+# --- Ingest ---
+
+
+def _next_ingest_id() -> str:
+    with _get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) as c FROM records WHERE type = 'ingest'").fetchone()
+        num = row["c"] + 1
+        return f"ingest_{num:03d}"
+
+
+def save_ingest(
+    source: str,
+    raw: str,
+    human_context: str = "",
+) -> str:
+    """Save a seed ingest record to the SOR.
+
+    Auto-classified as 'relevant' — bypasses triage.
+    Returns record_id (e.g. 'ingest_001').
+    """
+    init_db()
+    with _get_conn() as conn:
+        record_id = _next_ingest_id()
+        now = _now()
+
+        conn.execute(
+            "INSERT INTO records (id, type, source, created_at, raw, classification, human_context) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (record_id, "ingest", source, now, raw, "relevant", human_context or None),
+        )
+        conn.commit()
+        return record_id
+
+
 # --- Issue Changes ---
 
 
