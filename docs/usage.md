@@ -20,8 +20,8 @@
 | `pearscarf expert ingest --seed <file>` | Ingest a seed file into the graph pipeline |
 | `pearscarf expert ingest --record <file> --type <type>` | Ingest typed JSON records (email, issue, issue_change) |
 | `pearscarf extract-test [record_ids...]` | Run extraction prompt against emails (no writes) |
-| `pearscarf eval --dataset <path>` | Run extraction eval against a dataset, score and report |
-| `pearscarf eval --dataset <path> -v` | Verbose eval: print record content + expected/extracted per record |
+| `pearscarf eval --dataset <path>` | Graph-based eval: ingest, index, query graph, score |
+| `pearscarf eval --dataset <path> -v` | Verbose: print expected and graph entities/facts per record |
 
 All commands also available via `psc`.
 

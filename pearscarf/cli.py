@@ -353,10 +353,10 @@ def extract_test(record_ids: tuple[str, ...]) -> None:
 @click.option("--dataset", required=True, type=click.Path(exists=True), help="Path to eval dataset directory")
 @click.option("--verbose", "-v", is_flag=True, help="Print record content, expected and extracted entities/facts per record")
 def eval_cmd(dataset: str, verbose: bool) -> None:
-    """Run extraction eval against a dataset and score results."""
-    from pearscarf.eval_runner import run_eval
+    """Run graph-based eval: ingest, index, query graph, score."""
+    from pearscarf.eval_runner import run_graph_eval
 
-    run_eval(dataset, verbose=verbose)
+    run_graph_eval(dataset, verbose=verbose)
 
 
 import pearscarf.cli_memory  # noqa: F401 — registers memory command group
