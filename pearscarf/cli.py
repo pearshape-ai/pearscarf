@@ -275,8 +275,11 @@ def linear() -> None:
 
 
 @expert.command("ingest")
-def ingest() -> None:
-    """Ingest expert — standalone mode for file-based data entry."""
+@click.option("--seed", type=click.Path(exists=True), default=None, help="Ingest a seed file (.md)")
+@click.option("--record", type=click.Path(exists=True), default=None, help="Ingest a JSON record file")
+@click.option("--type", "record_type", type=click.Choice(["email", "issue", "issue_change"]), default=None, help="Record type (required with --record)")
+def ingest(seed: str | None, record: str | None, record_type: str | None) -> None:
+    """Ingest expert — file-based data entry. Standalone interactive mode without flags."""
     from pearscarf.experts.ingest import create_ingest_expert
 
     def on_tool_call(name, args):
@@ -295,6 +298,23 @@ def ingest() -> None:
         on_tool_result=on_tool_result,
     )
 
+    # Seed mode — non-interactive
+    if seed:
+        message = f"Ingest seed file: {seed}"
+        response = agent.run(message)
+        click.echo(response)
+        return
+
+    # Record mode — non-interactive
+    if record:
+        if not record_type:
+            raise click.UsageError("--type is required when using --record")
+        message = f"Ingest {record_type} records from: {record}"
+        response = agent.run(message)
+        click.echo(response)
+        return
+
+    # Interactive mode — fallthrough
     click.echo("Ingest expert — standalone (type 'exit' or Ctrl+C to quit)\n")
 
     try:

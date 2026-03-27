@@ -69,7 +69,9 @@ psc chat                       # direct chat (no session bus)
 psc gmail --auth               # Gmail OAuth setup for API access
 psc expert gmail               # standalone Gmail expert
 psc expert linear              # standalone Linear expert
-psc expert ingest              # standalone ingest expert
+psc expert ingest              # standalone ingest expert (interactive)
+psc expert ingest --seed <file>              # ingest seed file
+psc expert ingest --record <file> --type email  # ingest JSON records
 psc extract-test <record_id>   # test extraction on a specific record
 psc eval --dataset <path>     # run extraction eval against a dataset
 psc eval --dataset <path> -v  # verbose: print record content + expected/extracted per record

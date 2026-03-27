@@ -16,7 +16,9 @@
 | `pearscarf expert gmail --login` | Log into Gmail via browser (legacy) |
 | `pearscarf expert gmail --auth` | Gmail OAuth setup (same as `gmail --auth`) |
 | `pearscarf expert linear` | Standalone Linear expert |
-| `pearscarf expert ingest` | Standalone ingest expert for file-based data entry |
+| `pearscarf expert ingest` | Standalone ingest expert (interactive mode) |
+| `pearscarf expert ingest --seed <file>` | Ingest a seed file into the graph pipeline |
+| `pearscarf expert ingest --record <file> --type <type>` | Ingest typed JSON records (email, issue, issue_change) |
 | `pearscarf extract-test [record_ids...]` | Run extraction prompt against emails (no writes) |
 | `pearscarf eval --dataset <path>` | Run extraction eval against a dataset, score and report |
 | `pearscarf eval --dataset <path> -v` | Verbose eval: print record content + expected/extracted per record |
