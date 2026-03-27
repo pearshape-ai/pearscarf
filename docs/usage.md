@@ -22,6 +22,7 @@
 | `pearscarf extract-test [record_ids...]` | Run extraction prompt against emails (no writes) |
 | `pearscarf eval --dataset <path>` | Graph-based eval: ingest, index, query graph, score |
 | `pearscarf eval --dataset <path> -v` | Verbose: print expected and graph entities/facts per record |
+| `pearscarf erase-all` | Wipe all system state: Postgres records, Neo4j graph, Qdrant vectors |
 
 All commands also available via `psc`.
 
@@ -30,6 +31,7 @@ All commands also available via `psc`.
 | Script | Description |
 |---|---|
 | `python scripts/reindex_all.py` | Wipe Neo4j graph and reset indexed flags — Indexer re-extracts on next poll |
+| `python scripts/erase_all.py` | Wipe all system state: Postgres records, Neo4j graph, Qdrant vectors |
 | `python scripts/test_extraction.py [record_ids...]` | Run extraction prompt against emails (no writes) |
 | `python scripts/migrate_sqlite_to_postgres.py` | One-time SQLite → Postgres migration |
 | `python scripts/retrofit_temporal.py` | One-time migration: add temporal timestamps to pre-1.7.0 graph data |

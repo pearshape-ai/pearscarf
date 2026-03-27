@@ -75,6 +75,7 @@ psc expert ingest --record <file> --type email  # ingest JSON records
 psc extract-test <record_id>   # test extraction on a specific record
 psc eval --dataset <path>     # run extraction eval against a dataset
 psc eval --dataset <path> -v  # verbose: print record content + expected/extracted per record
+psc erase-all                  # wipe all system state (with confirmation)
 psc memory list                # list stored memories
 psc memory search "query"      # search memories
 psc memory entity "name"       # look up entity + connections

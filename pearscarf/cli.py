@@ -359,6 +359,75 @@ def eval_cmd(dataset: str, verbose: bool) -> None:
     run_graph_eval(dataset, verbose=verbose)
 
 
+@cli.command("erase-all")
+def erase_all() -> None:
+    """Wipe all system state: Postgres records, Neo4j graph, Qdrant vectors."""
+    from pearscarf import vectorstore
+    from pearscarf.db import _get_conn, init_db
+    from pearscarf.neo4j_client import close as neo4j_close, get_session
+
+    init_db()
+
+    # Count
+    with get_session() as session:
+        node_count = session.run("MATCH (n) RETURN count(n) AS c").single()["c"]
+        rel_count = session.run("MATCH ()-[r]->() RETURN count(r) AS c").single()["c"]
+
+    try:
+        vc = vectorstore._get_client()
+        vector_count = vc.get_collection(vectorstore.COLLECTION_NAME).points_count
+    except Exception:
+        vector_count = 0
+
+    with _get_conn() as conn:
+        records_count = conn.execute("SELECT count(*) AS c FROM records").fetchone()["c"]
+        emails_count = conn.execute("SELECT count(*) AS c FROM emails").fetchone()["c"]
+        issues_count = conn.execute("SELECT count(*) AS c FROM issues").fetchone()["c"]
+        changes_count = conn.execute("SELECT count(*) AS c FROM issue_changes").fetchone()["c"]
+
+    if node_count + vector_count + records_count == 0:
+        click.echo("Nothing to do — all stores are empty.")
+        return
+
+    click.echo("This will DELETE:")
+    click.echo(f"  Postgres:  {records_count} records, {emails_count} emails, {issues_count} issues, {changes_count} issue_changes")
+    click.echo(f"  Neo4j:     {node_count} nodes, {rel_count} relationships")
+    click.echo(f"  Qdrant:    {vector_count} vectors")
+    click.echo()
+
+    if not click.confirm("Continue?", default=False):
+        click.echo("Aborted.")
+        return
+
+    # Wipe Neo4j
+    with get_session() as session:
+        session.run("MATCH (n) DETACH DELETE n")
+    click.echo(f"Deleted {node_count} nodes and {rel_count} relationships from Neo4j.")
+
+    # Wipe Qdrant
+    try:
+        from qdrant_client.models import Distance, VectorParams
+        vc = vectorstore._get_client()
+        vc.delete_collection(vectorstore.COLLECTION_NAME)
+        vc.create_collection(
+            collection_name=vectorstore.COLLECTION_NAME,
+            vectors_config=VectorParams(size=vectorstore.VECTOR_SIZE, distance=Distance.COSINE),
+        )
+        vectorstore._client = None
+        click.echo(f"Deleted {vector_count} vectors from Qdrant (collection recreated).")
+    except Exception as exc:
+        click.echo(f"Warning: Qdrant clear failed: {exc}")
+
+    # Wipe Postgres
+    with _get_conn() as conn:
+        conn.execute("TRUNCATE issue_changes, issues, emails, records CASCADE")
+        conn.commit()
+    click.echo(f"Deleted {records_count} records from Postgres.")
+
+    click.echo("\nDone. All system state erased.")
+    neo4j_close()
+
+
 import pearscarf.cli_memory  # noqa: F401 — registers memory command group
 
 if __name__ == "__main__":
