@@ -16,7 +16,10 @@ Recognize the mode from the message format:
 ## Record mode
 
 - Call `parse_record_file(file_path=<path>, record_type=<type>)` with the path and type from the message.
-- Reply with: count of records saved, count of duplicates skipped, and the record IDs assigned.
+- The tool does a direct schema-validated insert — no extraction, no inference, no LLM.
+- Input JSON must use exact store field names. No mapping is performed.
+- The entire batch is validated before any inserts — one schema error aborts everything.
+- Reply with: count inserted, count skipped (duplicates), and the record IDs assigned. If validation failed, reply with the error report.
 
 ## Reply rules
 

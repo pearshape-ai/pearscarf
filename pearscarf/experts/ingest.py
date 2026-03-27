@@ -2,7 +2,7 @@
 
 Two ingestion modes:
 - Seed files: typed block markdown format
-- Record files: typed JSON (email, issue, issue_change)
+- Record files: typed JSON (email, issue, issue_change) — direct schema-validated insert
 """
 
 from __future__ import annotations
@@ -14,6 +14,88 @@ from typing import Any
 from pearscarf.agents.expert import ExpertAgent
 from pearscarf.prompts import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
+
+# ---------------------------------------------------------------------------
+# Record schema definitions
+# ---------------------------------------------------------------------------
+
+REQUIRED_FIELDS: dict[str, list[str]] = {
+    "email": ["sender", "subject", "body"],
+    "issue": ["linear_id", "title"],
+    "issue_change": ["issue_record_id", "field", "changed_at"],
+}
+
+OPTIONAL_FIELDS: dict[str, list[str]] = {
+    "email": ["recipient", "message_id", "received_at"],
+    "issue": [
+        "identifier", "description", "status", "priority", "assignee",
+        "project", "labels", "comments", "url",
+        "linear_created_at", "linear_updated_at",
+    ],
+    "issue_change": ["from_value", "to_value", "linear_history_id", "changed_by"],
+}
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_json_records(file_path: str) -> list[dict] | str:
+    """Load JSON records from a file or folder.
+
+    Returns list of dicts, or an error string.
+    """
+    if os.path.isdir(file_path):
+        records = []
+        for root, _dirs, files in os.walk(file_path):
+            for fname in sorted(files):
+                if not fname.endswith(".json"):
+                    continue
+                fpath = os.path.join(root, fname)
+                with open(fpath) as fh:
+                    data = json.load(fh)
+                if isinstance(data, list):
+                    records.extend(data)
+                else:
+                    records.append(data)
+        return records
+
+    if not os.path.isfile(file_path):
+        return f"Error: path not found: {file_path}"
+
+    with open(file_path) as fh:
+        data = json.load(fh)
+
+    return data if isinstance(data, list) else [data]
+
+
+def _validate_batch(records: list[dict], record_type: str) -> list[str]:
+    """Validate all records against the schema for record_type.
+
+    Returns list of error strings. Empty list means all valid.
+    """
+    required = REQUIRED_FIELDS[record_type]
+    allowed = set(required) | set(OPTIONAL_FIELDS[record_type])
+    errors: list[str] = []
+
+    for i, rec in enumerate(records):
+        label = rec.get("id", rec.get("message_id", f"record[{i}]"))
+        if not isinstance(rec, dict):
+            errors.append(f"  {label}: not a JSON object")
+            continue
+        for field in required:
+            if field not in rec or rec[field] is None or rec[field] == "":
+                errors.append(f"  {label}: missing required field '{field}'")
+        unknown = set(rec.keys()) - allowed
+        if unknown:
+            errors.append(f"  {label}: unknown fields: {', '.join(sorted(unknown))}")
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
 
 
 class ParseSeedTool(BaseTool):
@@ -56,20 +138,21 @@ class ParseSeedTool(BaseTool):
 class ParseRecordFileTool(BaseTool):
     name = "parse_record_file"
     description = (
-        "Read and parse a typed JSON record file. "
-        "Saves records to the system of record and returns count saved."
+        "Ingest typed JSON records via direct schema-validated insert. "
+        "Accepts a single file or a folder of .json files. "
+        "All records must pass validation before any are inserted."
     )
     input_schema = {
         "type": "object",
         "properties": {
             "file_path": {
                 "type": "string",
-                "description": "Path to the JSON record file",
+                "description": "Path to a JSON file or a folder of JSON files",
             },
             "record_type": {
                 "type": "string",
                 "enum": ["email", "issue", "issue_change"],
-                "description": "Type of records in the file",
+                "description": "Type of records",
             },
         },
         "required": ["file_path", "record_type"],
@@ -81,25 +164,32 @@ class ParseRecordFileTool(BaseTool):
         file_path = kwargs["file_path"]
         record_type = kwargs["record_type"]
 
-        if not os.path.isfile(file_path):
-            return f"Error: file not found: {file_path}"
+        # --- Load ---
+        records = _load_json_records(file_path)
+        if isinstance(records, str):
+            return records  # error message
 
-        with open(file_path) as fh:
-            data = json.load(fh)
+        if not records:
+            return "Error: no records found."
 
-        # Accept a single record dict or a list
-        records = data if isinstance(data, list) else [data]
+        # --- Validate ---
+        errors = _validate_batch(records, record_type)
+        if errors:
+            header = f"Validation failed — {len(errors)} error(s), zero inserts:\n"
+            return header + "\n".join(errors)
 
+        # --- Insert ---
         saved = 0
         skipped = 0
+        record_ids: list[str] = []
 
         for rec in records:
             if record_type == "email":
                 result = store.save_email(
                     source="ingest_expert",
-                    sender=rec.get("sender", ""),
-                    subject=rec.get("subject", ""),
-                    body=rec.get("body", ""),
+                    sender=rec["sender"],
+                    subject=rec["subject"],
+                    body=rec["body"],
                     message_id=rec.get("message_id"),
                     recipient=rec.get("recipient", ""),
                     received_at=rec.get("received_at", ""),
@@ -109,14 +199,15 @@ class ParseRecordFileTool(BaseTool):
                     skipped += 1
                 else:
                     store.classify_record(result, "relevant", reason="ingested via file")
+                    record_ids.append(result)
                     saved += 1
 
             elif record_type == "issue":
                 record_id, is_new = store.save_issue(
                     source="ingest_expert",
-                    linear_id=rec.get("linear_id", rec.get("id", "")),
+                    linear_id=rec["linear_id"],
                     identifier=rec.get("identifier", ""),
-                    title=rec.get("title", ""),
+                    title=rec["title"],
                     description=rec.get("description", ""),
                     status=rec.get("status", ""),
                     priority=rec.get("priority", ""),
@@ -131,29 +222,38 @@ class ParseRecordFileTool(BaseTool):
                 )
                 if is_new:
                     store.classify_record(record_id, "relevant", reason="ingested via file")
+                    record_ids.append(record_id)
                     saved += 1
                 else:
                     skipped += 1
 
             elif record_type == "issue_change":
                 result = store.save_issue_change(
-                    issue_record_id=rec.get("issue_record_id", ""),
-                    field=rec.get("field", ""),
+                    issue_record_id=rec["issue_record_id"],
+                    field=rec["field"],
                     from_value=rec.get("from_value", ""),
                     to_value=rec.get("to_value", ""),
                     linear_history_id=rec.get("linear_history_id"),
                     changed_by=rec.get("changed_by", ""),
-                    changed_at=rec.get("changed_at", ""),
+                    changed_at=rec["changed_at"],
                 )
                 if result is None:
                     skipped += 1
                 else:
-                    saved += 1  # already auto-classified by save_issue_change
+                    record_ids.append(result)
+                    saved += 1
 
         parts = [f"Saved {saved} {record_type} record(s)."]
         if skipped:
             parts.append(f"Skipped {skipped} duplicate(s).")
+        if record_ids:
+            parts.append(f"IDs: {', '.join(record_ids)}")
         return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Factory functions
+# ---------------------------------------------------------------------------
 
 
 def create_ingest_expert(
