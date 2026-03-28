@@ -89,6 +89,9 @@ CREATE TABLE IF NOT EXISTS records (
 CREATE INDEX IF NOT EXISTS idx_records_type ON records(type);
 CREATE INDEX IF NOT EXISTS idx_records_indexed ON records(indexed);
 
+ALTER TABLE records ADD COLUMN IF NOT EXISTS resolution_pending JSONB;
+ALTER TABLE records ADD COLUMN IF NOT EXISTS resolution_status TEXT;
+
 CREATE TABLE IF NOT EXISTS emails (
     record_id TEXT PRIMARY KEY REFERENCES records(id),
     message_id TEXT UNIQUE,
