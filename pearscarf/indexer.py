@@ -299,8 +299,20 @@ class Indexer:
             for c in candidates:
                 c_meta = c.get("metadata", {})
                 if email and c_meta.get("email", "").lower() == email:
+                    if c["name"].lower() != name.lower():
+                        graph.create_identified_as_edge(
+                            c["id"], name, self._current_record_id, self._current_record_type,
+                            confidence="stated",
+                            reasoning=f"Email match: {email}",
+                        )
                     return c["id"]
                 if domain and c_meta.get("domain", "").lower() == domain:
+                    if c["name"].lower() != name.lower():
+                        graph.create_identified_as_edge(
+                            c["id"], name, self._current_record_id, self._current_record_type,
+                            confidence="stated",
+                            reasoning=f"Domain match: {domain}",
+                        )
                     return c["id"]
 
         # Non-exact — call LLM judge
@@ -319,6 +331,11 @@ class Indexer:
             log.write(
                 "indexer", "--", "action",
                 f"Resolution: '{name}' matched to candidate {candidate_id} — {reasoning}",
+            )
+            graph.create_identified_as_edge(
+                candidate_id, name, self._current_record_id, self._current_record_type,
+                confidence="inferred",
+                reasoning=reasoning,
             )
             return candidate_id
 
@@ -495,6 +512,8 @@ class Indexer:
         """Process a single record: extract → resolve → write to Neo4j → embed in Qdrant."""
         record_id = record["id"]
         record_type = record["type"]
+        self._current_record_id = record_id
+        self._current_record_type = record_type
 
         log.write("indexer", "--", "action", f"processing {record_id}")
 
