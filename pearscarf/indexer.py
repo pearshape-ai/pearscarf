@@ -33,6 +33,7 @@ class Indexer:
         self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
         self._system_prompt = load_prompt("extraction")
         self._ingest_system_prompt = load_prompt("ingest_extraction")
+        self._resolution_prompt = load_prompt("entity_resolution")
 
     def _build_content(self, record: dict) -> str:
         """Build the record content string for extraction."""
@@ -231,6 +232,109 @@ class Indexer:
             f"— creating new entity (pre-judge fallback)",
         )
         return graph.create_entity(entity_type, name, metadata)
+
+    def _resolve_entity_with_llm(
+        self,
+        entity: dict,
+        source_context: str,
+        context_packages: list[dict],
+    ) -> dict:
+        """Call the resolution judge LLM to decide: match, new, or ambiguous.
+
+        Args:
+            entity: Extracted entity dict (name, type, metadata).
+            source_context: The record content snippet that produced this entity.
+            context_packages: List of context packages from get_entity_context(),
+                one per candidate.
+
+        Returns:
+            {"decision": "match"|"new"|"ambiguous",
+             "candidate_id": str (if match),
+             "candidate_ids": list[str] (if ambiguous),
+             "reasoning": str}
+        """
+        # Build user message
+        lines = []
+
+        # Section 1: Extracted entity
+        lines.append("## Extracted entity")
+        lines.append(f"Name: {entity.get('name', '')}")
+        lines.append(f"Type: {entity.get('type', '')}")
+        meta = entity.get("metadata", {})
+        if meta:
+            lines.append(f"Metadata: {json.dumps(meta)}")
+
+        # Section 2: Source record context
+        lines.append("")
+        lines.append("## Source record context")
+        lines.append(source_context)
+
+        # Section 3: Candidates
+        lines.append("")
+        lines.append("## Candidates")
+        for i, pkg in enumerate(context_packages):
+            ent = pkg.get("entity", {})
+            lines.append(f"### Candidate {i + 1}")
+            lines.append(f"ID: {ent.get('id', '')}")
+            lines.append(f"Name: {ent.get('name', '')}")
+            lines.append(f"Type: {ent.get('type', '')}")
+            ent_meta = ent.get("metadata", {})
+            if ent_meta:
+                lines.append(f"Metadata: {json.dumps(ent_meta)}")
+
+            facts = pkg.get("facts", [])
+            if facts:
+                lines.append("Facts:")
+                for f in facts:
+                    lines.append(f"  - [{f['category']}] {f['fact']}")
+
+            conns = pkg.get("connections", [])
+            if conns:
+                lines.append("Connections:")
+                for c in conns:
+                    lines.append(f"  - {c['name']} ({c.get('type', '')})")
+
+            lines.append("")
+
+        user_message = "\n".join(lines)
+
+        with trace_span(
+            "indexer_resolve",
+            run_type="llm",
+            metadata={
+                "entity_name": entity.get("name", ""),
+                "entity_type": entity.get("type", ""),
+                "candidate_count": len(context_packages),
+            },
+            inputs={"model": EXTRACTION_MODEL, "prompt_length": len(user_message)},
+        ) as span:
+            response = self._client.messages.create(
+                model=EXTRACTION_MODEL,
+                max_tokens=512,
+                temperature=0.0,
+                system=self._resolution_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            if span:
+                span.end(outputs={
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                })
+
+        raw_text = ""
+        for block in response.content:
+            if block.type == "text":
+                raw_text += block.text
+
+        parsed = self._parse_json_response(raw_text)
+        if parsed is None:
+            log.write(
+                "indexer", "--", "error",
+                f"Resolution JSON parse failed for '{entity.get('name', '')}': {raw_text[:200]}",
+            )
+            return {"decision": "new", "reasoning": "JSON parse failure — defaulting to new"}
+
+        return parsed
 
     def _embed_record(self, record: dict, content: str) -> None:
         """Embed record content into Qdrant."""
