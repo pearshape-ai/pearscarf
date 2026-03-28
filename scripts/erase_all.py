@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pearscarf import vectorstore
-from pearscarf.db import _get_conn, init_db
+from pearscarf.db import _get_conn, close_pool, init_db
 from pearscarf.neo4j_client import close as neo4j_close, get_session
 
 
@@ -47,6 +47,8 @@ def main() -> None:
     total = node_count + vector_count + records_count
     if total == 0:
         print("Nothing to do — all stores are empty.")
+        close_pool()
+        neo4j_close()
         return
 
     print("This will DELETE:")
@@ -58,6 +60,8 @@ def main() -> None:
     answer = input("Continue? [y/N] ").strip().lower()
     if answer != "y":
         print("Aborted.")
+        close_pool()
+        neo4j_close()
         return
 
     # --- Wipe Neo4j ---
@@ -90,6 +94,7 @@ def main() -> None:
 
     print("\nDone. All system state erased.")
 
+    close_pool()
     neo4j_close()
 
 

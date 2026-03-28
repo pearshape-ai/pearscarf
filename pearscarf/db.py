@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -32,6 +33,7 @@ def _get_pool() -> ConnectionPool:
             max_size=10,
             kwargs={"row_factory": dict_row, "autocommit": False},
         )
+        atexit.register(close_pool)
     return _pool
 
 
@@ -40,6 +42,14 @@ def _get_conn():
     """Get a connection from the pool. Use as context manager."""
     with _get_pool().connection() as conn:
         yield conn
+
+
+def close_pool() -> None:
+    """Explicitly close the connection pool. Prevents PythonFinalizationError on exit."""
+    global _pool
+    if _pool is not None:
+        _pool.close()
+        _pool = None
 
 
 _SCHEMA = """
