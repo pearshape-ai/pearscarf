@@ -442,6 +442,49 @@ def create_fact_edge(
         return record["rid"] if record else ""
 
 
+def create_identified_as_edge(
+    entity_id: str,
+    surface_form: str,
+    source_record: str,
+    source_type: str,
+    confidence: str,
+    reasoning: str = "",
+) -> str:
+    """Write an IDENTIFIED_AS self-edge recording a resolved surface form.
+
+    Self-edge: entity -> entity. Records that this entity was identified by
+    the given surface_form in the source record.
+
+    confidence: 'stated' (exact email/domain match), 'inferred' (LLM match),
+                'confirmed' (HIL confirmation).
+    """
+    ts = _now()
+    props = {
+        "fact": f"{surface_form} identified as this entity",
+        "surface_form": surface_form,
+        "category": "IDENTIFIED_AS",
+        "confidence": confidence,
+        "source_record": source_record,
+        "source_type": source_type,
+        "reasoning": reasoning,
+        "resolved_at": ts,
+        "created_at": ts,
+        "invalid_at": None,
+    }
+
+    with get_session() as session:
+        result = session.run(
+            "MATCH (a) WHERE elementId(a) = $eid "
+            "CALL apoc.create.relationship(a, 'IDENTIFIED_AS', $props, a) "
+            "YIELD rel "
+            "RETURN elementId(rel) AS rid",
+            eid=entity_id,
+            props=props,
+        )
+        record = result.single()
+        return record["rid"] if record else ""
+
+
 def invalidate_fact_edge(edge_id: str, invalid_at: str | None = None) -> None:
     """Set invalid_at on a fact-edge. Preserves the edge — history is kept."""
     ts = invalid_at or _now()
