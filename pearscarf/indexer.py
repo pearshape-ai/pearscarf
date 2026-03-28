@@ -145,6 +145,76 @@ class Indexer:
         # Fallback: use raw content from records table
         return record.get("raw") or "(no content)"
 
+    def _build_source_context(self, record: dict) -> str:
+        """Build a short context string from the record for the resolution judge."""
+        record_type = record.get("type", "")
+        record_id = record["id"]
+
+        if record_type == "email":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT sender, recipient, subject, body FROM emails WHERE record_id = %s",
+                    (record_id,),
+                ).fetchone()
+            if row:
+                parts = []
+                if row["sender"]:
+                    parts.append(f"From: {row['sender']}")
+                if row["recipient"]:
+                    parts.append(f"To: {row['recipient']}")
+                if row["subject"]:
+                    parts.append(f"Subject: {row['subject']}")
+                if row["body"]:
+                    parts.append(f"Body: {row['body'][:300]}")
+                return "\n".join(parts)
+
+        elif record_type == "issue":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT identifier, title, assignee, project FROM issues WHERE record_id = %s",
+                    (record_id,),
+                ).fetchone()
+            if row:
+                parts = []
+                if row["identifier"]:
+                    parts.append(f"Issue: {row['identifier']}")
+                if row["title"]:
+                    parts.append(f"Title: {row['title']}")
+                if row["assignee"]:
+                    parts.append(f"Assignee: {row['assignee']}")
+                if row["project"]:
+                    parts.append(f"Project: {row['project']}")
+                return "\n".join(parts)
+
+        elif record_type == "issue_change":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT ic.field, ic.from_value, ic.to_value, ic.changed_by, "
+                    "i.identifier, i.title "
+                    "FROM issue_changes ic "
+                    "JOIN issues i ON ic.issue_record_id = i.record_id "
+                    "WHERE ic.record_id = %s",
+                    (record_id,),
+                ).fetchone()
+            if row:
+                parts = []
+                if row["identifier"]:
+                    parts.append(f"Issue: {row['identifier']} — {row['title'] or ''}")
+                parts.append(f"Field changed: {row['field']}")
+                if row["from_value"]:
+                    parts.append(f"From: {row['from_value']}")
+                if row["to_value"]:
+                    parts.append(f"To: {row['to_value']}")
+                if row["changed_by"]:
+                    parts.append(f"Changed by: {row['changed_by']}")
+                return "\n".join(parts)
+
+        elif record_type == "ingest":
+            raw = record.get("raw", "")
+            return raw[:500] if raw else "(seed file)"
+
+        return "(no context)"
+
     def _parse_json_response(self, text: str) -> dict | None:
         """Parse JSON from an LLM response, handling ```json fencing."""
         text = text.strip()
@@ -199,8 +269,11 @@ class Indexer:
 
         return parsed
 
-    def _resolve_entity(self, entity: dict) -> str:
-        """Resolve an extracted entity against the graph. Returns element ID."""
+    def _resolve_entity(self, entity: dict, source_context: str) -> str | None:
+        """Resolve an extracted entity against the graph.
+
+        Returns element ID, or None if ambiguous.
+        """
         entity_type = entity.get("type", "")
         name = entity.get("name", "")
         metadata = entity.get("metadata", {})
@@ -210,26 +283,63 @@ class Indexer:
 
         candidates = graph.find_entity_candidates(entity_type, name, metadata)
 
+        # No candidates — create new entity
         if not candidates:
-            # No match — create new entity
             return graph.create_entity(entity_type, name, metadata)
 
-        # Exact name match — use it directly (fast path)
+        # Exact name match — fast path, no LLM
         for c in candidates:
             if c["name"].lower() == name.lower():
                 return c["id"]
 
-        # Non-exact matches only — build context packages for future judge
+        # Exact email/domain match — deterministic, no LLM
+        email = metadata.get("email", "").lower()
+        domain = metadata.get("domain", "").lower()
+        if email or domain:
+            for c in candidates:
+                c_meta = c.get("metadata", {})
+                if email and c_meta.get("email", "").lower() == email:
+                    return c["id"]
+                if domain and c_meta.get("domain", "").lower() == domain:
+                    return c["id"]
+
+        # Non-exact — call LLM judge
         context_packages = [
             graph.get_entity_context(c["id"])
             for c in candidates
         ]
+
+        decision = self._resolve_entity_with_llm(entity, source_context, context_packages)
+
+        verdict = decision.get("decision", "new")
+        reasoning = decision.get("reasoning", "")
+
+        if verdict == "match":
+            candidate_id = decision.get("candidate_id", "")
+            log.write(
+                "indexer", "--", "action",
+                f"Resolution: '{name}' matched to candidate {candidate_id} — {reasoning}",
+            )
+            return candidate_id
+
+        elif verdict == "new":
+            log.write(
+                "indexer", "--", "action",
+                f"Resolution: '{name}' is new entity — {reasoning}",
+            )
+            return graph.create_entity(entity_type, name, metadata)
+
+        elif verdict == "ambiguous":
+            log.write(
+                "indexer", "--", "action",
+                f"Resolution: '{name}' is ambiguous — {reasoning}",
+            )
+            return None  # caller handles ambiguity
+
+        # Unknown verdict — fallback to new
         log.write(
-            "indexer", "--", "debug",
-            f"Candidates for '{name}' ({entity_type}): "
-            f"{[c['name'] for c in candidates]} "
-            f"with {sum(len(p['facts']) for p in context_packages)} total facts "
-            f"— creating new entity (pre-judge fallback)",
+            "indexer", "--", "warning",
+            f"Resolution: unknown verdict '{verdict}' for '{name}' — creating new entity",
         )
         return graph.create_entity(entity_type, name, metadata)
 
@@ -399,15 +509,39 @@ class Indexer:
             self._mark_indexed(record_id)
             return
 
+        # Build source context for resolution judge
+        source_context = self._build_source_context(record)
+
         # Step 2: Resolve entities — build name → element ID map
         entity_id_map: dict[str, str] = {}
+        unresolved: list[dict] = []
+
         for entity in extracted.get("entities", []):
             name = entity.get("name", "")
             if not name:
                 continue
-            eid = self._resolve_entity(entity)
-            if eid:
+            eid = self._resolve_entity(entity, source_context)
+            if eid is None:
+                # Ambiguous — collect for pending state
+                candidates = graph.find_entity_candidates(
+                    entity.get("type", ""), name, entity.get("metadata", {})
+                )
+                unresolved.append({
+                    "name": name,
+                    "type": entity.get("type", ""),
+                    "candidate_ids": [c["id"] for c in candidates],
+                })
+            elif eid:
                 entity_id_map[name] = eid
+
+        # If any entities are unresolved, mark record as pending
+        if unresolved:
+            self._set_resolution_pending(record_id, unresolved)
+            log.write(
+                "indexer", "--", "action",
+                f"{record_id}: {len(unresolved)} unresolved entity(ies) — "
+                f"resolution pending, skipping fact writes for unresolved entities",
+            )
 
         # For issue_change records, use changed_at as the temporal valid_at
         valid_at = None
@@ -484,12 +618,24 @@ class Indexer:
             f"indexed {record_id}: {entity_count} entities, {fact_count} facts",
         )
 
-        self._mark_indexed(record_id)
+        # Only mark indexed if all entities resolved
+        if not unresolved:
+            self._mark_indexed(record_id)
 
     def _mark_indexed(self, record_id: str) -> None:
         with _get_conn() as conn:
             conn.execute(
                 "UPDATE records SET indexed = TRUE WHERE id = %s", (record_id,)
+            )
+            conn.commit()
+
+    def _set_resolution_pending(self, record_id: str, unresolved: list[dict]) -> None:
+        """Store ambiguity state on the record."""
+        with _get_conn() as conn:
+            conn.execute(
+                "UPDATE records SET resolution_pending = %s, resolution_status = 'pending' "
+                "WHERE id = %s",
+                (json.dumps(unresolved), record_id),
             )
             conn.commit()
 
@@ -503,6 +649,7 @@ class Indexer:
                         "SELECT id, type, source, created_at, raw, human_context "
                         "FROM records "
                         "WHERE indexed = FALSE AND classification = 'relevant' "
+                        "AND (resolution_status IS NULL OR resolution_status != 'pending') "
                         "ORDER BY created_at"
                     ).fetchall()
 
