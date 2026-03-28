@@ -280,6 +280,48 @@ def find_entity_candidates(
     return candidates
 
 
+def get_entity_context(entity_id: str, max_facts: int = 10, max_connections: int = 10) -> dict:
+    """Build a context package for an entity — facts and 1-hop connections.
+
+    Used by the resolution judge to distinguish between candidate entities.
+    Only current (non-invalidated) facts are included.
+    """
+    entity = get_entity(entity_id)
+    if not entity:
+        return {"entity": {}, "facts": [], "connections": []}
+
+    # Facts — current only, limited, sorted by valid_at descending
+    all_facts = get_facts_for_entity(entity_id, include_invalid=False)
+    all_facts.sort(key=lambda f: f.get("valid_at", ""), reverse=True)
+    facts = [
+        {
+            "category": f["category"],
+            "fact": f["fact"],
+            "other_name": f["other_name"],
+            "confidence": f["confidence"],
+        }
+        for f in all_facts[:max_facts]
+    ]
+
+    # Connections — 1-hop traversal, current edges only
+    traversal = traverse_fact_edges(entity_id, max_depth=1, current_only=True)
+    connections = []
+    seen_names: set[str] = set()
+    for node in traversal.get("nodes", []):
+        name = node.get("name", "")
+        if name and name not in seen_names and node.get("type") != "day":
+            seen_names.add(name)
+            connections.append({"name": name, "type": node.get("type", "")})
+        if len(connections) >= max_connections:
+            break
+
+    return {
+        "entity": entity,
+        "facts": facts,
+        "connections": connections,
+    }
+
+
 def get_entity(entity_id: str) -> dict | None:
     """Look up an entity by element ID."""
     with get_session() as session:
