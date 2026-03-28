@@ -218,12 +218,17 @@ class Indexer:
             if c["name"].lower() == name.lower():
                 return c["id"]
 
-        # Non-exact matches only — temporary fallback: create new entity
-        # 1.12.3 will add LLM judge to handle these candidates
+        # Non-exact matches only — build context packages for future judge
+        context_packages = [
+            graph.get_entity_context(c["id"])
+            for c in candidates
+        ]
         log.write(
             "indexer", "--", "debug",
             f"Candidates for '{name}' ({entity_type}): "
-            f"{[c['name'] for c in candidates]} — creating new entity (pre-judge fallback)",
+            f"{[c['name'] for c in candidates]} "
+            f"with {sum(len(p['facts']) for p in context_packages)} total facts "
+            f"— creating new entity (pre-judge fallback)",
         )
         return graph.create_entity(entity_type, name, metadata)
 
