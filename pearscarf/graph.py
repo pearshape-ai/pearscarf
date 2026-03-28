@@ -169,6 +169,117 @@ def create_entity(entity_type: str, name: str, metadata: dict | None = None) -> 
         return record["eid"]
 
 
+def _label_to_type(labels: list[str]) -> str:
+    """Convert Neo4j labels list to entity type string."""
+    for label in labels:
+        lower = label.lower()
+        if lower in ("person", "company", "project", "event"):
+            return lower
+    return ""
+
+
+def _find_by_identified_as(name: str) -> list[dict]:
+    """Find entities that have an IDENTIFIED_AS edge where surface_form matches name."""
+    with get_session() as session:
+        result = session.run(
+            "MATCH (n)-[r:IDENTIFIED_AS]->(m) "
+            "WHERE toLower(r.fact) CONTAINS toLower($name) "
+            "   OR toLower(coalesce(r.surface_form, '')) = toLower($name) "
+            "RETURN n, elementId(n) AS eid, labels(n) AS lbls",
+            name=name,
+        )
+        entities = []
+        for record in result:
+            node = record["n"]
+            etype = _label_to_type(record["lbls"])
+            entities.append({
+                "id": record["eid"],
+                "type": etype,
+                "name": node.get("name", ""),
+                "metadata": {
+                    k: v for k, v in dict(node).items()
+                    if k not in ("name", "created_at")
+                },
+            })
+        return entities
+
+
+def find_entity_candidates(
+    entity_type: str,
+    name: str,
+    metadata: dict | None = None,
+) -> list[dict]:
+    """Broad candidate retrieval for entity resolution.
+
+    Searches multiple paths in order of confidence. Deduplicates by element ID.
+    Returns list of candidate dicts: {"id", "type", "name", "metadata"}.
+    Empty list if no candidates found.
+    """
+    if not name:
+        return []
+
+    metadata = metadata or {}
+    seen: set[str] = set()
+    candidates: list[dict] = []
+
+    def _add(entity: dict) -> None:
+        eid = entity["id"]
+        if eid not in seen:
+            seen.add(eid)
+            candidates.append(entity)
+
+    label = _LABELS.get(entity_type, entity_type.capitalize())
+
+    # 1. Exact name match
+    existing = find_entity(entity_type, name)
+    if existing:
+        _add(existing)
+
+    # 2. Email match for persons
+    if entity_type == "person" and metadata.get("email"):
+        existing = find_entity(entity_type, name, metadata_match=metadata["email"])
+        if existing:
+            _add(existing)
+
+    # 3. Domain match for companies
+    if entity_type == "company" and metadata.get("domain"):
+        existing = find_entity(entity_type, name, metadata_match=metadata["domain"])
+        if existing:
+            _add(existing)
+
+    # 4. First-name prefix match for persons (single token names like "David", "Jim")
+    if entity_type == "person" and " " not in name.strip():
+        with get_session() as session:
+            result = session.run(
+                f"MATCH (n:{label}) "
+                "WHERE toLower(n.name) STARTS WITH toLower($prefix) "
+                "RETURN n, elementId(n) AS eid "
+                "LIMIT 5",
+                prefix=name.strip(),
+            )
+            for record in result:
+                node = record["n"]
+                _add({
+                    "id": record["eid"],
+                    "type": entity_type,
+                    "name": node.get("name", ""),
+                    "metadata": {
+                        k: v for k, v in dict(node).items()
+                        if k not in ("name", "created_at")
+                    },
+                })
+
+    # 5. Substring name match via search_entities()
+    for entity in search_entities(name, entity_type=entity_type, limit=5):
+        _add(entity)
+
+    # 6. IDENTIFIED_AS edge match
+    for entity in _find_by_identified_as(name):
+        _add(entity)
+
+    return candidates
+
+
 def get_entity(entity_id: str) -> dict | None:
     """Look up an entity by element ID."""
     with get_session() as session:
@@ -233,12 +344,7 @@ def search_entities(
         entities = []
         for record in result:
             node = record["n"]
-            labels = record["lbls"]
-            etype = "unknown"
-            for ext_type, lbl in _LABELS.items():
-                if lbl in labels:
-                    etype = ext_type
-                    break
+            etype = _label_to_type(record["lbls"])
             entities.append({
                 "id": record["eid"],
                 "type": etype,

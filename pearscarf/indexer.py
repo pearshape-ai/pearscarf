@@ -207,17 +207,24 @@ class Indexer:
         if not name:
             return ""
 
-        # Check for match by email (person) or domain (company)
-        metadata_match = None
-        if entity_type == "person":
-            metadata_match = metadata.get("email")
-        elif entity_type == "company":
-            metadata_match = metadata.get("domain")
+        candidates = graph.find_entity_candidates(entity_type, name, metadata)
 
-        existing = graph.find_entity(entity_type, name, metadata_match)
-        if existing:
-            return existing["id"]
+        if not candidates:
+            # No match — create new entity
+            return graph.create_entity(entity_type, name, metadata)
 
+        # Exact name match — use it directly (fast path)
+        for c in candidates:
+            if c["name"].lower() == name.lower():
+                return c["id"]
+
+        # Non-exact matches only — temporary fallback: create new entity
+        # 1.12.3 will add LLM judge to handle these candidates
+        log.write(
+            "indexer", "--", "debug",
+            f"Candidates for '{name}' ({entity_type}): "
+            f"{[c['name'] for c in candidates]} — creating new entity (pre-judge fallback)",
+        )
         return graph.create_entity(entity_type, name, metadata)
 
     def _embed_record(self, record: dict, content: str) -> None:
