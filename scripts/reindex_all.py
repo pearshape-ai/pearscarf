@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pearscarf import vectorstore
-from pearscarf.db import _get_conn, init_db
+from pearscarf.db import _get_conn, close_pool, init_db
 from pearscarf.neo4j_client import close as neo4j_close, get_session
 
 
@@ -44,6 +44,8 @@ def main() -> None:
 
     if node_count == 0 and vector_count == 0 and record_count == 0:
         print("Nothing to do — graph and vectors are empty, no indexed records.")
+        close_pool()
+        neo4j_close()
         return
 
     print("This will:")
@@ -55,6 +57,8 @@ def main() -> None:
     answer = input("Continue? [y/N] ").strip().lower()
     if answer != "y":
         print("Aborted.")
+        close_pool()
+        neo4j_close()
         return
 
     # Wipe Neo4j
@@ -90,6 +94,7 @@ def main() -> None:
 
     print("\nDone. The Indexer will re-process these records on its next poll cycle.")
 
+    close_pool()
     neo4j_close()
 
 

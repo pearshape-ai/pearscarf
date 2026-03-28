@@ -363,7 +363,7 @@ def eval_cmd(dataset: str, verbose: bool) -> None:
 def erase_all() -> None:
     """Wipe all system state: Postgres records, Neo4j graph, Qdrant vectors."""
     from pearscarf import vectorstore
-    from pearscarf.db import _get_conn, init_db
+    from pearscarf.db import _get_conn, close_pool, init_db
     from pearscarf.neo4j_client import close as neo4j_close, get_session
 
     init_db()
@@ -425,6 +425,7 @@ def erase_all() -> None:
     click.echo(f"Deleted {records_count} records from Postgres.")
 
     click.echo("\nDone. All system state erased.")
+    close_pool()
     neo4j_close()
 
 

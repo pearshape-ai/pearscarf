@@ -614,12 +614,12 @@ def traverse_fact_edges(
             )
         where_clause = "WHERE " + " AND ".join(where_parts)
 
-        params: dict = {"eid": entity_id, "depth": max_depth}
+        params: dict = {"eid": entity_id}
         if categories:
             params["cats"] = [c.upper() for c in categories]
 
         result = session.run(
-            f"MATCH path = (start)-[*1..$depth]-(connected) "
+            f"MATCH path = (start)-[*1..{max_depth}]-(connected) "
             f"{where_clause} "
             "UNWIND relationships(path) AS r "
             "WITH start, connected, r, startNode(r) AS sn, endNode(r) AS en "
