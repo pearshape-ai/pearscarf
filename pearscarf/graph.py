@@ -450,39 +450,64 @@ def create_identified_as_edge(
     confidence: str,
     reasoning: str = "",
 ) -> str:
-    """Write an IDENTIFIED_AS self-edge recording a resolved surface form.
+    """Write or update an IDENTIFIED_AS self-edge for a resolved surface form.
 
-    Self-edge: entity -> entity. Records that this entity was identified by
-    the given surface_form in the source record.
-
-    confidence: 'stated' (exact email/domain match), 'inferred' (LLM match),
-                'confirmed' (HIL confirmation).
+    MERGE on (entity, surface_form) — one edge per unique alias.
+    On first creation: sets all properties.
+    On subsequent match: updates resolved_at, appends source_record to source_records.
     """
     ts = _now()
-    props = {
-        "fact": f"{surface_form} identified as this entity",
-        "surface_form": surface_form,
-        "category": "IDENTIFIED_AS",
-        "confidence": confidence,
-        "source_record": source_record,
-        "source_type": source_type,
-        "reasoning": reasoning,
-        "resolved_at": ts,
-        "created_at": ts,
-        "invalid_at": None,
-    }
 
     with get_session() as session:
+        # Try to find existing edge with same surface_form
         result = session.run(
-            "MATCH (a) WHERE elementId(a) = $eid "
-            "CALL apoc.create.relationship(a, 'IDENTIFIED_AS', $props, a) "
-            "YIELD rel "
-            "RETURN elementId(rel) AS rid",
+            "MATCH (a)-[r:IDENTIFIED_AS]->(a) "
+            "WHERE elementId(a) = $eid AND r.surface_form = $sf "
+            "RETURN elementId(r) AS rid, r.source_records AS existing_records",
             eid=entity_id,
-            props=props,
+            sf=surface_form,
         )
-        record = result.single()
-        return record["rid"] if record else ""
+        existing = result.single()
+
+        if existing:
+            # Update existing edge
+            existing_records = existing["existing_records"] or []
+            if source_record not in existing_records:
+                existing_records.append(source_record)
+            session.run(
+                "MATCH (a)-[r:IDENTIFIED_AS]->(a) "
+                "WHERE elementId(a) = $eid AND r.surface_form = $sf "
+                "SET r.resolved_at = $ts, r.source_records = $records",
+                eid=entity_id,
+                sf=surface_form,
+                ts=ts,
+                records=existing_records,
+            )
+            return existing["rid"]
+        else:
+            # Create new edge
+            result = session.run(
+                "MATCH (a) WHERE elementId(a) = $eid "
+                "CALL apoc.create.relationship(a, 'IDENTIFIED_AS', $props, a) "
+                "YIELD rel "
+                "RETURN elementId(rel) AS rid",
+                eid=entity_id,
+                props={
+                    "fact": f"{surface_form} identified as this entity",
+                    "surface_form": surface_form,
+                    "category": "IDENTIFIED_AS",
+                    "confidence": confidence,
+                    "source_record": source_record,
+                    "source_records": [source_record],
+                    "source_type": source_type,
+                    "reasoning": reasoning,
+                    "resolved_at": ts,
+                    "created_at": ts,
+                    "invalid_at": None,
+                },
+            )
+            record = result.single()
+            return record["rid"] if record else ""
 
 
 def invalidate_fact_edge(edge_id: str, invalid_at: str | None = None) -> None:
