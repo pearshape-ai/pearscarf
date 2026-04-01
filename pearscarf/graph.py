@@ -19,18 +19,26 @@ _LABELS = {
     "event": "Event",
 }
 
-# Fact-edge categories — relationship types used for the new fact-as-edge model.
-# Structural (stable), Activity (time-bound), Claims (business facts), Meta.
+# Edge labels → valid fact_type values per label.
 FACT_CATEGORIES = {
-    # Structural
-    "WORKS_AT", "FOUNDED", "MANAGES", "PART_OF", "MEMBER_OF",
-    # Activity
-    "COMMUNICATED", "MENTIONED_IN", "STATUS_CHANGED",
-    # Claims
-    "COMMITTED_TO", "DECIDED", "BLOCKED_BY", "EVALUATED",
-    # Meta
-    "IDENTIFIED_AS",
+    "AFFILIATED": [
+        "employee", "contractor", "advisor", "board_member", "founder",
+        "investor", "legal_counsel", "consultant", "owner", "contributor",
+        "reviewer", "stakeholder", "subsidiary", "sub_project", "other",
+    ],
+    "ASSERTED": [
+        "commitment", "promise", "decision", "evaluation", "opinion",
+        "concern", "blocker", "request", "update", "risk", "goal",
+        "reference", "other",
+    ],
+    "TRANSITIONED": [
+        "status_change", "stage_change", "role_change", "ownership_change",
+        "resolution", "completion", "cancellation", "other",
+    ],
 }
+
+# System-only edge type — not from extraction.
+IDENTIFIED_AS = "IDENTIFIED_AS"
 
 
 def _now() -> str:
@@ -132,7 +140,6 @@ def create_entity(entity_type: str, name: str, metadata: dict | None = None) -> 
     with get_session() as session:
         # Build MERGE key based on entity type
         if entity_type == "person" and props.get("email"):
-            # Merge on name + email for persons
             result = session.run(
                 f"MERGE (n:{label} {{name: $name, email: $email}}) "
                 "ON CREATE SET n += $props "
@@ -284,18 +291,19 @@ def get_entity_context(entity_id: str, max_facts: int = 10, max_connections: int
     """Build a context package for an entity — facts and 1-hop connections.
 
     Used by the resolution judge to distinguish between candidate entities.
-    Only current (non-invalidated) facts are included.
+    Only current (non-stale) facts are included.
     """
     entity = get_entity(entity_id)
     if not entity:
         return {"entity": {}, "facts": [], "connections": []}
 
-    # Facts — current only, limited, sorted by valid_at descending
-    all_facts = get_facts_for_entity(entity_id, include_invalid=False)
-    all_facts.sort(key=lambda f: f.get("valid_at", ""), reverse=True)
+    # Facts — current only, limited, sorted by source_at descending
+    all_facts = get_facts_for_entity(entity_id, include_stale=False)
+    all_facts.sort(key=lambda f: f.get("source_at", ""), reverse=True)
     facts = [
         {
-            "category": f["category"],
+            "edge_label": f["edge_label"],
+            "fact_type": f["fact_type"],
             "fact": f["fact"],
             "other_name": f["other_name"],
             "confidence": f["confidence"],
@@ -335,12 +343,7 @@ def get_entity(entity_id: str) -> dict | None:
 
         node = record["n"]
         labels = record["lbls"]
-        # Derive type from label
-        entity_type = "unknown"
-        for ext_type, lbl in _LABELS.items():
-            if lbl in labels:
-                entity_type = ext_type
-                break
+        entity_type = _label_to_type(labels) or "unknown"
 
         return {
             "id": record["eid"],
@@ -402,28 +405,36 @@ def search_entities(
 def create_fact_edge(
     from_node_id: str,
     to_node_id: str,
-    category: str,
+    edge_label: str,
+    fact_type: str,
     fact: str,
     confidence: str,
     source_record: str,
     source_type: str,
-    valid_at: str | None = None,
+    source_at: str | None = None,
+    valid_until: str | None = None,
 ) -> str:
-    """Create a fact-edge between two nodes (entity or Day). Returns the edge element ID.
+    """Create a fact-edge between two nodes. Returns the edge element ID.
 
-    category must be one of FACT_CATEGORIES (e.g. WORKS_AT, MENTIONED_IN).
+    edge_label: AFFILIATED, ASSERTED, or TRANSITIONED (used as Neo4j relationship type).
+    fact_type: specific type within the label (e.g. employee, commitment, status_change).
+    source_at: event time — when the fact became true in the world.
+    valid_until: optional deadline/expiry.
     """
     ts = _now()
-    rel_type = category.upper()
     props = {
         "fact": fact,
-        "category": rel_type,
+        "fact_type": fact_type,
         "confidence": confidence,
         "source_record": source_record,
+        "source_records": [source_record],
         "source_type": source_type,
-        "valid_at": valid_at or ts,
+        "source_at": source_at or ts,
+        "recorded_at": ts,
+        "stale": False,
+        "replaced_by": None,
+        "valid_until": valid_until,
         "created_at": ts,
-        "invalid_at": None,
     }
 
     with get_session() as session:
@@ -435,11 +446,46 @@ def create_fact_edge(
             "RETURN elementId(rel) AS rid",
             from_id=from_node_id,
             to_id=to_node_id,
-            rel_type=rel_type,
+            rel_type=edge_label.upper(),
             props=props,
         )
         record = result.single()
         return record["rid"] if record else ""
+
+
+def find_existing_fact_edge(
+    from_id: str,
+    edge_label: str,
+    fact_type: str,
+    to_id: str,
+) -> dict | None:
+    """Find an active (non-stale) fact-edge between two nodes.
+
+    Returns {"id", "fact", "source_at", "stale"} or None.
+    """
+    with get_session() as session:
+        result = session.run(
+            "MATCH (a)-[r]->(b) "
+            "WHERE elementId(a) = $from_id AND elementId(b) = $to_id "
+            "AND type(r) = $label AND r.fact_type = $ft "
+            "AND (r.stale IS NULL OR r.stale = false) AND r.replaced_by IS NULL "
+            "RETURN elementId(r) AS rid, r.fact AS fact, "
+            "r.source_at AS source_at, r.stale AS stale "
+            "LIMIT 1",
+            from_id=from_id,
+            to_id=to_id,
+            label=edge_label.upper(),
+            ft=fact_type,
+        )
+        record = result.single()
+        if record is None:
+            return None
+        return {
+            "id": record["rid"],
+            "fact": record["fact"] or "",
+            "source_at": record["source_at"] or "",
+            "stale": record["stale"] or False,
+        }
 
 
 def create_identified_as_edge(
@@ -510,36 +556,38 @@ def create_identified_as_edge(
             return record["rid"] if record else ""
 
 
-def invalidate_fact_edge(edge_id: str, invalid_at: str | None = None) -> None:
-    """Set invalid_at on a fact-edge. Preserves the edge — history is kept."""
-    ts = invalid_at or _now()
+def mark_fact_stale(edge_id: str, replaced_by_id: str | None = None) -> None:
+    """Mark a fact-edge as stale. Preserves the edge — history is kept."""
     with get_session() as session:
         session.run(
             "MATCH ()-[r]->() WHERE elementId(r) = $rid "
-            "SET r.invalid_at = $ts",
+            "SET r.stale = true, r.replaced_by = $rby",
             rid=edge_id,
-            ts=ts,
+            rby=replaced_by_id,
         )
 
 
 def get_facts_for_entity(
-    entity_id: str, include_invalid: bool = False,
+    entity_id: str, include_stale: bool = False,
 ) -> list[dict]:
     """Get all fact-edges connected to an entity (as source or target).
 
-    By default only current facts (invalid_at IS NULL).
+    By default only current facts (stale = false).
     """
     with get_session() as session:
         where = "WHERE elementId(n) = $eid AND r.fact IS NOT NULL"
-        if not include_invalid:
-            where += " AND r.invalid_at IS NULL"
+        if not include_stale:
+            where += " AND (r.stale IS NULL OR r.stale = false)"
 
         result = session.run(
             f"MATCH (n)-[r]-(other) {where} "
-            "RETURN elementId(r) AS rid, type(r) AS category, "
+            "RETURN elementId(r) AS rid, type(r) AS edge_label, "
+            "r.fact_type AS fact_type, "
             "r.fact AS fact, r.confidence AS confidence, "
             "r.source_record AS source_record, r.source_type AS source_type, "
-            "r.valid_at AS valid_at, r.invalid_at AS invalid_at, r.created_at AS created_at, "
+            "r.source_at AS source_at, r.recorded_at AS recorded_at, "
+            "r.stale AS stale, r.replaced_by AS replaced_by, "
+            "r.valid_until AS valid_until, r.created_at AS created_at, "
             "elementId(other) AS other_id, other.name AS other_name, "
             "other.date AS other_date, labels(other) AS other_labels",
             eid=entity_id,
@@ -554,13 +602,17 @@ def get_facts_for_entity(
                 other_display = record["other_name"] or "?"
             facts.append({
                 "id": record["rid"],
-                "category": record["category"],
+                "edge_label": record["edge_label"],
+                "fact_type": record["fact_type"] or "",
                 "fact": record["fact"],
                 "confidence": record["confidence"] or "",
                 "source_record": record["source_record"] or "",
                 "source_type": record["source_type"] or "",
-                "valid_at": record["valid_at"] or "",
-                "invalid_at": record["invalid_at"],
+                "source_at": record["source_at"] or "",
+                "recorded_at": record["recorded_at"] or "",
+                "stale": record["stale"] or False,
+                "replaced_by": record["replaced_by"],
+                "valid_until": record["valid_until"],
                 "created_at": record["created_at"] or "",
                 "other_id": record["other_id"],
                 "other_name": other_display,
@@ -572,16 +624,19 @@ def get_facts_for_day(date_str: str) -> list[dict]:
     """Get all fact-edges connected to a Day node.
 
     Only returns single-entity facts anchored to this day.
-    Two-entity facts that happened on this day are found via valid_at filtering.
+    Two-entity facts that happened on this day are found via source_at filtering.
     """
     with get_session() as session:
         result = session.run(
             "MATCH (entity)-[r]-(d:Day {date: $date}) "
             "WHERE r.fact IS NOT NULL "
-            "RETURN elementId(r) AS rid, type(r) AS category, "
+            "RETURN elementId(r) AS rid, type(r) AS edge_label, "
+            "r.fact_type AS fact_type, "
             "r.fact AS fact, r.confidence AS confidence, "
             "r.source_record AS source_record, r.source_type AS source_type, "
-            "r.valid_at AS valid_at, r.invalid_at AS invalid_at, r.created_at AS created_at, "
+            "r.source_at AS source_at, r.recorded_at AS recorded_at, "
+            "r.stale AS stale, r.replaced_by AS replaced_by, "
+            "r.valid_until AS valid_until, r.created_at AS created_at, "
             "elementId(entity) AS entity_id, entity.name AS entity_name, "
             "labels(entity) AS entity_labels",
             date=date_str,
@@ -589,21 +644,20 @@ def get_facts_for_day(date_str: str) -> list[dict]:
 
         facts = []
         for record in result:
-            labels = record["entity_labels"] or []
-            etype = "unknown"
-            for ext_type, lbl in _LABELS.items():
-                if lbl in labels:
-                    etype = ext_type
-                    break
+            etype = _label_to_type(record["entity_labels"] or [])
             facts.append({
                 "id": record["rid"],
-                "category": record["category"],
+                "edge_label": record["edge_label"],
+                "fact_type": record["fact_type"] or "",
                 "fact": record["fact"],
                 "confidence": record["confidence"] or "",
                 "source_record": record["source_record"] or "",
                 "source_type": record["source_type"] or "",
-                "valid_at": record["valid_at"] or "",
-                "invalid_at": record["invalid_at"],
+                "source_at": record["source_at"] or "",
+                "recorded_at": record["recorded_at"] or "",
+                "stale": record["stale"] or False,
+                "replaced_by": record["replaced_by"],
+                "valid_until": record["valid_until"],
                 "created_at": record["created_at"] or "",
                 "entity_id": record["entity_id"],
                 "entity_name": record["entity_name"] or "?",
@@ -619,29 +673,29 @@ def traverse_fact_edges(
     entity_id: str,
     max_depth: int = 3,
     current_only: bool = True,
-    categories: list[str] | None = None,
+    edge_labels: list[str] | None = None,
 ) -> dict:
     """Walk fact-edges from an entity up to max_depth hops.
 
     Returns connected entities/Day nodes and the fact-edges connecting them.
-    When current_only is True (default), only traverses edges where invalid_at IS NULL.
-    Optional categories filter limits traversal to specific fact categories.
+    When current_only is True (default), only traverses non-stale edges.
+    Optional edge_labels filter limits traversal to AFFILIATED/ASSERTED/TRANSITIONED.
     """
     with get_session() as session:
         where_parts = ["elementId(start) = $eid"]
         if current_only:
             where_parts.append(
-                "ALL(r IN relationships(path) WHERE r.invalid_at IS NULL)"
+                "ALL(r IN relationships(path) WHERE r.stale IS NULL OR r.stale = false)"
             )
-        if categories:
+        if edge_labels:
             where_parts.append(
-                "ALL(r IN relationships(path) WHERE type(r) IN $cats)"
+                "ALL(r IN relationships(path) WHERE type(r) IN $labels)"
             )
         where_clause = "WHERE " + " AND ".join(where_parts)
 
         params: dict = {"eid": entity_id}
-        if categories:
-            params["cats"] = [c.upper() for c in categories]
+        if edge_labels:
+            params["labels"] = [l.upper() for l in edge_labels]
 
         result = session.run(
             f"MATCH path = (start)-[*1..{max_depth}]-(connected) "
@@ -653,13 +707,15 @@ def traverse_fact_edges(
             "  connected.name AS connected_name, "
             "  connected.date AS connected_date, "
             "  labels(connected) AS connected_labels, "
-            "  type(r) AS category, "
+            "  type(r) AS edge_label, "
+            "  r.fact_type AS fact_type, "
             "  r.fact AS fact, "
             "  r.confidence AS confidence, "
             "  r.source_record AS source_record, "
             "  r.source_type AS source_type, "
-            "  r.valid_at AS valid_at, "
-            "  r.invalid_at AS invalid_at, "
+            "  r.source_at AS source_at, "
+            "  r.stale AS stale, "
+            "  r.replaced_by AS replaced_by, "
             "  elementId(sn) AS from_id, "
             "  elementId(en) AS to_id",
             **params,
@@ -682,11 +738,7 @@ def traverse_fact_edges(
                         "name": record["connected_date"] or "?",
                     })
                 else:
-                    etype = "unknown"
-                    for ext_type, lbl in _LABELS.items():
-                        if lbl in labels:
-                            etype = ext_type
-                            break
+                    etype = _label_to_type(labels)
                     nodes.append({
                         "id": cid,
                         "type": etype,
@@ -696,12 +748,14 @@ def traverse_fact_edges(
             edges.append({
                 "from": record["from_id"],
                 "to": record["to_id"],
-                "category": record["category"],
+                "edge_label": record["edge_label"],
+                "fact_type": record["fact_type"] or "",
                 "fact": record["fact"] or "",
                 "confidence": record["confidence"] or "",
                 "source_record": record["source_record"] or "",
-                "valid_at": record["valid_at"] or "",
-                "invalid_at": record["invalid_at"],
+                "source_at": record["source_at"] or "",
+                "stale": record["stale"] or False,
+                "replaced_by": record["replaced_by"],
             })
 
             if record["source_record"]:
@@ -718,7 +772,7 @@ def traverse_fact_edges(
 
 
 def graph_stats() -> dict:
-    """Count nodes by label, fact-edges by category."""
+    """Count nodes by label, fact-edges by edge_label and fact_type."""
     with get_session() as session:
         # Count entity nodes by label
         entity_counts = {}
@@ -734,20 +788,30 @@ def graph_stats() -> dict:
         result = session.run("MATCH (d:Day) RETURN count(d) AS c")
         day_count = result.single()["c"]
 
-        # Count fact-edges by category
+        # Count fact-edges by edge_label
         result = session.run(
             "MATCH ()-[r]->() WHERE r.fact IS NOT NULL "
-            "RETURN type(r) AS category, count(r) AS c, "
-            "sum(CASE WHEN r.invalid_at IS NULL THEN 1 ELSE 0 END) AS current_c "
+            "RETURN type(r) AS edge_label, count(r) AS c, "
+            "sum(CASE WHEN r.stale IS NULL OR r.stale = false THEN 1 ELSE 0 END) AS current_c "
             "ORDER BY c DESC"
         )
-        cat_counts = {}
+        edge_label_counts = {}
         total_facts = 0
         current_facts = 0
         for record in result:
-            cat_counts[record["category"]] = record["c"]
+            edge_label_counts[record["edge_label"]] = record["c"]
             total_facts += record["c"]
             current_facts += record["current_c"]
+
+        # Count by fact_type
+        result = session.run(
+            "MATCH ()-[r]->() WHERE r.fact IS NOT NULL AND r.fact_type IS NOT NULL "
+            "RETURN r.fact_type AS fact_type, count(r) AS c "
+            "ORDER BY c DESC"
+        )
+        fact_type_counts = {}
+        for record in result:
+            fact_type_counts[record["fact_type"]] = record["c"]
 
         return {
             "total_entities": total_entities,
@@ -755,7 +819,8 @@ def graph_stats() -> dict:
             "total_facts": total_facts,
             "current_facts": current_facts,
             "entity_counts": entity_counts,
-            "category_counts": cat_counts,
+            "edge_label_counts": edge_label_counts,
+            "fact_type_counts": fact_type_counts,
         }
 
 
@@ -769,8 +834,9 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
             "MATCH (a)-[r]->(b) "
             "WHERE r.source_record = $rid AND r.fact IS NOT NULL "
             "RETURN a.name AS from_name, a.date AS from_date, labels(a) AS from_labels, "
-            "type(r) AS category, r.fact AS fact, r.confidence AS confidence, "
-            "r.valid_at AS valid_at, r.invalid_at AS invalid_at, "
+            "type(r) AS edge_label, r.fact_type AS fact_type, "
+            "r.fact AS fact, r.confidence AS confidence, "
+            "r.source_at AS source_at, r.stale AS stale, "
             "b.name AS to_name, b.date AS to_date, labels(b) AS to_labels",
             rid=record_id,
         )
@@ -782,14 +848,13 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
             to_display = record["to_date"] if "Day" in to_labels else (record["to_name"] or "?")
             items.append({
                 "type": "fact",
-                "category": record["category"],
+                "edge_label": record["edge_label"],
+                "fact_type": record["fact_type"] or "",
                 "fact": record["fact"] or "",
                 "from": from_display,
                 "to": to_display,
                 "confidence": record["confidence"] or "",
-                "valid_at": record["valid_at"] or "",
-                "invalid_at": record["invalid_at"],
+                "source_at": record["source_at"] or "",
+                "stale": record["stale"] or False,
             })
         return items
-
-
