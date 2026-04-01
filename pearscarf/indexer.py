@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import threading
 import traceback
+from datetime import datetime, timezone
 
 import anthropic
 
@@ -22,6 +23,10 @@ from pearscarf.config import (
 from pearscarf.db import _get_conn, init_db
 from pearscarf.prompts import load as load_prompt
 from pearscarf.tracing import trace_span
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 class Indexer:
@@ -562,27 +567,65 @@ class Indexer:
                 f"resolution pending, skipping fact writes for unresolved entities",
             )
 
-        # For issue_change records, use changed_at as the temporal valid_at
-        valid_at = None
-        if record_type == "issue_change":
+        # Derive source_at — event time from the record's own timestamp
+        source_at = str(record.get("created_at", "")) or ""
+        if record_type == "email":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT received_at FROM emails WHERE record_id = %s",
+                    (record_id,),
+                ).fetchone()
+                if row and row["received_at"]:
+                    source_at = str(row["received_at"])
+        elif record_type == "issue":
+            with _get_conn() as conn:
+                row = conn.execute(
+                    "SELECT linear_created_at FROM issues WHERE record_id = %s",
+                    (record_id,),
+                ).fetchone()
+                if row and row["linear_created_at"]:
+                    source_at = str(row["linear_created_at"])
+        elif record_type == "issue_change":
             with _get_conn() as conn:
                 row = conn.execute(
                     "SELECT changed_at FROM issue_changes WHERE record_id = %s",
                     (record_id,),
                 ).fetchone()
                 if row and row["changed_at"]:
-                    valid_at = str(row["changed_at"])
+                    source_at = str(row["changed_at"])
+
+        if not source_at:
+            source_at = _now()
+            log.write(
+                "indexer", "--", "warning",
+                f"no timestamp for {record_id}, using indexing time as source_at",
+            )
 
         # Step 3: Write facts to Neo4j
         for fact in extracted.get("facts", []):
-            category = fact.get("category", "")
+            edge_label = fact.get("edge_label", "")
+            fact_type = fact.get("fact_type", "")
             fact_text = fact.get("fact", "")
             confidence = fact.get("confidence", "stated")
             from_name = fact.get("from_entity", "")
             to_name = fact.get("to_entity")  # None for single-entity facts
-            fact_valid_at = fact.get("valid_at")
+            valid_until = fact.get("valid_until")
 
-            if not from_name or not fact_text or not category:
+            if not from_name or not fact_text or not edge_label:
+                continue
+
+            # Validate edge_label and fact_type
+            if edge_label not in graph.FACT_CATEGORIES:
+                log.write(
+                    "indexer", "--", "warning",
+                    f"unrecognized edge_label '{edge_label}' in {record_id}, skipping",
+                )
+                continue
+            if fact_type and fact_type not in graph.FACT_CATEGORIES[edge_label]:
+                log.write(
+                    "indexer", "--", "warning",
+                    f"unrecognized fact_type '{fact_type}' for {edge_label} in {record_id}, skipping",
+                )
                 continue
 
             from_id = entity_id_map.get(from_name)
@@ -593,39 +636,64 @@ class Indexer:
                 )
                 continue
 
+            to_id = None
             if to_name:
-                # Two-entity fact: from_entity → to_entity
+                # Try entity_id_map first
                 to_id = entity_id_map.get(to_name)
                 if not to_id:
-                    log.write(
-                        "indexer", "--", "warning",
-                        f"fact references unknown to_entity '{to_name}' in {record_id}, skipping",
-                    )
-                    continue
+                    # Full resolution for to_entity
+                    try:
+                        to_candidates = graph.find_entity_candidates("", to_name)
+                        if to_candidates:
+                            # Exact name match — fast path
+                            matched = next(
+                                (c for c in to_candidates if c["name"].lower() == to_name.lower()),
+                                None,
+                            )
+                            if matched:
+                                to_id = matched["id"]
+                            else:
+                                # LLM judge
+                                to_ctx = [graph.get_entity_context(c["id"]) for c in to_candidates]
+                                decision = self._resolve_entity_with_llm(
+                                    {"name": to_name, "type": "", "metadata": {}},
+                                    source_context, to_ctx,
+                                )
+                                verdict = decision.get("decision", "new")
+                                if verdict == "match":
+                                    to_id = decision.get("candidate_id", "")
+                                elif verdict == "new":
+                                    to_id = graph.create_entity("", to_name)
+                                # ambiguous or other → to_id stays None → Day node
+                        else:
+                            # No candidates — create new entity
+                            to_id = graph.create_entity("", to_name)
+                    except Exception as exc:
+                        log.write(
+                            "indexer", "--", "warning",
+                            f"to_entity resolution failed for '{to_name}' in {record_id}: {exc}",
+                        )
+                        # to_id stays None → Day node
+
+                    if to_id:
+                        entity_id_map[to_name] = to_id
+
+            if to_id:
+                # Two-entity fact
                 graph.create_fact_edge(
-                    from_id, to_id, category, fact_text, confidence,
-                    record_id, record_type,
-                    valid_at=fact_valid_at or valid_at,
+                    from_id, to_id, edge_label, fact_type, fact_text,
+                    confidence, record_id, record_type,
+                    source_at=source_at, valid_until=valid_until,
                 )
             else:
-                # Single-entity fact: from_entity → Day node
-                if fact_valid_at:
-                    day_date = fact_valid_at[:10]
-                else:
-                    record_ts = record.get("created_at", "")
-                    day_date = graph.utc_to_local_date(str(record_ts)) if record_ts else None
-                if day_date:
-                    day_id = graph.get_or_create_day(day_date)
-                    graph.create_fact_edge(
-                        from_id, day_id, category, fact_text, confidence,
-                        record_id, record_type,
-                        valid_at=fact_valid_at or valid_at,
-                    )
-                else:
-                    log.write(
-                        "indexer", "--", "warning",
-                        f"cannot determine Day for single-entity fact in {record_id}, skipping",
-                    )
+                # Single-entity fact or degraded to_entity → Day node
+                day_date = graph.utc_to_local_date(source_at)
+                day_id = graph.get_or_create_day(day_date)
+                graph.create_fact_edge(
+                    from_id, day_id, edge_label, fact_type, fact_text,
+                    confidence, record_id, record_type,
+                    source_at=source_at, valid_until=valid_until,
+                )
 
         # Step 4: Embed in Qdrant
         self._embed_record(record, content)

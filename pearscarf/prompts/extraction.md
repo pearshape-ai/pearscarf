@@ -41,85 +41,80 @@ Extract when: there is a concrete date or timeframe attached ("demo Thursday Mar
 
 Do not extract when: it's a vague future reference with no date ("we should meet sometime"), a past event mentioned only for context with no ongoing relevance, or a recurring automated event ("your daily standup summary").
 
-## Fact Categories
+## Fact Edge Labels
 
-Every fact connects a `from_entity` to either a `to_entity` (two-entity fact) or nothing (single-entity fact, `to_entity` is null). Pick the category that most precisely describes the relationship or claim.
+Every fact has an `edge_label` (the relationship type) and a `fact_type` (the specific kind within that label). Pick the combination that most precisely describes the relationship or claim.
 
-**Structural — stable facts about how entities relate. Rarely change over time.**
+### AFFILIATED — organizational attachments
 
-`WORKS_AT` — person is employed at or professionally affiliated with a company. This is an ongoing role, not a one-off interaction.
-- Use when: "Michael is VP Engineering at Acme", "Sarah joined Stripe last month", email domain implies employment (michael@acme.com → works at Acme).
-- Don't use when: person just interacted with the company, bought something from them, or attended their event.
+Stable facts about how entities relate. Who belongs to what, who leads what. Rarely change over time.
 
-`FOUNDED` — person started or co-founded a company.
-- Use when: explicitly stated as founder or co-founder.
-- Don't use when: person is CEO/executive but founding isn't mentioned — use WORKS_AT instead.
+`fact_type` values: `employee`, `contractor`, `advisor`, `board_member`, `founder`, `investor`, `legal_counsel`, `consultant`, `owner`, `contributor`, `reviewer`, `stakeholder`, `subsidiary`, `sub_project`, `other`
 
-`MANAGES` — person leads, owns, or is responsible for a project or workstream. Implies ongoing accountability, not just participation.
-- Use when: "Sarah is leading the integration", "Michael owns the API migration."
-- Don't use when: person is merely working on or contributing to the project — use MEMBER_OF.
+- `employee` — person is employed at or professionally affiliated with a company. Ongoing role, not a one-off interaction. "Michael is VP Engineering at Acme", email domain implies employment.
+- `founder` — person started or co-founded a company. Explicitly stated as founder or co-founder.
+- `owner` — person leads, owns, or is responsible for a project or workstream. Implies ongoing accountability. "Sarah is leading the integration."
+- `contributor` — person participates in a project or team but doesn't lead it. "Michael is on the integration team."
+- `subsidiary` — company is a division of another company. "AWS is a division of Amazon."
+- `sub_project` — project belongs to a company or parent project. "the Acme API integration" (project affiliated with Acme).
+- `advisor` — person advises a company or project in an ongoing capacity.
+- `investor` — person or company has an investment relationship.
+- `legal_counsel` — person or company provides legal representation.
+- Use `other` when the affiliation is clear but doesn't match any specific type.
 
-`PART_OF` — a project belongs to a company, or a company is a subsidiary/division of another company.
-- Use when: "the Acme API integration" (project PART_OF Acme), "AWS is a division of Amazon."
-- Don't use when: a company is just involved with a project as a customer or vendor — that's a different relationship.
+Don't use AFFILIATED when: person just interacted with the company, bought something from them, or attended their event. Don't use for event attendance.
 
-`MEMBER_OF` — person has an ongoing role on a project or team. They're a participant, contributor, or stakeholder — not the lead (that's MANAGES).
-- Use when: "Sarah is on the integration team", "@Michael was added to the project", "the engineering team includes David."
-- Don't use when: person just attended a meeting, booked a room, or had a one-off interaction with something. Don't use for event attendance.
+### ASSERTED — claims, commitments, evaluations, decisions
 
-**Activity — things that happened. Time-bound, tied to specific moments.**
+Things that were said, promised, decided, or observed. Business facts with temporal significance.
 
-`COMMUNICATED` — a meaningful exchange happened between people or between a person and a company. Emails, calls, meetings where something substantive was discussed.
-- Use when: "Sarah emailed Acme about the contract terms", "met with the Acme team to discuss pricing", "Michael called to escalate the issue."
-- Don't use when: the email itself is the record you're extracting from (the fact that this email exists is already captured by the system — don't create a COMMUNICATED fact for the email you're reading). Only use when the record references a separate communication.
+`fact_type` values: `commitment`, `promise`, `decision`, `evaluation`, `opinion`, `concern`, `blocker`, `request`, `update`, `risk`, `goal`, `reference`, `other`
 
-`STATUS_CHANGED` — something moved to a new state. Status transitions, priority changes, stage progressions.
-- Use when: "moved to In Review", "priority escalated to Urgent", "deal advanced to legal review."
-- Don't use when: describing a current static state with no transition — "status is In Progress" without evidence it changed.
+- `commitment` — a promise, deadline, agreement, scheduled obligation. "Demo scheduled for Thursday", "agreed to deliver the API spec by Friday", "contract renews March 2026."
+- `decision` — a choice was made. "Decided to go with AWS over GCP", "board approved the budget."
+- `blocker` — something is blocked, delayed, or dependent. "Integration blocked on Acme's API key", "can't proceed until legal reviews."
+- `evaluation` — actively considering or reviewing. "Evaluating switch to AWS", "reviewing vendor proposals."
+- `update` — a status or progress report. "Pipeline processing is back to normal."
+- `concern` — a worry or risk raised. "Worried about timeline slippage."
+- `risk` — an identified risk. "SOC2 certification may delay launch."
+- `reference` — entity meaningfully referenced but connection doesn't fit other types. Use sparingly — if another type fits, use it.
+- Use `other` when the assertion is clear but doesn't match any specific type.
 
-**Claims — business facts with temporal significance. Things you'd want to recall later.**
+Don't use ASSERTED when: it's a vague intention with no concrete commitment — "we should meet sometime."
 
-`COMMITTED_TO` — a promise, deadline, agreement, scheduled obligation, or booking. Someone or something is committed to a future action or date.
-- Use when: "contract renews March 2026", "demo scheduled for Thursday", "agreed to deliver the API spec by Friday", "booked a workspace for March 11."
-- Don't use when: it's a vague intention with no date or concrete commitment — "we should meet sometime."
+### TRANSITIONED — observed state changes
 
-`DECIDED` — a decision was made. A choice between alternatives, an approval, a rejection, a direction set.
-- Use when: "decided to go with AWS over GCP", "board approved the budget", "chose to delay the launch."
-- Don't use when: someone is still evaluating — that's EVALUATED.
+Something moved to a new state. Status transitions, priority changes, role changes, completions.
 
-`BLOCKED_BY` — something is blocked, delayed, or dependent on something else.
-- Use when: "integration blocked on Acme's API key", "can't proceed until legal reviews the contract", "delayed by SOC2 certification."
-- Don't use when: it's a general challenge or risk without a specific dependency — "this is going to be hard" is not a blocker.
+`fact_type` values: `status_change`, `stage_change`, `role_change`, `ownership_change`, `resolution`, `completion`, `cancellation`, `other`
 
-`EVALUATED` — actively considering, reviewing, or comparing options. An evaluation is in progress.
-- Use when: "evaluating switch to AWS", "reviewing three vendor proposals", "comparing pricing tiers."
-- Don't use when: a decision has been made — that's DECIDED.
+- `status_change` — moved to a new status. "Moved to In Review", "priority escalated to Urgent."
+- `completion` — something was finished. "Integration completed", "deal closed."
+- `cancellation` — something was cancelled. "Demo cancelled", "project shelved."
+- `role_change` — person changed roles. "Sarah promoted to VP."
+- Use `other` when the transition is clear but doesn't match any specific type.
 
-**Fallback**
+Don't use TRANSITIONED when: describing a current static state with no evidence of change.
 
-`MENTIONED_IN` — an entity appeared in a record but the connection doesn't fit any of the above categories. Use this sparingly. If you're reaching for MENTIONED_IN, first ask whether the fact is worth extracting at all.
-- Use when: an entity is meaningfully referenced but the nature of the connection is unclear or doesn't match other categories.
-- Don't use when: another category fits. Don't use as a lazy default — pick the right category or skip the fact.
+### Do not use
 
-**Do not use**
-
-`IDENTIFIED_AS` — reserved for the system's entity resolution process. Never output this category in extraction. The system creates these edges internally when resolving aliases.
+`IDENTIFIED_AS` — reserved for the system's entity resolution process. Never output this.
 
 ## Facts
 
 A fact is a specific claim extracted from the record. It connects entities to each other or stands alone as a claim about a single entity.
 
 **Two-entity facts** have both `from_entity` and `to_entity`:
-- "Michael works at Acme" → WORKS_AT, from "Michael Chen", to "Acme"
-- "Integration blocked by Acme's API changes" → BLOCKED_BY, from "Acme API Integration", to "Acme"
+- "Michael works at Acme" → AFFILIATED/employee, from "Michael Chen", to "Acme"
+- "Integration blocked by Acme's API changes" → ASSERTED/blocker, from "Acme API Integration", to "Acme"
 
 **Single-entity facts** have `from_entity` but `to_entity` is null:
-- "Contract renews March 2026" → COMMITTED_TO, from "Acme", to null
-- "Priority escalated to Urgent" → STATUS_CHANGED, from "Acme API Integration", to null
+- "Contract renews March 2026" → ASSERTED/commitment, from "Acme", to null
+- "Priority escalated to Urgent" → TRANSITIONED/status_change, from "Acme API Integration", to null
 
-**`valid_at`**: If the fact references a specific date, set `valid_at` to that date as an ISO string (e.g. "2026-03-01"). If no specific date is referenced, set to null — the system will use the record's own timestamp.
+**`valid_until`**: Set only when the fact text explicitly states a specific deadline, expiry, or renewal date. "Contract expires March 15" → `valid_until: "2026-03-15"`. If no specific date is stated, set to `null`. This is NOT the record's own timestamp.
 
-**`fact` text**: Write a concise, self-contained sentence. Someone reading just the fact text and category should understand what happened without seeing the original record.
+**`fact` text**: Write a concise, self-contained sentence. Someone reading just the fact text should understand what happened without seeing the original record.
 
 Every fact's `from_entity` (and `to_entity` if present) must match an entity name in the `entities` array exactly.
 
@@ -142,15 +137,15 @@ Don't force facts that aren't clearly stated. If two entities appear in the same
 When the record is an issue (indicated by "Issue:" prefix in the content):
 
 - **Don't re-extract structured fields.** The assignee, status, priority, project, and labels are already stored as structured data. Focus extraction on the description and comments — that's where unstructured knowledge lives.
-- **Extract people mentioned in comments.** Comments often reference people by first name or @-mention. Extract them as person entities when they're actively involved ("@Sarah can you review this?" → person Sarah with MEMBER_OF fact to the project).
-- **Extract commitments and blockers from comments.** "Blocked on Acme's API key" → BLOCKED_BY fact. "Pushing to next sprint" → COMMITTED_TO fact about timeline.
+- **Extract people mentioned in comments.** Comments often reference people by first name or @-mention. Extract them as person entities when they're actively involved ("@Sarah can you review this?" → person Sarah with AFFILIATED/contributor fact to the project).
+- **Extract commitments and blockers from comments.** "Blocked on Acme's API key" → ASSERTED/blocker fact. "Pushing to next sprint" → ASSERTED/commitment fact about timeline.
 - **Extract project references.** Issues often reference other projects or initiatives in description/comments. These cross-references are high-value for the graph.
 
 ## Change-specific guidance
 
 When the record is an issue change (indicated by "Change:" in the content):
 
-- **Extract the transition as a STATUS_CHANGED fact.** A status change from "In Progress" to "In Review" → STATUS_CHANGED, from the project entity, to null, fact text describes the transition.
+- **Extract the transition as a TRANSITIONED/status_change fact.** A status change from "In Progress" to "In Review" → TRANSITIONED/status_change, from the project entity, to null, fact text describes the transition.
 - **Reference the person who made the change.** If "Changed by: Michael Chen", extract or reference the person entity.
 - **Don't create new entities from structured fields.** The issue, project, and person are already known from the parent issue extraction. Reuse the same entity names.
 - **Keep it minimal.** A single change record should produce at most one or two facts. Don't over-extract.
@@ -179,20 +174,22 @@ Respond with exactly this JSON structure and nothing else — no markdown fences
   ],
   "facts": [
     {{
-      "category": "WORKS_AT",
+      "edge_label": "AFFILIATED",
+      "fact_type": "employee",
       "fact": "works at Acme as VP Engineering",
       "from_entity": "Michael Chen",
       "to_entity": "Acme",
       "confidence": "stated",
-      "valid_at": null
+      "valid_until": null
     }},
     {{
-      "category": "COMMITTED_TO",
+      "edge_label": "ASSERTED",
+      "fact_type": "commitment",
       "fact": "contract renewal deadline is March 2026",
       "from_entity": "Acme",
       "to_entity": null,
       "confidence": "stated",
-      "valid_at": "2026-03-01"
+      "valid_until": "2026-03-01"
     }}
   ]
 }}
