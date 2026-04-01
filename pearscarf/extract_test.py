@@ -25,7 +25,7 @@ from pearscarf.config import (
     EXTRACTION_TEMPERATURE,
 )
 from pearscarf.db import _get_conn, init_db
-from pearscarf.graph import FACT_CATEGORIES as VALID_CATEGORIES
+from pearscarf.graph import FACT_CATEGORIES
 from pearscarf.indexer import Indexer
 from pearscarf.prompts import load as load_prompt
 from pearscarf.tracing import trace_span
@@ -156,21 +156,19 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
                 extra = f"  [{meta_str}]" if meta_str else ""
                 print(f"  [{e.get('type', '?')}] {e.get('name', '?')}{extra}")
 
-            # Print facts grouped by category
+            # Print facts grouped by edge_label
             facts = parsed.get("facts", [])
-            # Also handle old format: merge relationships into facts display
-            old_rels = parsed.get("relationships", [])
-            if old_rels:
-                print(f"\n⚠ Old format detected: {len(old_rels)} relationships (expected unified facts)")
-                for r in old_rels:
-                    print(f"  {r.get('from', '?')} --{r.get('type', '?')}--> {r.get('to', '?')}")
+
+            # Detect old extraction format
+            if any("category" in f and "edge_label" not in f for f in facts):
+                print(f"\n⚠ Old extraction format detected: facts use 'category' instead of 'edge_label'")
 
             print(f"\nFacts ({len(facts)}):")
-            by_category: dict[str, list] = {}
+            by_label: dict[str, list] = {}
             warnings = []
             for f in facts:
-                cat = f.get("category", "UNKNOWN")
-                by_category.setdefault(cat, []).append(f)
+                label = f.get("edge_label", "UNKNOWN")
+                by_label.setdefault(label, []).append(f)
                 # Validate from_entity exists
                 from_e = f.get("from_entity", "")
                 if from_e and from_e not in entity_names:
@@ -178,16 +176,21 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
                 to_e = f.get("to_entity")
                 if to_e and to_e not in entity_names:
                     warnings.append(f"  ⚠ to_entity '{to_e}' not in entities array")
-                # Validate category
-                if cat not in VALID_CATEGORIES:
-                    warnings.append(f"  ⚠ unrecognized category '{cat}'")
+                # Validate edge_label and fact_type
+                if label not in FACT_CATEGORIES:
+                    warnings.append(f"  ⚠ unrecognized edge_label '{label}'")
+                else:
+                    ft = f.get("fact_type", "")
+                    if ft and ft not in FACT_CATEGORIES[label]:
+                        warnings.append(f"  ⚠ unrecognized fact_type '{ft}' for {label}")
 
-            for cat, cat_facts in sorted(by_category.items()):
-                print(f"\n  {cat}:")
-                for f in cat_facts:
+            for label, label_facts in sorted(by_label.items()):
+                print(f"\n  {label}:")
+                for f in label_facts:
+                    ft = f.get("fact_type", "?")
                     to_str = f" → {f['to_entity']}" if f.get("to_entity") else ""
-                    valid = f"  (valid_at: {f['valid_at']})" if f.get("valid_at") else ""
-                    print(f"    [{f.get('confidence', '?')}] {f.get('from_entity', '?')}{to_str}: {f.get('fact', '')}{valid}")
+                    valid = f"  (valid_until: {f['valid_until']})" if f.get("valid_until") else ""
+                    print(f"    [{f.get('confidence', '?')}] {ft}: {f.get('from_entity', '?')}{to_str}: {f.get('fact', '')}{valid}")
 
             if warnings:
                 print(f"\nWarnings ({len(warnings)}):")

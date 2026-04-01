@@ -24,9 +24,9 @@ Example: `meridian deal`
 
 **`## facts`** — one fact per line:
 ```
-from_entity | CATEGORY | to_entity
+from_entity | EDGE_LABEL/fact_type | to_entity
 ```
-Example: `gev jan | MANAGES | meridian deal`
+Example: `gev jan | AFFILIATED/owner | meridian deal`
 
 Lines starting with `#` are comments — ignore them.
 
@@ -45,20 +45,20 @@ Do not include domains, emails, or parenthetical qualifiers in entity names — 
 - Every `## people` line → `person` entity. Put `email` and `role` in metadata when present.
 - Every `## companies` line → `company` entity. Put `domain` in metadata when present.
 - Every `## projects` line → `project` entity. No metadata needed.
-- Every `## facts` line → a fact edge using the declared category. Generate a short, self-contained `fact` text from the three fields — for example `gev jan | MANAGES | meridian deal` → fact text: "Gev Jan leads the Meridian Deal".
+- Every `## facts` line → a fact edge using the declared edge_label and fact_type. Generate a short, self-contained `fact` text from the three fields — for example `gev jan | AFFILIATED/owner | meridian deal` → fact text: "Gev Jan leads the Meridian Deal".
 - `confidence` is always `stated` — seed data is declared ground truth.
-- `valid_at` is always `null` — seed facts are not time-bound.
+- `valid_until` is always `null` — seed facts don't carry deadlines.
 - Every `from_entity` and `to_entity` in facts must exactly match a name in the `entities` array.
 
-## Fact Categories
+## Edge Labels
 
-Valid categories — use only these:
+Valid edge labels and fact types for seed data (AFFILIATED and ASSERTED only — seeds don't produce transitions):
 
-Structural: `WORKS_AT`, `FOUNDED`, `MANAGES`, `PART_OF`, `MEMBER_OF`
-Activity: `COMMUNICATED`, `STATUS_CHANGED`, `MENTIONED_IN`
-Claims: `COMMITTED_TO`, `DECIDED`, `BLOCKED_BY`, `EVALUATED`
+**AFFILIATED**: `employee`, `contractor`, `advisor`, `board_member`, `founder`, `investor`, `legal_counsel`, `consultant`, `owner`, `contributor`, `reviewer`, `stakeholder`, `subsidiary`, `sub_project`, `other`
 
-Do not use `IDENTIFIED_AS` — that category is reserved for the system's entity resolution process.
+**ASSERTED**: `commitment`, `promise`, `decision`, `evaluation`, `opinion`, `concern`, `blocker`, `request`, `update`, `risk`, `goal`, `reference`, `other`
+
+Do not use `IDENTIFIED_AS` — reserved for entity resolution.
 
 ## Output
 
@@ -89,20 +89,22 @@ Respond with exactly this JSON structure and nothing else — no markdown fences
   ],
   "facts": [
     {
-      "category": "WORKS_AT",
+      "edge_label": "AFFILIATED",
+      "fact_type": "employee",
       "fact": "Gev Jan works at Pear Ventures as Founder & CEO",
       "from_entity": "Gev Jan",
       "to_entity": "Pear Ventures",
       "confidence": "stated",
-      "valid_at": null
+      "valid_until": null
     },
     {
-      "category": "MANAGES",
+      "edge_label": "AFFILIATED",
+      "fact_type": "owner",
       "fact": "Gev Jan leads the Meridian Deal",
       "from_entity": "Gev Jan",
       "to_entity": "Meridian Deal",
       "confidence": "stated",
-      "valid_at": null
+      "valid_until": null
     }
   ]
 }
