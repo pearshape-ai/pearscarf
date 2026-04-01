@@ -81,7 +81,7 @@ See the [Data Model](docs/data-model.md) for the full schema and [Query Surface]
 
 - **Expert agents** — Gmail (OAuth API), Linear (GraphQL), more to come. Each owns its polling, schema, and extraction prompt.
 - **Extraction pipeline** — LLM-powered entity and fact extraction from raw records, driven by editable prompts.
-- **Temporal fact store** — Neo4j with bi-temporal fact edges and full provenance on every write. Postgres for structured records. Qdrant for semantic search.
+- **Temporal fact store** — Graph db with bi-temporal fact edges and full provenance on every write. Postgres for structured records. Qdrant for semantic search.
 - **MCP server** — read-only query surface. Any MCP-compatible agent framework connects once and queries for context.
 - **Entity resolution** — alias accumulation, confidence scoring, human-in-the-loop for ambiguous cases.
 - **Observability** — every LLM call and fact write traced via LangSmith.
