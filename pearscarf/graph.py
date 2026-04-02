@@ -427,7 +427,7 @@ def create_fact_edge(
         "fact_type": fact_type,
         "confidence": confidence,
         "source_record": source_record,
-        "source_records": [source_record],
+        "source_records": [{"record_id": source_record, "confidence": confidence}],
         "source_type": source_type,
         "source_at": source_at or ts,
         "recorded_at": ts,
@@ -519,18 +519,33 @@ def find_exact_dup_edge(
         return record["rid"] if record else None
 
 
-def append_source_record(edge_id: str, source_record: str) -> None:
-    """Append a source_record to an edge's source_records list if not already present."""
+def append_source_record(edge_id: str, source_record: str, confidence: str = "inferred") -> None:
+    """Append a {record_id, confidence} entry to source_records if record_id not already present."""
     with get_session() as session:
+        result = session.run(
+            "MATCH ()-[r]->() WHERE elementId(r) = $rid "
+            "RETURN r.source_records AS sr",
+            rid=edge_id,
+        )
+        row = result.single()
+        existing = row["sr"] if row else None
+        if existing is None:
+            existing = []
+
+        # Check if record_id already in list (handle both dict and legacy string entries)
+        for entry in existing:
+            if isinstance(entry, dict) and entry.get("record_id") == source_record:
+                return
+            if isinstance(entry, str) and entry == source_record:
+                return
+
+        existing.append({"record_id": source_record, "confidence": confidence})
+
         session.run(
             "MATCH ()-[r]->() WHERE elementId(r) = $rid "
-            "SET r.source_records = CASE "
-            "  WHEN r.source_records IS NULL THEN [$sr] "
-            "  WHEN NOT $sr IN r.source_records THEN r.source_records + $sr "
-            "  ELSE r.source_records "
-            "END",
+            "SET r.source_records = $sr",
             rid=edge_id,
-            sr=source_record,
+            sr=existing,
         )
 
 
@@ -1019,3 +1034,41 @@ def get_expired_commitments(today: str) -> list[dict]:
                 "to_name": to_display,
             })
         return items
+
+
+def get_inferred_multi_source_edges() -> list[dict]:
+    """Find all current edges with confidence='inferred' and multiple source_records."""
+    with get_session() as session:
+        result = session.run(
+            "MATCH (a)-[r]->(b) "
+            "WHERE r.fact IS NOT NULL "
+            "AND r.confidence = 'inferred' "
+            "AND (r.stale IS NULL OR r.stale = false) "
+            "AND r.source_records IS NOT NULL "
+            "AND size(r.source_records) > 1 "
+            "RETURN elementId(r) AS edge_id, r.fact AS fact, "
+            "r.confidence AS confidence, r.source_records AS source_records, "
+            "a.name AS from_name, b.name AS to_name"
+        )
+        return [
+            {
+                "edge_id": r["edge_id"],
+                "fact": r["fact"] or "",
+                "confidence": r["confidence"] or "",
+                "source_records": r["source_records"] or [],
+                "from_name": r["from_name"] or "?",
+                "to_name": r["to_name"] or "?",
+            }
+            for r in result
+        ]
+
+
+def set_edge_confidence(edge_id: str, confidence: str) -> None:
+    """Update the confidence value on a fact-edge."""
+    with get_session() as session:
+        session.run(
+            "MATCH ()-[r]->() WHERE elementId(r) = $rid "
+            "SET r.confidence = $conf",
+            rid=edge_id,
+            conf=confidence,
+        )

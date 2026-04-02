@@ -404,6 +404,15 @@ def curator_status() -> None:
     if oldest:
         click.echo(f"  Oldest:     {oldest}")
 
+    # Graph-derived metrics
+    from datetime import datetime, timezone
+    from pearscarf import graph
+    eligible = len(graph.get_inferred_multi_source_edges())
+    today = graph.utc_to_local_date(datetime.now(timezone.utc).isoformat())
+    expired = len(graph.get_expired_commitments(today))
+    click.echo(f"  Upgrade eligible: {eligible}")
+    click.echo(f"  Expired pending:  {expired}")
+
 
 @cli.group(invoke_without_command=True)
 @click.pass_context
