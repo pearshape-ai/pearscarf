@@ -188,15 +188,24 @@ fact: "Marcus committed to deliver contract markup by March 16"
 
 ---
 
+## Write loop
+
+The indexer's write loop is structurally focused: it checks for **literal duplicates** before writing.
+
+Before every `create_fact_edge` call, the indexer queries for an existing edge matching all of: `(from, to, edge_label, fact_type, source_record, fact)`. If found, the source record is appended to the edge's `source_records` list — no new edge is created. If not found, a new edge is created.
+
+This check prevents duplicate edges from re-indexing the same record. It does not perform semantic deduplication, supersession, or staleness checks — those are the responsibility of the verification & augmentation agent.
+
 ## Staleness and supersession
 
-When a new AFFILIATED or ASSERTED fact arrives for the same (entity, edge label, fact_type, target):
+The `stale` and `replaced_by` fields are set by the **verification & augmentation agent**, not the indexer.
 
-- **New `source_at` > existing** — write new edge, set existing `stale=true`, `replaced_by=<new edge id>`
-- **New `source_at` < existing** — write new edge, set new edge `stale=true`, `replaced_by=<existing edge id>` (old news)
-- **Equal `source_at`** — write both, both `stale=false` — ambiguous, verification agent resolves
+Between writes and the verification agent running, the graph may contain redundant or semantically equivalent facts. This is by design — the graph is eventually consistent. Structurally correct at write time, semantically correct after verification.
 
-TRANSITIONED facts are never staled — every transition is a real event in the chain.
+When the verification agent runs:
+
+- **AFFILIATED/ASSERTED**: newer `source_at` for same (entity, edge label, fact_type, target) supersedes older — sets `stale=true`, `replaced_by=<new edge id>`
+- **TRANSITIONED**: never staled — every transition is a real event in the chain
 
 No deletion. No overwriting. History is always preserved.
 
