@@ -40,6 +40,10 @@ NEO4J_URL = os.getenv("NEO4J_URL", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 
+# Curator
+CURATOR_POLL_INTERVAL = int(os.getenv("CURATOR_POLL_INTERVAL", "30"))
+CURATOR_CLAIM_TIMEOUT = int(os.getenv("CURATOR_CLAIM_TIMEOUT", "600"))
+
 # Timezone (for Day node date derivation)
 TIMEZONE = os.getenv("TIMEZONE", "America/Los_Angeles")
 
