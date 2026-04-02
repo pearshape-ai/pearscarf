@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pearscarf import graph, vectorstore
+from pearscarf import context_query
 from pearscarf.agents.expert import ExpertAgent
 from pearscarf.bus import MessageBus
 from pearscarf.prompts import load as load_prompt
@@ -45,7 +45,7 @@ class SearchEntitiesTool(BaseTool):
     def execute(self, **kwargs: Any) -> str:
         query = kwargs["query"]
         entity_type = kwargs.get("entity_type")
-        results = graph.search_entities(query, entity_type=entity_type, limit=5)
+        results = context_query.find_entity(query, entity_type=entity_type)
         if not results:
             return "No entities found."
         lines = []
@@ -86,7 +86,7 @@ class FactsLookupTool(BaseTool):
     def execute(self, **kwargs: Any) -> str:
         entity_id = kwargs["entity_id"]
         include_stale = kwargs.get("include_stale", False)
-        facts = graph.get_facts_for_entity(entity_id, include_stale=include_stale)
+        facts = context_query.get_facts(entity_id, include_stale=include_stale)
         if not facts:
             return "No facts found for this entity."
 
@@ -150,10 +150,10 @@ class GraphTraverseTool(BaseTool):
         max_depth = kwargs.get("max_depth", 2)
         include_stale = kwargs.get("include_stale", False)
         edge_labels = kwargs.get("edge_labels")
-        result = graph.traverse_fact_edges(
+        result = context_query.get_connections(
             entity_id,
             max_depth=max_depth,
-            current_only=not include_stale,
+            include_stale=include_stale,
             edge_labels=edge_labels,
         )
         if not result["nodes"] and not result["edges"]:
@@ -206,7 +206,7 @@ class DayLookupTool(BaseTool):
 
     def execute(self, **kwargs: Any) -> str:
         date_str = kwargs["date"]
-        facts = graph.get_facts_for_day(date_str)
+        facts = context_query.get_facts_for_day(date_str)
         if not facts:
             return f"No facts found for {date_str}."
         lines = [f"Facts for {date_str}:"]
@@ -245,7 +245,7 @@ class VectorSearchTool(BaseTool):
     def execute(self, **kwargs: Any) -> str:
         query = kwargs["query"]
         n_results = kwargs.get("n_results", 5)
-        results = vectorstore.query(query, n_results=n_results)
+        results = context_query.vector_search(query, n_results=n_results)
         if not results:
             return "No results found."
         lines = []
