@@ -986,3 +986,36 @@ def get_edges_for_slot(
             }
             for r in result
         ]
+
+
+def get_expired_commitments(today: str) -> list[dict]:
+    """Find all current ASSERTED[commitment|promise] edges where valid_until < today."""
+    with get_session() as session:
+        result = session.run(
+            "MATCH (a)-[r]->(b) "
+            "WHERE type(r) = 'ASSERTED' "
+            "AND r.fact_type IN ['commitment', 'promise'] "
+            "AND r.valid_until IS NOT NULL "
+            "AND r.valid_until < $today "
+            "AND (r.stale IS NULL OR r.stale = false) "
+            "RETURN elementId(r) AS edge_id, r.fact AS fact, "
+            "r.fact_type AS fact_type, r.valid_until AS valid_until, "
+            "r.source_record AS source_record, "
+            "a.name AS from_name, b.name AS to_name, b.date AS to_date, "
+            "labels(b) AS to_labels",
+            today=today,
+        )
+        items = []
+        for r in result:
+            to_labels = r["to_labels"] or []
+            to_display = r["to_date"] if "Day" in to_labels else (r["to_name"] or "?")
+            items.append({
+                "edge_id": r["edge_id"],
+                "fact": r["fact"] or "",
+                "fact_type": r["fact_type"] or "",
+                "valid_until": r["valid_until"] or "",
+                "source_record": r["source_record"] or "",
+                "from_name": r["from_name"] or "?",
+                "to_name": to_display,
+            })
+        return items

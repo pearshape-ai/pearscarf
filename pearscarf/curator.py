@@ -135,8 +135,32 @@ class Curator:
                         f"(source_at: {older['source_at']} < {survivor['source_at']})",
                     )
 
+    def _notify_expiry(self, edge: dict) -> None:
+        """Reserved hook for expiry notifications. No-op for now."""
+        log.write(
+            "curator", "--", "action",
+            f"expiry notification reserved for {edge['edge_id']}",
+        )
+
+    def _scan_expired(self) -> None:
+        """Stale all ASSERTED[commitment|promise] edges past their valid_until."""
+        from datetime import datetime, timezone
+
+        today = graph.utc_to_local_date(datetime.now(timezone.utc).isoformat())
+        expired = graph.get_expired_commitments(today)
+
+        for edge in expired:
+            self._notify_expiry(edge)
+            graph.mark_fact_stale(edge["edge_id"], replaced_by_id=None)
+            log.write(
+                "curator", "--", "action",
+                f"expired {edge['fact_type']} staled — edge_id={edge['edge_id']}, "
+                f"from={edge['from_name']}, valid_until={edge['valid_until']}, "
+                f"source_record={edge['source_record']}",
+            )
+
     def _process(self, record_id: str) -> None:
-        """Process a single record — AFFILIATED then ASSERTED semantic dedup."""
+        """Process a single record — dedup then expiry scan."""
         log.write("curator", "--", "action", f"processing {record_id}")
 
         edges = graph.get_edges_by_source_record(record_id)
@@ -148,6 +172,9 @@ class Curator:
 
         # Pass 2: ASSERTED dedup
         self._dedup_edges("ASSERTED", edges)
+
+        # Pass 3: Global expiry scan
+        self._scan_expired()
 
     def _loop(self) -> None:
         init_db()
