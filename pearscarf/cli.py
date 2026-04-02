@@ -361,6 +361,52 @@ def eval_cmd(dataset: str, verbose: bool) -> None:
 
 @cli.group(invoke_without_command=True)
 @click.pass_context
+def curator(ctx) -> None:
+    """Curator agent — processes indexed records for graph quality."""
+    if ctx.invoked_subcommand is None:
+        click.echo("Use 'psc curator start' to run or 'psc curator status' to inspect.")
+
+
+@curator.command("start")
+def curator_start() -> None:
+    """Start the curator in the foreground."""
+    from pearscarf.curator import Curator
+    click.echo("Curator starting...")
+    c = Curator()
+    c.run_foreground()
+
+
+@curator.command("status")
+def curator_status() -> None:
+    """Show curator queue status."""
+    from pearscarf.db import _get_conn, init_db
+    from pearscarf.config import CURATOR_CLAIM_TIMEOUT
+    init_db()
+    with _get_conn() as conn:
+        unclaimed = conn.execute(
+            "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NULL"
+        ).fetchone()["c"]
+        claimed = conn.execute(
+            "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NOT NULL"
+        ).fetchone()["c"]
+        oldest = conn.execute(
+            "SELECT MIN(queued_at) AS oldest FROM curator_queue WHERE claimed_at IS NULL"
+        ).fetchone()["oldest"]
+        timed_out = conn.execute(
+            "SELECT COUNT(*) AS c FROM curator_queue "
+            "WHERE claimed_at IS NOT NULL "
+            "AND claimed_at < now() - interval '%s seconds'",
+            (CURATOR_CLAIM_TIMEOUT,),
+        ).fetchone()["c"]
+    click.echo(f"  Unclaimed:  {unclaimed}")
+    click.echo(f"  Claimed:    {claimed}")
+    click.echo(f"  Timed out:  {timed_out}")
+    if oldest:
+        click.echo(f"  Oldest:     {oldest}")
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
 def queue(ctx) -> None:
     """Inspect the curator queue."""
     if ctx.invoked_subcommand is not None:

@@ -26,6 +26,8 @@
 | `pearscarf queue` | Show curator queue summary (unclaimed/claimed counts) |
 | `pearscarf queue list` | List up to 20 queue entries |
 | `pearscarf queue clear --confirm` | Clear unclaimed queue entries |
+| `pearscarf curator start` | Start the curator in the foreground |
+| `pearscarf curator status` | Show curator queue status |
 
 All commands also available via `psc`.
 
