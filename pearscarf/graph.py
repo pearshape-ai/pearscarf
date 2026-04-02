@@ -488,6 +488,52 @@ def find_existing_fact_edge(
         }
 
 
+def find_exact_dup_edge(
+    from_id: str,
+    edge_label: str,
+    fact_type: str,
+    to_id: str,
+    source_record: str,
+    fact: str,
+) -> str | None:
+    """Find a literal duplicate edge — same from, to, label, type, source, and fact text.
+
+    Returns edge element ID if found, None otherwise.
+    """
+    with get_session() as session:
+        result = session.run(
+            "MATCH (a)-[r]->(b) "
+            "WHERE elementId(a) = $from_id AND elementId(b) = $to_id "
+            "AND type(r) = $label AND r.fact_type = $ft "
+            "AND r.source_record = $sr AND r.fact = $fact "
+            "RETURN elementId(r) AS rid "
+            "LIMIT 1",
+            from_id=from_id,
+            to_id=to_id,
+            label=edge_label.upper(),
+            ft=fact_type,
+            sr=source_record,
+            fact=fact,
+        )
+        record = result.single()
+        return record["rid"] if record else None
+
+
+def append_source_record(edge_id: str, source_record: str) -> None:
+    """Append a source_record to an edge's source_records list if not already present."""
+    with get_session() as session:
+        session.run(
+            "MATCH ()-[r]->() WHERE elementId(r) = $rid "
+            "SET r.source_records = CASE "
+            "  WHEN r.source_records IS NULL THEN [$sr] "
+            "  WHEN NOT $sr IN r.source_records THEN r.source_records + $sr "
+            "  ELSE r.source_records "
+            "END",
+            rid=edge_id,
+            sr=source_record,
+        )
+
+
 def create_identified_as_edge(
     entity_id: str,
     surface_form: str,

@@ -468,6 +468,37 @@ class Indexer:
 
         return parsed
 
+    def _write_fact_edge(
+        self,
+        from_id: str,
+        to_id: str,
+        edge_label: str,
+        fact_type: str,
+        fact_text: str,
+        confidence: str,
+        record_id: str,
+        record_type: str,
+        source_at: str,
+        valid_until: str | None,
+    ) -> None:
+        """Write a fact edge with literal dup check."""
+        existing = graph.find_exact_dup_edge(
+            from_id, edge_label, fact_type, to_id, record_id, fact_text,
+        )
+        if existing:
+            graph.append_source_record(existing, record_id)
+            log.write(
+                "indexer", "--", "action",
+                f"dup merged: {record_id} already in edge {existing}",
+            )
+            return
+
+        graph.create_fact_edge(
+            from_id, to_id, edge_label, fact_type, fact_text,
+            confidence, record_id, record_type,
+            source_at=source_at, valid_until=valid_until,
+        )
+
     def _embed_record(self, record: dict, content: str) -> None:
         """Embed record content into Qdrant."""
         record_id = record["id"]
@@ -680,19 +711,19 @@ class Indexer:
 
             if to_id:
                 # Two-entity fact
-                graph.create_fact_edge(
+                self._write_fact_edge(
                     from_id, to_id, edge_label, fact_type, fact_text,
                     confidence, record_id, record_type,
-                    source_at=source_at, valid_until=valid_until,
+                    source_at, valid_until,
                 )
             else:
                 # Single-entity fact or degraded to_entity → Day node
                 day_date = graph.utc_to_local_date(source_at)
                 day_id = graph.get_or_create_day(day_date)
-                graph.create_fact_edge(
+                self._write_fact_edge(
                     from_id, day_id, edge_label, fact_type, fact_text,
                     confidence, record_id, record_type,
-                    source_at=source_at, valid_until=valid_until,
+                    source_at, valid_until,
                 )
 
         # Step 4: Embed in Qdrant
