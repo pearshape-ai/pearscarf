@@ -739,6 +739,14 @@ class Indexer:
         # Only mark indexed if all entities resolved
         if not unresolved:
             self._mark_indexed(record_id)
+            try:
+                from pearscarf.store import enqueue_for_curation
+                enqueue_for_curation(record_id)
+            except Exception as exc:
+                log.write(
+                    "indexer", "--", "warning",
+                    f"failed to enqueue {record_id} for curation: {exc}",
+                )
 
     def _mark_indexed(self, record_id: str) -> None:
         with _get_conn() as conn:
