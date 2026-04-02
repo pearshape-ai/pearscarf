@@ -27,8 +27,9 @@ def judge_equivalence(
     # Select prompt
     if edge_label == "AFFILIATED":
         system_prompt = load_prompt("curator_affiliated")
+    elif edge_label == "ASSERTED":
+        system_prompt = load_prompt("curator_asserted")
     else:
-        # Placeholder for ASSERTED (1.14.3)
         return [[c["edge_id"]] for c in candidates]
 
     # Build user message
