@@ -82,13 +82,14 @@ def format_entity(entity_data: dict | None) -> list[str]:
         lines.append("  Facts:")
         for f in facts:
             source = f" [from: {f['source_record']}]" if f.get("source_record") else ""
-            if f.get("invalid_at"):
-                marker = click.style(" [was]", fg="red", dim=True)
-                valid_range = f" ({f.get('valid_at', '?')} -> {f['invalid_at']})"
+            if f.get("stale"):
+                marker = click.style(" [stale]", fg="red", dim=True)
+                temporal = ""
             else:
                 marker = ""
-                valid_range = f" (since {f.get('valid_at', '?')})" if f.get("valid_at") else ""
-            lines.append(f"    {f['attribute']}: {f['value']}{marker}{valid_range}{source}")
+                temporal = f" (since {f.get('source_at', '?')})" if f.get("source_at") else ""
+            label = f"{f.get('edge_label', '?')}/{f.get('fact_type', '')}"
+            lines.append(f"    {label}: {f['value']}{marker}{temporal}{source}")
 
     connections = entity_data.get("connections", [])
     if connections:
@@ -126,11 +127,17 @@ def format_graph_stats(stats: dict) -> list[str]:
         for etype, count in entity_counts.items():
             lines.append(f"    {etype}: {count}")
 
-    cat_counts = stats.get("category_counts", {})
-    if cat_counts:
-        lines.append("  Fact categories:")
-        for cat, count in cat_counts.items():
-            lines.append(f"    {cat}: {count}")
+    label_counts = stats.get("edge_label_counts", {})
+    if label_counts:
+        lines.append("  Edge labels:")
+        for label, count in label_counts.items():
+            lines.append(f"    {label}: {count}")
+
+    ft_counts = stats.get("fact_type_counts", {})
+    if ft_counts:
+        lines.append("  Fact types:")
+        for ft, count in ft_counts.items():
+            lines.append(f"    {ft}: {count}")
 
     return lines
 
@@ -142,14 +149,13 @@ def format_record_memories(memories: list[dict]) -> list[str]:
     lines = []
     for i, m in enumerate(memories, 1):
         temporal = ""
-        if m.get("invalid_at"):
-            temporal = click.style(" [was]", fg="red", dim=True)
-            temporal += f" ({m.get('valid_at', '?')} -> {m['invalid_at']})"
-        elif m.get("valid_at"):
-            temporal = f" (since {m['valid_at']})"
-        cat = m.get("category", "?")
+        if m.get("stale"):
+            temporal = click.style(" [stale]", fg="red", dim=True)
+        elif m.get("source_at"):
+            temporal = f" (since {m['source_at']})"
+        label = f"{m.get('edge_label', '?')}/{m.get('fact_type', '?')}"
         lines.append(
-            f"  {i}. [{cat}] {m.get('from', '?')} → {m.get('to', '?')}: {m.get('fact', '')}{temporal}"
+            f"  {i}. [{label}] {m.get('from', '?')} → {m.get('to', '?')}: {m.get('fact', '')}{temporal}"
         )
     return lines
 
@@ -212,15 +218,16 @@ def _get_entity(name: str) -> dict | None:
     if not full:
         return entity
 
-    # Add facts (include historical for full history view)
-    facts = graph.get_facts_for_entity(eid, include_invalid=True)
+    # Add facts (include stale for full history view)
+    facts = graph.get_facts_for_entity(eid, include_stale=True)
     full["facts"] = [
         {
-            "attribute": f.get("category", "?"),
+            "edge_label": f.get("edge_label", "?"),
+            "fact_type": f.get("fact_type", ""),
             "value": f.get("fact", ""),
             "source_record": f.get("source_record", ""),
-            "valid_at": f.get("valid_at", ""),
-            "invalid_at": f.get("invalid_at"),
+            "source_at": f.get("source_at", ""),
+            "stale": f.get("stale", False),
         }
         for f in facts
     ]
@@ -231,7 +238,7 @@ def _get_entity(name: str) -> dict | None:
         {
             "to_entity": n.get("name", "?"),
             "relationship": next(
-                (edge["category"] for edge in traversal["edges"]
+                (edge["edge_label"] for edge in traversal["edges"]
                  if edge["to"] == n["id"] or edge["from"] == n["id"]),
                 "?",
             ),

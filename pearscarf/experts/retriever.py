@@ -64,9 +64,9 @@ class FactsLookupTool(BaseTool):
 
     name = "facts_lookup"
     description = (
-        "Get stored facts for a known entity. Returns fact-edges grouped by category. "
-        "By default shows only current facts. "
-        "Set include_historical=true to see full history with temporal markers."
+        "Get stored facts for a known entity. Returns fact-edges grouped by edge label. "
+        "By default shows only current (non-stale) facts. "
+        "Set include_stale=true to see full history with temporal markers."
     )
     input_schema = {
         "type": "object",
@@ -75,9 +75,9 @@ class FactsLookupTool(BaseTool):
                 "type": "string",
                 "description": "Entity element ID from search_entities results",
             },
-            "include_historical": {
+            "include_stale": {
                 "type": "boolean",
-                "description": "Include invalidated (historical) facts. Default false.",
+                "description": "Include stale (superseded) facts. Default false.",
             },
         },
         "required": ["entity_id"],
@@ -85,28 +85,29 @@ class FactsLookupTool(BaseTool):
 
     def execute(self, **kwargs: Any) -> str:
         entity_id = kwargs["entity_id"]
-        include_historical = kwargs.get("include_historical", False)
-        facts = graph.get_facts_for_entity(entity_id, include_invalid=include_historical)
+        include_stale = kwargs.get("include_stale", False)
+        facts = graph.get_facts_for_entity(entity_id, include_stale=include_stale)
         if not facts:
             return "No facts found for this entity."
 
-        # Group by category
-        by_cat: dict[str, list] = {}
+        # Group by edge_label
+        by_label: dict[str, list] = {}
         for f in facts:
-            by_cat.setdefault(f["category"], []).append(f)
+            by_label.setdefault(f["edge_label"], []).append(f)
 
         lines = []
-        for cat, cat_facts in sorted(by_cat.items()):
-            lines.append(f"{cat}:")
-            for f in cat_facts:
+        for label, label_facts in sorted(by_label.items()):
+            lines.append(f"{label}:")
+            for f in label_facts:
+                ft = f" ({f['fact_type']})" if f.get("fact_type") else ""
                 other = f" → {f['other_name']}" if f.get("other_name") else ""
                 temporal = ""
-                if f.get("invalid_at"):
-                    temporal = f" [was: {f['valid_at']} → {f['invalid_at']}]"
-                elif f.get("valid_at"):
-                    temporal = f" [since: {f['valid_at']}]"
+                if f.get("stale"):
+                    temporal = " [stale]"
+                elif f.get("source_at"):
+                    temporal = f" [since: {f['source_at']}]"
                 conf = f" [{f['confidence']}]" if f.get("confidence") else ""
-                lines.append(f"  - {f['fact']}{other}{conf}{temporal}")
+                lines.append(f"  - {f['fact']}{ft}{other}{conf}{temporal}")
         return "\n".join(lines)
 
 
@@ -116,9 +117,9 @@ class GraphTraverseTool(BaseTool):
     name = "graph_traverse"
     description = (
         "Walk fact-edges from an entity to find connected entities and Day nodes. "
-        "Traverses up to max_depth hops. Returns categories, fact text, and connected nodes. "
-        "By default only current (non-invalidated) edges. "
-        "Set include_historical=true to include past connections."
+        "Traverses up to max_depth hops. Returns edge labels, fact text, and connected nodes. "
+        "By default only current (non-stale) edges. "
+        "Set include_stale=true to include superseded connections."
     )
     input_schema = {
         "type": "object",
@@ -131,14 +132,14 @@ class GraphTraverseTool(BaseTool):
                 "type": "integer",
                 "description": "Maximum hops to traverse (default 2)",
             },
-            "include_historical": {
+            "include_stale": {
                 "type": "boolean",
-                "description": "Include invalidated edges. Default false.",
+                "description": "Include stale (superseded) edges. Default false.",
             },
-            "categories": {
+            "edge_labels": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Optional: only traverse these fact categories (e.g. ['WORKS_AT', 'MANAGES'])",
+                "description": "Optional: only traverse these edge labels (e.g. ['AFFILIATED', 'ASSERTED'])",
             },
         },
         "required": ["entity_id"],
@@ -147,13 +148,13 @@ class GraphTraverseTool(BaseTool):
     def execute(self, **kwargs: Any) -> str:
         entity_id = kwargs["entity_id"]
         max_depth = kwargs.get("max_depth", 2)
-        include_historical = kwargs.get("include_historical", False)
-        categories = kwargs.get("categories")
+        include_stale = kwargs.get("include_stale", False)
+        edge_labels = kwargs.get("edge_labels")
         result = graph.traverse_fact_edges(
             entity_id,
             max_depth=max_depth,
-            current_only=not include_historical,
-            categories=categories,
+            current_only=not include_stale,
+            edge_labels=edge_labels,
         )
         if not result["nodes"] and not result["edges"]:
             return "No connections found."
@@ -169,12 +170,13 @@ class GraphTraverseTool(BaseTool):
             lines.append("Fact-edges:")
             for edge in result["edges"]:
                 temporal = ""
-                if edge.get("invalid_at"):
-                    temporal = f" [was: {edge['valid_at']} → {edge['invalid_at']}]"
-                elif edge.get("valid_at"):
-                    temporal = f" [since: {edge['valid_at']}]"
+                if edge.get("stale"):
+                    temporal = " [stale]"
+                elif edge.get("source_at"):
+                    temporal = f" [since: {edge['source_at']}]"
+                ft = f"/{edge['fact_type']}" if edge.get("fact_type") else ""
                 lines.append(
-                    f"  - [{edge['category']}] {edge['fact']}{temporal}"
+                    f"  - [{edge['edge_label']}{ft}] {edge['fact']}{temporal}"
                 )
         if result["source_records"]:
             lines.append(f"Source records: {', '.join(result['source_records'])}")
@@ -210,8 +212,9 @@ class DayLookupTool(BaseTool):
         lines = [f"Facts for {date_str}:"]
         for f in facts:
             conf = f" [{f['confidence']}]" if f.get("confidence") else ""
+            ft = f"/{f['fact_type']}" if f.get("fact_type") else ""
             lines.append(
-                f"  - [{f['category']}] {f['entity_name']} ({f['entity_type']}): {f['fact']}{conf}"
+                f"  - [{f['edge_label']}{ft}] {f['entity_name']} ({f['entity_type']}): {f['fact']}{conf}"
             )
         return "\n".join(lines)
 

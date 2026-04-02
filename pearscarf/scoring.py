@@ -51,24 +51,31 @@ def match_facts(
 
     Returns (matched, total_extracted, total_expected).
 
-    Match criteria: category equal, from_entity matches (case-insensitive),
-    to_entity matches (case-insensitive, both None counts as match).
-    Each expected fact matches at most once.
+    Match criteria: edge_label equal, fact_type equal, from_entity matches
+    (case-insensitive), to_entity matches (case-insensitive, both None
+    counts as match). Each expected fact matches at most once.
     """
     matched_indices: set[int] = set()
     for ext in extracted:
-        ext_cat = ext.get("category", "").upper()
+        ext_label = ext.get("edge_label", "").upper()
+        ext_ft = ext.get("fact_type", "").lower()
         ext_from = (ext.get("from_entity") or "").lower()
         ext_to = (ext.get("to_entity") or "").lower() or None
 
         for i, exp in enumerate(expected):
             if i in matched_indices:
                 continue
-            exp_cat = exp.get("category", "").upper()
+            exp_label = exp.get("edge_label", "").upper()
+            exp_ft = exp.get("fact_type", "").lower()
             exp_from = (exp.get("from_entity") or "").lower()
             exp_to = (exp.get("to_entity") or "").lower() or None
 
-            if ext_cat == exp_cat and ext_from == exp_from and ext_to == exp_to:
+            if (
+                ext_label == exp_label
+                and ext_ft == exp_ft
+                and ext_from == exp_from
+                and ext_to == exp_to
+            ):
                 matched_indices.add(i)
                 break
 
@@ -157,13 +164,13 @@ def temporal_accuracy(
     temporal_assertions: list[dict],
     extracted_facts_by_record: dict[str, list[dict]],
 ) -> float | None:
-    """Check whether extracted facts carry the correct valid_at.
+    """Check whether extracted facts carry the correct source_at.
 
     Each assertion: {"record_id": str, "fact_category": str,
-                     "from_entity": str, "valid_at": str,
-                     "invalid_at": str|None}
+                     "from_entity": str, "valid_at": str}
 
-    Compares date portion (first 10 chars) of valid_at.
+    Compares date portion (first 10 chars) of source_at against valid_at
+    from ground truth.
     Returns correct / total, or None if no assertions.
     """
     if not temporal_assertions:
@@ -179,10 +186,10 @@ def temporal_accuracy(
         # Find matching extracted fact
         for fact in facts:
             if (
-                fact.get("category", "").upper() == cat
+                fact.get("edge_label", "").upper() == cat
                 and (fact.get("from_entity") or "").lower() == from_e
             ):
-                extracted_valid = (fact.get("valid_at") or "")[:10]
+                extracted_valid = (fact.get("source_at") or "")[:10]
                 expected_valid = (assertion.get("valid_at") or "")[:10]
                 if extracted_valid == expected_valid:
                     correct += 1

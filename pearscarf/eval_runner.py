@@ -106,16 +106,17 @@ def _build_extracted_from_graph(record_id: str) -> dict:
     for item in items:
         from_name = item.get("from", "")
         to_name = item.get("to", "")
-        category = item.get("category", "")
+        edge_label = item.get("edge_label", "")
 
         # Build fact
         fact = {
-            "category": category,
+            "edge_label": edge_label,
+            "fact_type": item.get("fact_type", ""),
             "fact": item.get("fact", ""),
             "from_entity": from_name,
             "to_entity": to_name if to_name and not _is_day(to_name) else None,
             "confidence": item.get("confidence", ""),
-            "valid_at": item.get("valid_at", ""),
+            "source_at": item.get("source_at", ""),
         }
         facts.append(fact)
 
@@ -172,8 +173,9 @@ def _print_verbose_graph(
     print("\n--- Graph Facts ---")
     for f in extracted.get("facts", []):
         to_str = f" -> {f['to_entity']}" if f.get("to_entity") else ""
-        valid = f"  (valid_at: {f['valid_at']})" if f.get("valid_at") else ""
-        print(f"  [{f.get('confidence', '?')}] {f.get('category', '?')}: {f.get('from_entity', '?')}{to_str}{valid}")
+        valid = f"  (source_at: {f['source_at']})" if f.get("source_at") else ""
+        label = f"{f.get('edge_label', '?')}/{f.get('fact_type', '?')}"
+        print(f"  [{f.get('confidence', '?')}] {label}: {f.get('from_entity', '?')}{to_str}{valid}")
 
     print()
 
