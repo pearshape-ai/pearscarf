@@ -1072,3 +1072,107 @@ def set_edge_confidence(edge_id: str, confidence: str) -> None:
             rid=edge_id,
             conf=confidence,
         )
+
+
+# --- Path and conflict queries ---
+
+
+def get_path(entity_id_a: str, entity_id_b: str, max_depth: int = 4) -> dict:
+    """Find the shortest path between two entities via current fact-edges.
+
+    Returns {"path": [...], "direct_facts": [...]}.
+    path: sequence of {entity, edge_label, fact_type, fact, direction}.
+    direct_facts: edges where both endpoints are the queried entities.
+    """
+    with get_session() as session:
+        # Direct facts (depth 1)
+        result = session.run(
+            "MATCH (a)-[r]-(b) "
+            "WHERE elementId(a) = $eid_a AND elementId(b) = $eid_b "
+            "AND r.fact IS NOT NULL AND (r.stale IS NULL OR r.stale = false) "
+            "RETURN type(r) AS edge_label, r.fact_type AS fact_type, "
+            "r.fact AS fact, r.source_at AS source_at, "
+            "elementId(startNode(r)) AS from_id",
+            eid_a=entity_id_a,
+            eid_b=entity_id_b,
+        )
+        direct_facts = []
+        for r in result:
+            direct_facts.append({
+                "edge_label": r["edge_label"],
+                "fact_type": r["fact_type"] or "",
+                "fact": r["fact"] or "",
+                "source_at": r["source_at"] or "",
+            })
+
+        # Shortest path
+        result = session.run(
+            f"MATCH (a), (b) "
+            f"WHERE elementId(a) = $eid_a AND elementId(b) = $eid_b "
+            f"MATCH path = shortestPath((a)-[*1..{max_depth}]-(b)) "
+            "WHERE ALL(r IN relationships(path) WHERE "
+            "  r.fact IS NOT NULL AND (r.stale IS NULL OR r.stale = false)) "
+            "UNWIND range(0, length(path)-1) AS idx "
+            "WITH path, idx, relationships(path)[idx] AS r, "
+            "  nodes(path)[idx] AS n, nodes(path)[idx+1] AS m "
+            "RETURN n.name AS from_name, m.name AS to_name, "
+            "  type(r) AS edge_label, r.fact_type AS fact_type, "
+            "  r.fact AS fact, "
+            "  CASE WHEN elementId(startNode(r)) = elementId(n) THEN 'outgoing' ELSE 'incoming' END AS direction",
+            eid_a=entity_id_a,
+            eid_b=entity_id_b,
+        )
+        path = []
+        for r in result:
+            path.append({
+                "from": r["from_name"] or "?",
+                "to": r["to_name"] or "?",
+                "edge_label": r["edge_label"],
+                "fact_type": r["fact_type"] or "",
+                "fact": r["fact"] or "",
+                "direction": r["direction"],
+            })
+
+        return {"path": path, "direct_facts": direct_facts}
+
+
+def get_conflicts(entity_id: str | None = None) -> list[dict]:
+    """Find AFFILIATED slots with multiple current (non-stale) edges.
+
+    If entity_id is provided, scopes to that entity as from_id.
+    Returns list of conflict dicts.
+    """
+    with get_session() as session:
+        where = (
+            "WHERE type(r1) = 'AFFILIATED' AND type(r2) = 'AFFILIATED' "
+            "AND r1.fact_type = r2.fact_type "
+            "AND (r1.stale IS NULL OR r1.stale = false) "
+            "AND (r2.stale IS NULL OR r2.stale = false) "
+            "AND elementId(r1) < elementId(r2)"
+        )
+        if entity_id:
+            where += " AND elementId(a) = $eid"
+
+        result = session.run(
+            f"MATCH (a)-[r1]->(b), (a)-[r2]->(b) {where} "
+            "RETURN a.name AS entity_name, type(r1) AS edge_label, "
+            "r1.fact_type AS fact_type, "
+            "r1.fact AS fact_a, r2.fact AS fact_b, "
+            "r1.source_at AS source_at_a, r2.source_at AS source_at_b, "
+            "elementId(r1) AS edge_id_a, elementId(r2) AS edge_id_b",
+            eid=entity_id,
+        )
+        return [
+            {
+                "entity_name": r["entity_name"] or "?",
+                "edge_label": r["edge_label"],
+                "fact_type": r["fact_type"] or "",
+                "fact_a": r["fact_a"] or "",
+                "fact_b": r["fact_b"] or "",
+                "source_at_a": r["source_at_a"] or "",
+                "source_at_b": r["source_at_b"] or "",
+                "edge_id_a": r["edge_id_a"],
+                "edge_id_b": r["edge_id_b"],
+            }
+            for r in result
+        ]
