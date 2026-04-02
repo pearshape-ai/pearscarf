@@ -23,6 +23,9 @@
 | `pearscarf eval --dataset <path>` | Graph-based eval: ingest, index, query graph, score |
 | `pearscarf eval --dataset <path> -v` | Verbose: print expected and graph entities/facts per record |
 | `pearscarf erase-all` | Wipe all system state: Postgres records, Neo4j graph, Qdrant vectors |
+| `pearscarf queue` | Show curator queue summary (unclaimed/claimed counts) |
+| `pearscarf queue list` | List up to 20 queue entries |
+| `pearscarf queue clear --confirm` | Clear unclaimed queue entries |
 
 All commands also available via `psc`.
 

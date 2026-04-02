@@ -88,7 +88,7 @@ def main() -> None:
 
     # --- Wipe Postgres records tables (dependency order) ---
     with _get_conn() as conn:
-        conn.execute("TRUNCATE issue_changes, issues, emails, records CASCADE")
+        conn.execute("TRUNCATE curator_queue, issue_changes, issues, emails, records CASCADE")
         conn.commit()
     print(f"Deleted {records_count} records, {emails_count} emails, {issues_count} issues, {changes_count} issue_changes from Postgres.")
 

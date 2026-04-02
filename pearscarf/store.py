@@ -343,3 +343,18 @@ def get_pending_records(limit: int = 10) -> list[dict]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# --- Curator Queue ---
+
+
+def enqueue_for_curation(record_id: str) -> None:
+    """Enqueue a record for curation. Idempotent — re-indexing does not reset claimed_at."""
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO curator_queue (record_id) VALUES (%s) "
+            "ON CONFLICT (record_id) DO NOTHING",
+            (record_id,),
+        )
+        conn.commit()

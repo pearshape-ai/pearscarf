@@ -151,6 +151,12 @@ CREATE TABLE IF NOT EXISTS issue_changes (
 
 CREATE INDEX IF NOT EXISTS idx_issue_changes_issue ON issue_changes(issue_record_id);
 CREATE INDEX IF NOT EXISTS idx_issue_changes_linear_id ON issue_changes(linear_history_id);
+
+CREATE TABLE IF NOT EXISTS curator_queue (
+    record_id TEXT PRIMARY KEY,
+    queued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    claimed_at TIMESTAMPTZ
+);
 """
 
 def init_db() -> None:

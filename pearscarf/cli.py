@@ -359,6 +359,63 @@ def eval_cmd(dataset: str, verbose: bool) -> None:
     run_graph_eval(dataset, verbose=verbose)
 
 
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def queue(ctx) -> None:
+    """Inspect the curator queue."""
+    if ctx.invoked_subcommand is not None:
+        return
+    from pearscarf.db import _get_conn, init_db
+    init_db()
+    with _get_conn() as conn:
+        unclaimed = conn.execute(
+            "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NULL"
+        ).fetchone()["c"]
+        claimed = conn.execute(
+            "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NOT NULL"
+        ).fetchone()["c"]
+        oldest = conn.execute(
+            "SELECT MIN(queued_at) AS oldest FROM curator_queue WHERE claimed_at IS NULL"
+        ).fetchone()["oldest"]
+    click.echo(f"  Unclaimed: {unclaimed}")
+    click.echo(f"  Claimed:   {claimed}")
+    if oldest:
+        click.echo(f"  Oldest:    {oldest}")
+
+
+@queue.command("list")
+def queue_list() -> None:
+    """List curator queue entries (up to 20)."""
+    from pearscarf.db import _get_conn, init_db
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT record_id, queued_at, claimed_at FROM curator_queue "
+            "ORDER BY queued_at LIMIT 20"
+        ).fetchall()
+    if not rows:
+        click.echo("Queue is empty.")
+        return
+    for r in rows:
+        claimed = f"  claimed: {r['claimed_at']}" if r["claimed_at"] else "  unclaimed"
+        click.echo(f"  {r['record_id']}  queued: {r['queued_at']}{claimed}")
+
+
+@queue.command("clear")
+@click.option("--confirm", is_flag=True, help="Required to actually clear the queue")
+def queue_clear(confirm: bool) -> None:
+    """Delete all unclaimed entries from the curator queue."""
+    if not confirm:
+        click.echo("Use --confirm to clear unclaimed queue entries.")
+        return
+    from pearscarf.db import _get_conn, init_db
+    init_db()
+    with _get_conn() as conn:
+        result = conn.execute("DELETE FROM curator_queue WHERE claimed_at IS NULL")
+        conn.commit()
+        click.echo(f"Cleared {result.rowcount} unclaimed entries.")
+
+
 @cli.command("erase-all")
 def erase_all() -> None:
     """Wipe all system state: Postgres records, Neo4j graph, Qdrant vectors."""
@@ -420,7 +477,7 @@ def erase_all() -> None:
 
     # Wipe Postgres
     with _get_conn() as conn:
-        conn.execute("TRUNCATE issue_changes, issues, emails, records CASCADE")
+        conn.execute("TRUNCATE curator_queue, issue_changes, issues, emails, records CASCADE")
         conn.commit()
     click.echo(f"Deleted {records_count} records from Postgres.")
 
