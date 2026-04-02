@@ -486,7 +486,7 @@ class Indexer:
             from_id, edge_label, fact_type, to_id, record_id, fact_text,
         )
         if existing:
-            graph.append_source_record(existing, record_id)
+            graph.append_source_record(existing, record_id, confidence)
             log.write(
                 "indexer", "--", "action",
                 f"dup merged: {record_id} already in edge {existing}",

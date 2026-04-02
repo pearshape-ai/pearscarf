@@ -1,17 +1,23 @@
 """Curator — processes the curator_queue after the indexer writes facts.
 
 Polls the queue for unclaimed entries, claims one at a time, processes it,
-and deletes the entry. Currently handles AFFILIATED semantic dedup.
+and deletes the entry. Handles AFFILIATED/ASSERTED dedup, expiry, and
+confidence upgrades.
 """
 
 from __future__ import annotations
 
 import threading
 import traceback
+from datetime import datetime, timezone
 
 from pearscarf import curator_judge, graph, log
 from pearscarf.config import CURATOR_CLAIM_TIMEOUT, CURATOR_POLL_INTERVAL
 from pearscarf.db import _get_conn, init_db
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 class Curator:
@@ -20,6 +26,9 @@ class Curator:
     def __init__(self) -> None:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._last_cycle_upgrades = 0
+        self._last_cycle_expired = 0
+        self._last_cycle_at: str | None = None
 
     def _reset_timed_out_claims(self) -> None:
         """Release claims that have been held too long (crash recovery)."""
@@ -142,10 +151,8 @@ class Curator:
             f"expiry notification reserved for {edge['edge_id']}",
         )
 
-    def _scan_expired(self) -> None:
-        """Stale all ASSERTED[commitment|promise] edges past their valid_until."""
-        from datetime import datetime, timezone
-
+    def _scan_expired(self) -> int:
+        """Stale all ASSERTED[commitment|promise] edges past their valid_until. Returns count."""
         today = graph.utc_to_local_date(datetime.now(timezone.utc).isoformat())
         expired = graph.get_expired_commitments(today)
 
@@ -159,8 +166,40 @@ class Curator:
                 f"source_record={edge['source_record']}",
             )
 
+        return len(expired)
+
+    def _scan_confidence_upgrades(self) -> int:
+        """Upgrade edges from inferred to stated when a source_record confirms it.
+
+        Returns count of edges upgraded.
+        """
+        edges = graph.get_inferred_multi_source_edges()
+        upgraded = 0
+
+        for edge in edges:
+            source_records = edge["source_records"]
+            has_stated = False
+            for sr in source_records:
+                if isinstance(sr, dict) and sr.get("confidence") == "stated":
+                    has_stated = True
+                    break
+                # Legacy flat string — can't determine confidence, skip
+                if isinstance(sr, str):
+                    continue
+
+            if has_stated:
+                graph.set_edge_confidence(edge["edge_id"], "stated")
+                log.write(
+                    "curator", "--", "action",
+                    f"confidence upgraded: {edge['edge_id']} inferred → stated "
+                    f"({edge['from_name']} → {edge['to_name']})",
+                )
+                upgraded += 1
+
+        return upgraded
+
     def _process(self, record_id: str) -> None:
-        """Process a single record — dedup then expiry scan."""
+        """Process a single record — dedup, expiry, confidence upgrade."""
         log.write("curator", "--", "action", f"processing {record_id}")
 
         edges = graph.get_edges_by_source_record(record_id)
@@ -174,7 +213,12 @@ class Curator:
         self._dedup_edges("ASSERTED", edges)
 
         # Pass 3: Global expiry scan
-        self._scan_expired()
+        self._last_cycle_expired = self._scan_expired()
+
+        # Pass 4: Global confidence upgrade
+        self._last_cycle_upgrades = self._scan_confidence_upgrades()
+
+        self._last_cycle_at = _now()
 
     def _loop(self) -> None:
         init_db()
