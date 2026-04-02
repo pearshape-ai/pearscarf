@@ -228,11 +228,18 @@ def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
     indexer.start()
     print("Indexer started.")
 
+    # Start MCP server
+    from pearscarf.mcp_server import MCPServer
+    mcp_srv = MCPServer()
+    mcp_srv.start()
+    print("MCP server started.")
+
     # Run Discord bot
     bot = PearscarfBot(bus)
     try:
         bot.run(DISCORD_BOT_TOKEN)
     finally:
+        mcp_srv.stop()
         indexer.stop()
         retriever_runner.stop()
         worker_runner.stop()

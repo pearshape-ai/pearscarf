@@ -390,3 +390,76 @@ def get_communications_for_entity(name_or_email: str, since: str | None = None) 
                 (pattern, pattern),
             ).fetchall()
         return [dict(r) for r in rows]
+
+
+# --- MCP Keys ---
+
+import hashlib
+import secrets
+
+
+def _hash_key(raw_key: str) -> str:
+    return hashlib.sha256(raw_key.encode()).hexdigest()
+
+
+def _next_mcp_key_id() -> str:
+    with _get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) AS c FROM mcp_keys").fetchone()
+        return f"mck_{row['c'] + 1:03d}"
+
+
+def create_mcp_key(name: str) -> dict:
+    """Create a new MCP API key. Returns {id, name, raw_key}."""
+    init_db()
+    raw_key = f"psk_{secrets.token_urlsafe(32)}"
+    key_hash = _hash_key(raw_key)
+    key_id = _next_mcp_key_id()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO mcp_keys (id, name, key_hash) VALUES (%s, %s, %s)",
+            (key_id, name, key_hash),
+        )
+        conn.commit()
+    return {"id": key_id, "name": name, "raw_key": raw_key}
+
+
+def list_mcp_keys() -> list[dict]:
+    """List all MCP keys (without hashes)."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name, created_at, last_used_at, revoked FROM mcp_keys "
+            "ORDER BY created_at"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def revoke_mcp_key(key_id: str) -> bool:
+    """Revoke an MCP key. Returns True if found and revoked."""
+    init_db()
+    with _get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE mcp_keys SET revoked = TRUE WHERE id = %s AND revoked = FALSE",
+            (key_id,),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def validate_mcp_key(raw_key: str) -> bool:
+    """Validate an MCP key. Updates last_used_at if valid."""
+    init_db()
+    key_hash = _hash_key(raw_key)
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM mcp_keys WHERE key_hash = %s AND revoked = FALSE",
+            (key_hash,),
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute(
+            "UPDATE mcp_keys SET last_used_at = now() WHERE id = %s",
+            (row["id"],),
+        )
+        conn.commit()
+        return True
