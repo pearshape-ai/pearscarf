@@ -904,3 +904,85 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
                 "stale": record["stale"] or False,
             })
         return items
+
+
+def get_edges_by_source_record(record_id: str) -> list[dict]:
+    """Get fact-edges where record_id appears in source_records, with element IDs.
+
+    Uses source_records (list) instead of source_record (singular) so edges
+    that were dedup-merged from this record are also returned.
+    """
+    with get_session() as session:
+        result = session.run(
+            "MATCH (a)-[r]->(b) "
+            "WHERE $rid IN r.source_records AND r.fact IS NOT NULL "
+            "RETURN elementId(r) AS edge_id, type(r) AS edge_label, "
+            "r.fact_type AS fact_type, r.fact AS fact, "
+            "r.confidence AS confidence, r.source_at AS source_at, "
+            "r.source_record AS source_record, r.source_records AS source_records, "
+            "r.stale AS stale, r.role AS role, "
+            "elementId(a) AS from_id, a.name AS from_name, "
+            "elementId(b) AS to_id, b.name AS to_name",
+            rid=record_id,
+        )
+        return [
+            {
+                "edge_id": r["edge_id"],
+                "edge_label": r["edge_label"],
+                "fact_type": r["fact_type"] or "",
+                "fact": r["fact"] or "",
+                "confidence": r["confidence"] or "",
+                "source_at": r["source_at"] or "",
+                "source_record": r["source_record"] or "",
+                "source_records": r["source_records"] or [],
+                "stale": r["stale"] or False,
+                "role": r["role"] or "",
+                "from_id": r["from_id"],
+                "from_name": r["from_name"] or "",
+                "to_id": r["to_id"],
+                "to_name": r["to_name"] or "",
+            }
+            for r in result
+        ]
+
+
+def get_edges_for_slot(
+    from_id: str,
+    edge_label: str,
+    fact_type: str,
+    to_id: str,
+    include_stale: bool = False,
+) -> list[dict]:
+    """Get all fact-edges for a (from, label, type, to) slot."""
+    with get_session() as session:
+        where = (
+            "WHERE elementId(a) = $from_id AND elementId(b) = $to_id "
+            "AND type(r) = $label AND r.fact_type = $ft"
+        )
+        if not include_stale:
+            where += " AND (r.stale IS NULL OR r.stale = false)"
+
+        result = session.run(
+            f"MATCH (a)-[r]->(b) {where} "
+            "RETURN elementId(r) AS edge_id, r.fact AS fact, "
+            "r.confidence AS confidence, r.source_at AS source_at, "
+            "r.source_record AS source_record, r.source_records AS source_records, "
+            "r.stale AS stale, r.role AS role",
+            from_id=from_id,
+            to_id=to_id,
+            label=edge_label.upper(),
+            ft=fact_type,
+        )
+        return [
+            {
+                "edge_id": r["edge_id"],
+                "fact": r["fact"] or "",
+                "confidence": r["confidence"] or "",
+                "source_at": r["source_at"] or "",
+                "source_record": r["source_record"] or "",
+                "source_records": r["source_records"] or [],
+                "stale": r["stale"] or False,
+                "role": r["role"] or "",
+            }
+            for r in result
+        ]

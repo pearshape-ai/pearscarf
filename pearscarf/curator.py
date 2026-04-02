@@ -1,7 +1,7 @@
 """Curator — processes the curator_queue after the indexer writes facts.
 
 Polls the queue for unclaimed entries, claims one at a time, processes it,
-and deletes the entry. Processing logic is a stub until 1.14.2+.
+and deletes the entry. Currently handles AFFILIATED semantic dedup.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import traceback
 
-from pearscarf import log
+from pearscarf import curator_judge, graph, log
 from pearscarf.config import CURATOR_CLAIM_TIMEOUT, CURATOR_POLL_INTERVAL
 from pearscarf.db import _get_conn, init_db
 
@@ -78,9 +78,69 @@ class Curator:
             conn.commit()
 
     def _process(self, record_id: str) -> None:
-        """Process a single record. Stub — filled in by 1.14.2+."""
+        """Process a single record — AFFILIATED semantic dedup."""
         log.write("curator", "--", "action", f"processing {record_id}")
-        # TODO: graph curation logic goes here
+
+        # Step 1: Get this record's edges (including dedup-merged)
+        edges = graph.get_edges_by_source_record(record_id)
+        affiliated = [e for e in edges if e["edge_label"] == "AFFILIATED" and not e["stale"]]
+
+        if not affiliated:
+            return
+
+        # Step 2: Group by slot (from_id, fact_type, to_id)
+        slots: dict[tuple, list[dict]] = {}
+        for e in affiliated:
+            key = (e["from_id"], e["fact_type"], e["to_id"])
+            slots.setdefault(key, []).append(e)
+
+        # Step 3: For each slot, get all current edges and run dedup
+        for (from_id, fact_type, to_id), slot_edges in slots.items():
+            all_edges = graph.get_edges_for_slot(from_id, "AFFILIATED", fact_type, to_id)
+
+            if len(all_edges) <= 1:
+                continue
+
+            from_name = slot_edges[0]["from_name"]
+            to_name = slot_edges[0]["to_name"]
+
+            # Step 4: Call judge
+            groups = curator_judge.judge_equivalence(all_edges, "AFFILIATED")
+
+            log.write(
+                "curator", "--", "action",
+                f"affiliated dedup: slot ({from_name}, {fact_type}, {to_name}) — "
+                f"{len(all_edges)} candidates, {len(groups)} groups",
+            )
+
+            # Step 5: Process groups
+            for group_ids in groups:
+                if len(group_ids) <= 1:
+                    continue
+
+                # Find the edges in this group
+                group_edges = [e for e in all_edges if e["edge_id"] in group_ids]
+                if not group_edges:
+                    continue
+
+                # Sort by source_at descending — most recent is survivor
+                group_edges.sort(key=lambda e: e["source_at"], reverse=True)
+                survivor = group_edges[0]
+
+                for older in group_edges[1:]:
+                    if older["source_at"] == survivor["source_at"]:
+                        log.write(
+                            "curator", "--", "action",
+                            f"affiliated unresolved: equal source_at for "
+                            f"{older['edge_id']} and {survivor['edge_id']} — skipped",
+                        )
+                        continue
+                    graph.mark_fact_stale(older["edge_id"], survivor["edge_id"])
+                    log.write(
+                        "curator", "--", "action",
+                        f"affiliated staled: {older['edge_id']} → {survivor['edge_id']} "
+                        f"(source_at: {older['source_at']} < {survivor['source_at']})",
+                    )
 
     def _loop(self) -> None:
         init_db()
