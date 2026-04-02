@@ -105,11 +105,20 @@ def run(poll_email: bool, poll_linear: bool) -> None:
     sys.stdout.write("Indexer started.\r\n")
     sys.stdout.flush()
 
+    # Start MCP server
+    from pearscarf.mcp_server import MCPServer
+    from pearscarf.config import MCP_PORT
+    mcp_srv = MCPServer()
+    mcp_srv.start()
+    sys.stdout.write(f"MCP server started on port {MCP_PORT}.\r\n")
+    sys.stdout.flush()
+
     # Run REPL in main thread
     repl = SessionRepl(bus)
     try:
         repl.run()
     finally:
+        mcp_srv.stop()
         indexer.stop()
         retriever_runner.stop()
         worker_runner.stop()
@@ -357,6 +366,83 @@ def eval_cmd(dataset: str, verbose: bool) -> None:
     from pearscarf.eval_runner import run_graph_eval
 
     run_graph_eval(dataset, verbose=verbose)
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def mcp(ctx):
+    """MCP server management."""
+    if ctx.invoked_subcommand is None:
+        click.echo("Use 'psc mcp start', 'psc mcp status', or 'psc mcp keys'.")
+
+
+@mcp.command("start")
+def mcp_start():
+    """Run MCP server standalone in the foreground."""
+    from pearscarf.mcp_server import MCPServer
+    MCPServer().run_foreground()
+
+
+@mcp.command("status")
+def mcp_status():
+    """Show MCP server info."""
+    from pearscarf.config import MCP_HOST, MCP_PORT
+    from pearscarf.store import list_mcp_keys
+    from pearscarf.db import init_db
+    init_db()
+    keys = list_mcp_keys()
+    active = sum(1 for k in keys if not k["revoked"])
+    click.echo(f"  Bind: {MCP_HOST}:{MCP_PORT}")
+    click.echo(f"  Tools: 0 (registered in 1.15.2+)")
+    click.echo(f"  Keys: {active} active, {len(keys)} total")
+
+
+@mcp.group("keys")
+def mcp_keys():
+    """Manage MCP API keys."""
+
+
+@mcp_keys.command("list")
+def mcp_keys_list():
+    """List all MCP API keys."""
+    from pearscarf.store import list_mcp_keys
+    from pearscarf.db import init_db
+    init_db()
+    keys = list_mcp_keys()
+    if not keys:
+        click.echo("No keys.")
+        return
+    for k in keys:
+        status = "revoked" if k["revoked"] else "active"
+        last = k["last_used_at"] or "never"
+        click.echo(f"  {k['id']}  {k['name']}  {status}  created: {k['created_at']}  last used: {last}")
+
+
+@mcp_keys.command("create")
+@click.option("--name", required=True, help="Human-readable key name")
+def mcp_keys_create(name):
+    """Create a new MCP API key."""
+    from pearscarf.store import create_mcp_key
+    from pearscarf.db import init_db
+    init_db()
+    result = create_mcp_key(name)
+    click.echo(f"Key created: {result['id']}")
+    click.echo(f"Name: {result['name']}")
+    click.echo(f"Key: {result['raw_key']}")
+    click.echo("Save this key — it will not be shown again.")
+
+
+@mcp_keys.command("revoke")
+@click.argument("key_id")
+def mcp_keys_revoke(key_id):
+    """Revoke an MCP API key."""
+    from pearscarf.store import revoke_mcp_key
+    from pearscarf.db import init_db
+    init_db()
+    if revoke_mcp_key(key_id):
+        click.echo(f"Key {key_id} revoked.")
+    else:
+        click.echo(f"Key {key_id} not found or already revoked.")
 
 
 @cli.group(invoke_without_command=True)

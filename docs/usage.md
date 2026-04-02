@@ -28,6 +28,11 @@
 | `pearscarf queue clear --confirm` | Clear unclaimed queue entries |
 | `pearscarf curator start` | Start the curator in the foreground |
 | `pearscarf curator status` | Show curator queue status |
+| `pearscarf mcp start` | Run MCP server standalone (dev/debug) |
+| `pearscarf mcp status` | Show MCP server info |
+| `pearscarf mcp keys list` | List all API keys |
+| `pearscarf mcp keys create --name <name>` | Create a new API key |
+| `pearscarf mcp keys revoke <key_id>` | Revoke an API key |
 
 All commands also available via `psc`.
 

@@ -157,6 +157,15 @@ CREATE TABLE IF NOT EXISTS curator_queue (
     queued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     claimed_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS mcp_keys (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at TIMESTAMPTZ,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE
+);
 """
 
 def init_db() -> None:

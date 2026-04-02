@@ -44,6 +44,10 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 CURATOR_POLL_INTERVAL = int(os.getenv("CURATOR_POLL_INTERVAL", "30"))
 CURATOR_CLAIM_TIMEOUT = int(os.getenv("CURATOR_CLAIM_TIMEOUT", "600"))
 
+# MCP server
+MCP_PORT = int(os.getenv("MCP_PORT", "8090"))
+MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
+
 # Timezone (for Day node date derivation)
 TIMEZONE = os.getenv("TIMEZONE", "America/Los_Angeles")
 
