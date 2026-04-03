@@ -120,6 +120,50 @@ def get_connections(
     }
 
 
+@mcp.tool(description=(
+    "Find how two entities are connected in the PearScarf graph. "
+    "Returns direct facts between them and the shortest path if no direct connection exists. "
+    "Use before drafting a message or making a decision involving two parties."
+))
+def get_relationship(entity_a: str, entity_b: str) -> dict:
+    """Find the relationship between two entities."""
+    ent_a, err_a = _resolve_entity(entity_a)
+    if err_a:
+        return err_a
+    ent_b, err_b = _resolve_entity(entity_b)
+    if err_b:
+        return err_b
+
+    result = context_query.get_path(ent_a["id"], ent_b["id"])
+    return {
+        "entity_a": {"id": ent_a["id"], "name": ent_a["name"], "type": ent_a["type"]},
+        "entity_b": {"id": ent_b["id"], "name": ent_b["name"], "type": ent_b["type"]},
+        "direct_facts": result.get("direct_facts", []),
+        "path": result.get("path", []),
+    }
+
+
+@mcp.tool(description=(
+    "Find AFFILIATED facts where the graph holds two current conflicting values for the same slot. "
+    "These are cases where the Curator detected equal source_at timestamps and could not resolve automatically. "
+    "Use when reviewing graph health or validating entity affiliations."
+))
+def get_conflicts(entity_name: str = None) -> dict:
+    """Find conflicting AFFILIATED facts."""
+    entity_id = None
+    if entity_name:
+        entity, err = _resolve_entity(entity_name)
+        if err:
+            return err
+        entity_id = entity["id"]
+
+    conflicts = context_query.get_conflicts(entity_id=entity_id)
+    return {
+        "conflicts": conflicts,
+        "count": len(conflicts),
+    }
+
+
 class MCPServer:
     """Background thread running the FastMCP server."""
 

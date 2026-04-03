@@ -393,7 +393,7 @@ def mcp_status():
     keys = list_mcp_keys()
     active = sum(1 for k in keys if not k["revoked"])
     click.echo(f"  Bind: {MCP_HOST}:{MCP_PORT}")
-    click.echo(f"  Tools: 3 (find_entity, get_facts, get_connections)")
+    click.echo(f"  Tools: 5 (find_entity, get_facts, get_connections, get_relationship, get_conflicts)")
     click.echo(f"  Keys: {active} active, {len(keys)} total")
 
 
@@ -431,6 +431,13 @@ def mcp_test(entity_name: str):
     click.echo(f"  {len(nodes)} connection(s)")
     for n in nodes[:5]:
         click.echo(f"  {n['name']} ({n['type']})")
+
+    # get_conflicts
+    click.echo("\n--- get_conflicts (global) ---")
+    conflicts = context_query.get_conflicts()
+    click.echo(f"  {len(conflicts)} conflict(s)")
+    for c in conflicts[:3]:
+        click.echo(f"  {c['entity_name']}: {c['fact_a']} vs {c['fact_b']}")
 
 
 @mcp.group("keys")
