@@ -3,36 +3,41 @@
 ## System Diagram
 
 ```
-┌─────────────────────────────────────────────────┐
-│                   Human                          │
-│            (Discord / Terminal REPL)              │
-└──────────────────────┬──────────────────────────┘
-                       │ Postgres messages
-┌──────────────────────▼──────────────────────────┐
-│               Worker Agent                       │
-│    (reasoning, routing, triage, responds)         │
-└───┬──────────────┬──────────────┬───────────────┘
-    │              │              │
-    │ Postgres     │ Postgres     │ Postgres
-    │ messages     │ messages     │ messages
-    │              │              │
-┌───▼───┐   ┌─────▼─────┐   ┌───▼────────┐
-│ Gmail │   │  Indexer   │   │ Retriever  │
-│Expert │   │  (bg)      │   │            │
-└───┬───┘   └─────┬──────┘   └───┬────────┘
-    │             │              │
-    │ writes      │ writes       │ reads
-    │             │              │
-┌───▼─────────────▼──────────────▼────────────────┐
-│                  Storage                         │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
-│  │ Postgres │ │ Neo4j    │ │ Qdrant           │ │
-│  │ records  │ │ entities │ │ vector embeddings│ │
-│  │ emails   │ │ relations│ │                  │ │
-│  │ issues   │ │ facts    │ │                  │ │
-│  │ sessions │ │          │ │                  │ │
-│  └──────────┘ └──────────┘ └──────────────────┘ │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    Interfaces                            │
+│       Discord / Terminal REPL / MCP Server (HTTP/SSE)    │
+└────────────┬──────────────────────────┬─────────────────┘
+             │ Postgres messages         │ context_query.py
+┌────────────▼──────────────────────────┐│
+│            Worker Agent                ││
+│   (reasoning, routing, triage)         ││
+└──┬──────┬──────┬──────┬───────────────┘│
+   │      │      │      │               │
+┌──▼──┐┌──▼──┐┌──▼───┐┌─▼────┐  ┌──────▼──────┐
+│Gmail││Linear││Ingest││Retrvr│  │ MCP Server  │
+│Exprt││Exprt ││Exprt ││      │  │ (10 tools)  │
+└──┬──┘└──┬──┘└──┬───┘└──┬───┘  └──────┬──────┘
+   │      │      │       │             │
+   │writes│writes│writes │reads        │reads
+   │      │      │       │             │
+┌──▼──────▼──────▼───────▼─────────────▼──────┐
+│                  Storage                     │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────┐ │
+│  │ Postgres │ │ Neo4j    │ │ Qdrant       │ │
+│  │ records  │ │ entities │ │ vectors      │ │
+│  │ emails   │ │ fact-    │ │              │ │
+│  │ issues   │ │ edges    │ │              │ │
+│  │ sessions │ │          │ │              │ │
+│  │ mcp_keys │ │          │ │              │ │
+│  └──────────┘ └──────────┘ └──────────────┘ │
+└──────────────────────────────────────────────┘
+        ↑ writes              ↑ writes
+┌───────┴──────┐     ┌───────┴──────┐
+│   Indexer    │────→│   Curator    │
+│ (extraction) │queue│ (dedup,      │
+│              │     │  expiry,     │
+│              │     │  confidence) │
+└──────────────┘     └──────────────┘
 ```
 
 ## Email Pipeline
@@ -118,34 +123,51 @@ pearscarf/
 │   └── runner.py          # AgentRunner — polling loop that feeds bus messages to agents
 ├── experts/
 │   ├── __init__.py        # Expert registry
-│   ├── gmail.py           # Gmail expert — headless browser automation
-│   ├── ingest.py          # Ingest expert — file-based data entry (seed files + JSON records)
-│   └── retriever.py       # Retriever expert — knowledge graph + vector search
-├── knowledge/
-│   └── __init__.py        # KnowledgeStore — file-based markdown storage
+│   ├── gmail.py           # Gmail expert — OAuth API + headless browser fallback
+│   ├── linear.py          # Linear expert — GraphQL API, issue CRUD
+│   ├── ingest.py          # Ingest expert — file-based data entry (seed + JSON records)
+│   └── retriever.py       # Retriever expert — context queries via context_query.py
 ├── prompts/               # System prompts as standalone markdown files
 │   ├── __init__.py        # load(name) — prompt loader
 │   ├── worker.md          # Worker agent system prompt
 │   ├── gmail_browser.md   # Gmail expert browser transport prompt
 │   ├── gmail_mcp.md       # Gmail expert MCP/API transport prompt
+│   ├── linear.md          # Linear expert system prompt
 │   ├── retriever.md       # Retriever expert system prompt
-│   └── extraction.md      # Indexer LLM extraction template (format-string placeholders)
+│   ├── ingest.md          # Ingest expert system prompt
+│   ├── extraction.md      # Indexer LLM extraction template
+│   ├── ingest_extraction.md # Seed file extraction template
+│   ├── entity_resolution.md # Entity resolution LLM judge prompt
+│   ├── curator_affiliated.md # Curator AFFILIATED dedup judge
+│   └── curator_asserted.md  # Curator ASSERTED dedup judge
 ├── tools/
 │   ├── __init__.py        # BaseTool + ToolRegistry with auto-discovery
 │   ├── math.py            # Safe math expression evaluator
 │   └── web_search.py      # DuckDuckGo web search
+├── context_query.py       # Read-only data access layer — single query surface for retriever + MCP
+├── mcp_server.py          # MCP server — FastMCP over HTTP/SSE, exposes 10 tools
+├── curator.py             # Curator — background worker for graph quality (dedup, expiry, confidence)
+├── curator_judge.py       # LLM judge for semantic equivalence of fact-edges
+├── indexer.py             # Indexer — background LLM extraction into knowledge graph
+├── graph.py               # Knowledge graph CRUD — entities, fact-edges, traversal
 ├── db.py                  # Postgres schema + queries (sessions, messages, records, graph)
 ├── bus.py                 # MessageBus — send/receive/poll over Postgres
-├── store.py               # System of Record — structured email/record storage
-├── graph.py               # Knowledge graph CRUD — entities, edges, facts
-├── indexer.py             # Indexer — background LLM extraction into knowledge graph
+├── store.py               # System of Record — structured record/email/issue storage + curator queue
 ├── vectorstore.py         # Qdrant vector storage — semantic search via sentence-transformers
+├── scoring.py             # Eval scoring — entity/fact matching, F1, NRR, ERA, temporal accuracy
+├── eval_runner.py         # Eval pipeline — ingest, index, query graph, score
+├── eval_report.py         # Eval terminal report formatter + JSON results writer
+├── extract_test.py        # Extraction prompt testing utility (no writes)
+├── neo4j_client.py        # Neo4j connection manager
+├── linear_client.py       # Linear GraphQL API client
+├── tracing.py             # LangSmith tracing utilities
 ├── log.py                 # Shared session logger — unified timeline
 ├── status.py              # In-memory agent activity registry
+├── config.py              # Environment-based configuration
 ├── terminal.py            # Raw terminal I/O for non-blocking REPL
 ├── repl.py                # Non-blocking session-aware REPL
-├── cli.py                 # Click CLI — run, discord, chat, expert commands
-├── config.py              # Environment-based configuration
+├── cli.py                 # Click CLI — run, discord, eval, query, mcp, curator, queue, erase-all
+├── cli_memory.py          # Memory inspection CLI commands (psc memory)
 └── discord_bot.py         # Discord bot with thread-per-session
 ```
 
@@ -203,8 +225,17 @@ messages(id, session_id, from_agent, to_agent, content, reasoning, data, read, c
 discord_threads(session_id, thread_id, channel_id)
 
 -- System of Record
-records(id, type, source, created_at, raw, indexed, classification, classification_reason, human_context)
+records(id, type, source, created_at, raw, indexed, classification, classification_reason,
+        human_context, resolution_pending, resolution_status)
 emails(record_id, message_id, sender, recipient, subject, body, received_at)
+issues(record_id, linear_id, identifier, title, description, status, priority, assignee,
+       project, labels, comments, url, linear_created_at, linear_updated_at)
+issue_changes(record_id, issue_record_id, linear_history_id, field, from_value, to_value,
+              changed_by, changed_at)
+
+-- Operations
+curator_queue(record_id, queued_at, claimed_at)
+mcp_keys(id, name, key_hash, created_at, last_used_at, revoked)
 ```
 
 Postgres with connection pooling (psycopg_pool) for concurrent reads/writes across threads.
@@ -232,28 +263,30 @@ When the worker receives an email from the gmail expert, it classifies it before
 
 Human responses are captured as `human_context` on the record. The Indexer appends this context to the extraction prompt, enriching entity extraction. The Indexer only processes records with `classification = 'relevant'`.
 
+**Triage bypass:** Ingest records (`store.save_ingest()`) and issue change records (`store.save_issue_change()`) are auto-classified as `'relevant'` on save — they skip the worker triage step entirely.
+
 ## Knowledge Graph
 
-> **Note:** The extraction pipeline is in transition. The Indexer and Retriever are currently placeholder stubs — they start and run but do not extract or search. The graph tables and Qdrant collection remain in the schema for the upcoming extraction rebuild.
+The Indexer processes records into a knowledge graph of entities and fact-edges. All graph data lives in Neo4j. The Retriever queries the graph and vector store via `context_query.py` — the single read-only data access layer shared with the MCP server. Extraction correctness is measured by the metrics defined in [Eval Metrics](eval-metrics.md).
 
-The Indexer processes records into a knowledge graph of entities, relationships, and facts. All graph data lives in Neo4j (no Postgres graph tables). Extraction correctness is measured by the metrics defined in [Eval Metrics](eval-metrics.md).
-
-- **Entities** — nodes with labels (Person, Company, Project, Event). Merged on name + email/domain.
-- **Relationships** — typed edges between entities (e.g. WORKS_AT, CUSTOMER_OF). Bi-temporal: `valid_at`, `invalid_at`.
-- **Facts** — `Fact` nodes connected via `HAS_FACT` edges. Bi-temporal: old facts invalidated, new facts created.
-- **`graph.py`** — CRUD module: `find_entity()`, `create_entity()`, `create_edge()`, `upsert_fact()`.
+- **Entities** — nodes with labels (Person, Company, Project, Event). Merged on name + email/domain. Aliases tracked via IDENTIFIED_AS self-edges.
+- **Fact-edges** — three relationship types: AFFILIATED (organizational), ASSERTED (claims/commitments), TRANSITIONED (state changes). Each carries `fact_type`, `source_at`, `recorded_at`, `stale`, `replaced_by`, `valid_until`. Stale facts are preserved, never deleted.
+- **`graph.py`** — CRUD module: `find_entity()`, `create_entity()`, `create_fact_edge()`, `mark_fact_stale()`, `find_entity_candidates()`, `get_entity_context()`.
 
 ### Indexer (`indexer.py`)
 
-Background daemon thread that polls `records WHERE indexed = 0` every 5 seconds. For each unindexed record:
+Background daemon thread that polls `records WHERE indexed = FALSE AND classification = 'relevant' AND resolution_status != 'pending'` every 5 seconds. For each unindexed record:
 
-1. Reads full content from typed table (e.g. emails)
-2. Loads extraction prompt from `pearscarf/prompts/extraction.md`
-3. Calls LLM for structured JSON extraction
-4. Resolves entities against existing graph (exact name + metadata match)
-5. Creates edges and upserts facts
+1. Builds content string from typed table (emails, issues, issue_changes, or raw for ingest records)
+2. Loads extraction prompt — `extraction.md` for most records, `ingest_extraction.md` for seed ingests
+3. Calls LLM for structured JSON extraction (entities + facts with `edge_label`/`fact_type`)
+4. Resolves entities via candidate retrieval: exact name → email/domain → first-name prefix → substring → IDENTIFIED_AS aliases → LLM judge for non-exact matches
+5. Writes fact-edges to Neo4j with literal dup check (skip if identical edge already exists from same source)
 6. Embeds record content into Qdrant for semantic search
 7. Marks record as indexed
+8. Enqueues record in `curator_queue` for post-write graph quality processing
+
+Ambiguous entity resolution → record stays `resolution_status = 'pending'`, not marked indexed, skipped on next poll.
 
 Logs to `session.log` as `[indexer]`.
 
@@ -293,6 +326,28 @@ Tools: `search_entities`, `facts_lookup`, `graph_traverse`, `vector_search`.
 ### AgentRunner (`agents/runner.py`)
 
 Polling loop that runs in a background thread. Polls the bus every 1 second, dispatches messages to agents. The runner does **not** auto-reply — agents use their own tools (`send_message`, `reply`) to communicate. Caches one agent instance per session.
+
+### Linear Expert (`experts/linear.py`)
+
+Expert agent for Linear issue management via GraphQL API. Tools: list, get, create, update, comment, search issues. Saves issues to Postgres SOR via `save_issue`. Issue polling via `--poll-linear` flag.
+
+### Ingest Expert (`experts/ingest.py`)
+
+Expert agent for file-based data entry. Two tools: `parse_seed` (typed block markdown) and `parse_record_file` (JSON records). Supports `--seed` and `--record --type` CLI flags for non-interactive use.
+
+### Curator (`curator.py`)
+
+Background worker that processes the `curator_queue` after each record is indexed. Four passes per cycle: AFFILIATED semantic dedup, ASSERTED semantic dedup, expired commitment detection, confidence upgrades. Uses `curator_judge.py` for LLM-based equivalence grouping. See [Curator](curator.md) for full documentation.
+
+## MCP Server
+
+`mcp_server.py` exposes PearScarf's context as a read-only query surface via FastMCP over HTTP/SSE. It is not an agent — it has no reasoning loop, no prompt, and no tools of its own. It translates incoming MCP tool calls into `context_query.py` function calls and returns structured responses.
+
+10 tools registered: 5 primitive (`find_entity`, `get_facts`, `get_connections`, `get_relationship`, `get_conflicts`) and 5 convenience (`get_entity_context`, `get_current_state`, `get_open_commitments`, `get_open_blockers`, `get_recent_activity`).
+
+Named API key auth (`Authorization: Bearer <key>`). Health check at `/health` (no auth). Starts as a background daemon thread in `psc run` and `psc discord`, or standalone via `psc mcp start`.
+
+See [MCP Tools](mcp_tools.md) for the full tool reference.
 
 ## Interfaces
 
@@ -379,9 +434,29 @@ See [Context Query](context_query.md) for the function reference and [MCP Tools]
 | `ANTHROPIC_API_KEY` | (required) | Anthropic API key |
 | `MODEL` | `claude-sonnet-4-5-20250929` | Model to use |
 | `MAX_TURNS` | `10` | Max agentic loop iterations per message |
+| `EXTRACTION_MODEL` | (same as MODEL) | Model for extraction calls |
+| `EXTRACTION_MAX_TOKENS` | `2048` | Max output tokens for extraction |
 | `DISCORD_BOT_TOKEN` | (required for discord) | Discord bot token |
 | `POSTGRES_HOST` | `localhost` | Postgres host |
 | `POSTGRES_PORT` | `5432` | Postgres port |
 | `POSTGRES_USER` | `pearscarf` | Postgres user |
 | `POSTGRES_PASSWORD` | (required) | Postgres password |
 | `POSTGRES_DB` | `pearscarf` | Postgres database name |
+| `QDRANT_URL` | `http://localhost:6333` | Qdrant server URL |
+| `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL |
+| `NEO4J_USER` | `neo4j` | Neo4j username |
+| `NEO4J_PASSWORD` | (required) | Neo4j password |
+| `GMAIL_CLIENT_ID` | | Google OAuth client ID |
+| `GMAIL_CLIENT_SECRET` | | Google OAuth client secret |
+| `GMAIL_REFRESH_TOKEN` | | OAuth refresh token |
+| `GMAIL_POLL_INTERVAL` | `300` | Email polling interval (seconds) |
+| `LINEAR_API_KEY` | | Linear API key |
+| `LINEAR_POLL_INTERVAL` | `300` | Linear polling interval (seconds) |
+| `LINEAR_TEAM_ID` | | Optional team scope |
+| `CURATOR_POLL_INTERVAL` | `30` | Curator poll interval (seconds) |
+| `CURATOR_CLAIM_TIMEOUT` | `600` | Curator claim timeout (seconds) |
+| `MCP_PORT` | `8090` | MCP server port |
+| `MCP_HOST` | `0.0.0.0` | MCP server bind address |
+| `TIMEZONE` | `America/Los_Angeles` | Timezone for Day node dates |
+| `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing |
+| `LANGSMITH_PROJECT` | `pears` | LangSmith project name |
