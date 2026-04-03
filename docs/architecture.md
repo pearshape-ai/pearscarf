@@ -337,6 +337,41 @@ The log is append-only and thread-safe. Entries without a session use `[--]`.
 
 The version string lives in `pearscarf/__init__.py` as `__version__`. `pyproject.toml` reads it dynamically via hatchling. Available via `pearscarf --version` / `psc --version` and printed in the REPL on startup.
 
+## Data Access Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     WRITE PATH                                │
+│                                                              │
+│  Records (Gmail, Linear, Ingest)                             │
+│       ↓                                                      │
+│  Indexer ──writes──→ graph.py / store.py / vectorstore.py    │
+│       ↓                                                      │
+│  curator_queue (Postgres)                                    │
+│       ↓                                                      │
+│  Curator ──writes──→ graph.py (stale, confidence)            │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│                     READ PATH                                 │
+│                                                              │
+│  Retriever (internal agents)                                 │
+│       ↓                                                      │
+│  context_query.py ──reads only──→ graph.py                   │
+│       ↑                          store.py                    │
+│  MCP Server (external agents)    vectorstore.py              │
+└──────────────────────────────────────────────────────────────┘
+
+Storage:
+  Neo4j      — entities, fact-edges, Day nodes
+  Postgres   — records, emails, issues, curator_queue, mcp_keys
+  Qdrant     — vector embeddings
+```
+
+The indexer and curator own all writes. `context_query.py` is the only read layer for context-building — it abstracts over Neo4j, Postgres, and Qdrant. The retriever (internal agents) and the MCP server (external agents like Claude, OpenClaw) are two surfaces over the same functions. Internal agents reason about what to call; external agents call directly via MCP tools.
+
+See [Context Query](context_query.md) for the function reference and [MCP Tools](mcp_tools.md) for the external tool surface.
+
 ## Configuration
 
 | Variable | Default | Description |

@@ -33,6 +33,8 @@
 | `pearscarf mcp keys list` | List all API keys |
 | `pearscarf mcp keys create --name <name>` | Create a new API key |
 | `pearscarf mcp keys revoke <key_id>` | Revoke an API key |
+| `pearscarf query <tool> [--options]` | Call a context_query tool directly (no MCP auth) |
+| `pearscarf integration-test` | Smoke test all context_query tools |
 
 All commands also available via `psc`.
 

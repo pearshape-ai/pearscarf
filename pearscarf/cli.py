@@ -644,6 +644,124 @@ def queue_clear(confirm: bool) -> None:
         click.echo(f"Cleared {result.rowcount} unclaimed entries.")
 
 
+@cli.command("query")
+@click.argument("tool_name")
+@click.option("--name", default=None, help="Entity name (for find_entity)")
+@click.option("--entity-name", default=None, help="Entity name (for entity-scoped tools)")
+@click.option("--edge-label", default=None, help="AFFILIATED, ASSERTED, or TRANSITIONED")
+@click.option("--fact-type", default=None, help="Fact type filter")
+@click.option("--include-stale", is_flag=True, help="Include stale facts")
+@click.option("--since", default=None, help="ISO datetime filter")
+@click.option("--entity-a", default=None, help="First entity (for get_relationship)")
+@click.option("--entity-b", default=None, help="Second entity (for get_relationship)")
+@click.option("--before-date", default=None, help="ISO date (for get_open_commitments)")
+@click.option("--entity-type", default=None, help="person, company, project, event")
+def query_cmd(tool_name, **kwargs):
+    """Call a context_query tool directly. No MCP auth needed."""
+    import json as json_mod
+    from pearscarf import context_query
+    from pearscarf.db import init_db
+    init_db()
+
+    try:
+        if tool_name == "find_entity":
+            result = context_query.find_entity(
+                kwargs["name"] or kwargs["entity_name"] or "",
+                entity_type=kwargs.get("entity_type"),
+            )
+        elif tool_name == "get_facts":
+            matches = context_query.find_entity(kwargs["entity_name"] or "")
+            if not matches:
+                click.echo(json_mod.dumps({"error": "not_found", "name": kwargs["entity_name"]}))
+                return
+            result = context_query.get_facts(
+                matches[0]["id"],
+                edge_label=kwargs.get("edge_label"),
+                fact_type=kwargs.get("fact_type"),
+                include_stale=kwargs.get("include_stale", False),
+                since=kwargs.get("since"),
+            )
+        elif tool_name == "get_connections":
+            matches = context_query.find_entity(kwargs["entity_name"] or "")
+            if not matches:
+                click.echo(json_mod.dumps({"error": "not_found"}))
+                return
+            labels = [kwargs["edge_label"]] if kwargs.get("edge_label") else None
+            result = context_query.get_connections(
+                matches[0]["id"], include_stale=kwargs.get("include_stale", False),
+                edge_labels=labels,
+            )
+        elif tool_name == "get_relationship":
+            ma = context_query.find_entity(kwargs["entity_a"] or "")
+            mb = context_query.find_entity(kwargs["entity_b"] or "")
+            if not ma or not mb:
+                click.echo(json_mod.dumps({"error": "not_found"}))
+                return
+            result = context_query.get_path(ma[0]["id"], mb[0]["id"])
+        elif tool_name == "get_conflicts":
+            eid = None
+            if kwargs.get("entity_name"):
+                matches = context_query.find_entity(kwargs["entity_name"])
+                eid = matches[0]["id"] if matches else None
+            result = context_query.get_conflicts(entity_id=eid)
+        elif tool_name == "vector_search":
+            result = context_query.vector_search(kwargs["name"] or kwargs["entity_name"] or "")
+        else:
+            click.echo(f"Unknown tool: {tool_name}")
+            return
+
+        click.echo(json_mod.dumps(result, indent=2, default=str))
+    except Exception as exc:
+        click.echo(f"Error: {exc}")
+
+
+@cli.command("integration-test")
+def integration_test():
+    """Smoke test: call all context_query tools and validate response shapes."""
+    from pearscarf import context_query
+    from pearscarf.db import init_db
+    init_db()
+
+    passed = 0
+    failed = 0
+
+    def _check(name, result, required_keys):
+        nonlocal passed, failed
+        if isinstance(result, dict):
+            for k in required_keys:
+                if k not in result:
+                    click.echo(f"  FAIL {name}: missing key '{k}'")
+                    failed += 1
+                    return
+        count = len(result) if isinstance(result, list) else result.get("count", len(result))
+        click.echo(f"  PASS {name} ({count} items)")
+        passed += 1
+
+    # find_entity
+    entities = context_query.find_entity("")
+    _check("find_entity", entities, [])
+
+    if entities:
+        eid = entities[0]["id"]
+        ename = entities[0]["name"]
+
+        _check("get_facts", context_query.get_facts(eid), [])
+        _check("get_connections", context_query.get_connections(eid), ["nodes", "edges"])
+        _check("get_conflicts", context_query.get_conflicts(), [])
+        _check("get_communications", context_query.get_communications(eid), [])
+
+        from pearscarf import graph
+        from datetime import datetime, timezone
+        today = graph.utc_to_local_date(datetime.now(timezone.utc).isoformat())
+        _check("get_facts_for_day", context_query.get_facts_for_day(today), [])
+        _check("vector_search", context_query.vector_search(ename), [])
+        _check("get_path", context_query.get_path(eid, eid), ["path", "direct_facts"])
+    else:
+        click.echo("  SKIP — no entities in graph, seed data first")
+
+    click.echo(f"\n  {passed} passed, {failed} failed")
+
+
 @cli.command("erase-all")
 def erase_all() -> None:
     """Wipe all system state: Postgres records, Neo4j graph, Qdrant vectors."""

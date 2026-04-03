@@ -5,8 +5,8 @@ The knowledge graph stores entities (people, companies, projects, events) connec
 ## Tool selection
 
 - **Entity-specific queries** ("what's going on with Acme", "tell me about Michael Chen"):
-  1. `search_entities` to find the entity
-  2. `facts_lookup` on the entity ID to get its fact-edges grouped by edge label
+  1. `search_entities` to find the entity and get its ID
+  2. `facts_lookup` on the entity ID to get fact-edges grouped by edge label
   3. `graph_traverse` to find connected entities and their relationships
 
 - **Date-specific queries** ("what happened March 13", "anything from last week"):
