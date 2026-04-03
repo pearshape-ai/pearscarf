@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.0
+- `score_record` extended with per-label fact counts: `affiliated_matched/extracted/expected`, `asserted_*`, `transitioned_*`
+- `score_record` adds `confidence_warnings` list — identity-matched facts with mismatched confidence (informational, does not affect scores)
+- `temporal_accuracy` rewritten: supports new nested `expected_edges` format (checks `stale` + `valid_until` per edge) alongside legacy flat format
+- `entity_resolution_accuracy` gains optional `extracted_facts_by_record` param and `domain_inferred` branch — checks for AFFILIATED edge from surface form to canonical entity
+- `eval_runner` passes `extracted_facts_by_record` to ERA
+
 ## 1.15.6
 - Documentation pass: `docs/context_query.md` (data access layer reference), `docs/mcp_tools.md` (MCP tools reference for agent developers)
 - Architecture doc updated with data access diagram showing write path (Indexer/Curator) and read path (Retriever/MCP → context_query)
