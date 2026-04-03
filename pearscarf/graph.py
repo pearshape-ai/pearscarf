@@ -427,7 +427,8 @@ def create_fact_edge(
         "fact_type": fact_type,
         "confidence": confidence,
         "source_record": source_record,
-        "source_records": [{"record_id": source_record, "confidence": confidence}],
+        "source_record_ids": [source_record],
+        "source_confidences": [confidence],
         "source_type": source_type,
         "source_at": source_at or ts,
         "recorded_at": ts,
@@ -505,7 +506,7 @@ def find_exact_dup_edge(
             "MATCH (a)-[r]->(b) "
             "WHERE elementId(a) = $from_id AND elementId(b) = $to_id "
             "AND type(r) = $label AND r.fact_type = $ft "
-            "AND r.source_record = $sr AND r.fact = $fact "
+            "AND $sr IN r.source_record_ids AND r.fact = $fact "
             "RETURN elementId(r) AS rid "
             "LIMIT 1",
             from_id=from_id,
@@ -520,32 +521,29 @@ def find_exact_dup_edge(
 
 
 def append_source_record(edge_id: str, source_record: str, confidence: str = "inferred") -> None:
-    """Append a {record_id, confidence} entry to source_records if record_id not already present."""
+    """Append a source record to the parallel arrays if record_id not already present."""
     with get_session() as session:
         result = session.run(
             "MATCH ()-[r]->() WHERE elementId(r) = $rid "
-            "RETURN r.source_records AS sr",
+            "RETURN r.source_record_ids AS ids, r.source_confidences AS confs",
             rid=edge_id,
         )
         row = result.single()
-        existing = row["sr"] if row else None
-        if existing is None:
-            existing = []
+        ids = row["ids"] if row and row["ids"] else []
+        confs = row["confs"] if row and row["confs"] else []
 
-        # Check if record_id already in list (handle both dict and legacy string entries)
-        for entry in existing:
-            if isinstance(entry, dict) and entry.get("record_id") == source_record:
-                return
-            if isinstance(entry, str) and entry == source_record:
-                return
+        if source_record in ids:
+            return
 
-        existing.append({"record_id": source_record, "confidence": confidence})
+        ids.append(source_record)
+        confs.append(confidence)
 
         session.run(
             "MATCH ()-[r]->() WHERE elementId(r) = $rid "
-            "SET r.source_records = $sr",
+            "SET r.source_record_ids = $ids, r.source_confidences = $confs",
             rid=edge_id,
-            sr=existing,
+            ids=ids,
+            confs=confs,
         )
 
 
@@ -931,11 +929,13 @@ def get_edges_by_source_record(record_id: str) -> list[dict]:
     with get_session() as session:
         result = session.run(
             "MATCH (a)-[r]->(b) "
-            "WHERE $rid IN r.source_records AND r.fact IS NOT NULL "
+            "WHERE $rid IN r.source_record_ids AND r.fact IS NOT NULL "
             "RETURN elementId(r) AS edge_id, type(r) AS edge_label, "
             "r.fact_type AS fact_type, r.fact AS fact, "
             "r.confidence AS confidence, r.source_at AS source_at, "
-            "r.source_record AS source_record, r.source_records AS source_records, "
+            "r.source_record AS source_record, "
+            "r.source_record_ids AS source_record_ids, "
+            "r.source_confidences AS source_confidences, "
             "r.stale AS stale, r.role AS role, "
             "elementId(a) AS from_id, a.name AS from_name, "
             "elementId(b) AS to_id, b.name AS to_name",
@@ -950,7 +950,13 @@ def get_edges_by_source_record(record_id: str) -> list[dict]:
                 "confidence": r["confidence"] or "",
                 "source_at": r["source_at"] or "",
                 "source_record": r["source_record"] or "",
-                "source_records": r["source_records"] or [],
+                "source_records": [
+                    {"record_id": rid, "confidence": conf}
+                    for rid, conf in zip(
+                        r["source_record_ids"] or [],
+                        r["source_confidences"] or [],
+                    )
+                ],
                 "stale": r["stale"] or False,
                 "role": r["role"] or "",
                 "from_id": r["from_id"],
@@ -982,7 +988,9 @@ def get_edges_for_slot(
             f"MATCH (a)-[r]->(b) {where} "
             "RETURN elementId(r) AS edge_id, r.fact AS fact, "
             "r.confidence AS confidence, r.source_at AS source_at, "
-            "r.source_record AS source_record, r.source_records AS source_records, "
+            "r.source_record AS source_record, "
+            "r.source_record_ids AS source_record_ids, "
+            "r.source_confidences AS source_confidences, "
             "r.stale AS stale, r.role AS role",
             from_id=from_id,
             to_id=to_id,
@@ -996,7 +1004,13 @@ def get_edges_for_slot(
                 "confidence": r["confidence"] or "",
                 "source_at": r["source_at"] or "",
                 "source_record": r["source_record"] or "",
-                "source_records": r["source_records"] or [],
+                "source_records": [
+                    {"record_id": rid, "confidence": conf}
+                    for rid, conf in zip(
+                        r["source_record_ids"] or [],
+                        r["source_confidences"] or [],
+                    )
+                ],
                 "stale": r["stale"] or False,
                 "role": r["role"] or "",
             }
@@ -1045,10 +1059,12 @@ def get_inferred_multi_source_edges() -> list[dict]:
             "WHERE r.fact IS NOT NULL "
             "AND r.confidence = 'inferred' "
             "AND (r.stale IS NULL OR r.stale = false) "
-            "AND r.source_records IS NOT NULL "
-            "AND size(r.source_records) > 1 "
+            "AND r.source_record_ids IS NOT NULL "
+            "AND size(r.source_record_ids) > 1 "
             "RETURN elementId(r) AS edge_id, r.fact AS fact, "
-            "r.confidence AS confidence, r.source_records AS source_records, "
+            "r.confidence AS confidence, "
+            "r.source_record_ids AS source_record_ids, "
+            "r.source_confidences AS source_confidences, "
             "a.name AS from_name, b.name AS to_name"
         )
         return [
@@ -1056,7 +1072,13 @@ def get_inferred_multi_source_edges() -> list[dict]:
                 "edge_id": r["edge_id"],
                 "fact": r["fact"] or "",
                 "confidence": r["confidence"] or "",
-                "source_records": r["source_records"] or [],
+                "source_records": [
+                    {"record_id": rid, "confidence": conf}
+                    for rid, conf in zip(
+                        r["source_record_ids"] or [],
+                        r["source_confidences"] or [],
+                    )
+                ],
                 "from_name": r["from_name"] or "?",
                 "to_name": r["to_name"] or "?",
             }
