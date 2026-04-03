@@ -418,7 +418,7 @@ class Indexer:
             if facts:
                 lines.append("Facts:")
                 for f in facts:
-                    lines.append(f"  - [{f['category']}] {f['fact']}")
+                    lines.append(f"  - [{f['edge_label']}] {f['fact']}")
 
             conns = pkg.get("connections", [])
             if conns:
