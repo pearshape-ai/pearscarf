@@ -21,7 +21,7 @@ These metrics cover **extraction quality** — the accuracy of the LLM extractio
 
 **Record** — a single ingested unit (email, calendar event, Slack message, etc.)
 
-**Fact-edge** — a labeled, attributed edge in the graph; the atomic unit of extracted knowledge. Carries: `fact`, `category`, `confidence`, `source_record`, `valid_at`, `invalid_at`.
+**Fact-edge** — a labeled, attributed edge in the graph; the atomic unit of extracted knowledge. Carries: `fact`, `edge_label`, `fact_type`, `confidence`, `source_record`, `source_at`, `recorded_at`, `stale`, `replaced_by`, `valid_until`.
 
 **E** — the set of fact-edges annotated as ground truth for a given record or dataset.
 
@@ -98,11 +98,11 @@ Entity fragmentation is a compounding failure: a person split into two nodes cau
 
 > Did facts land at the correct point in time?
 
-`facts_with_correct_valid_at / total_facts_with_temporal_annotation`
+`correct_temporal_edges / total_expected_temporal_edges`
 
-Measures whether `valid_at` reflects when a fact became true in the world, not when the record was ingested. For superseded facts, also checks that `invalid_at` is correctly set on the predecessor edge.
+Checks two properties per expected edge: whether `stale` matches the expected value, and whether `valid_until` matches when present. Evaluated over `expected_edges` nested within each temporal assertion.
 
-**Primary failure mode:** substituting ingestion time for event time; failure to invalidate superseded facts when a deadline or status changes.
+**Primary failure mode:** incorrect `stale` flag (fact should be superseded but isn't, or vice versa); incorrect or missing `valid_until` on commitment/promise facts.
 
 ---
 
@@ -123,14 +123,16 @@ Primary metrics are computed on every evaluation run. Specialized metrics requir
 Each record in an evaluation dataset carries the following annotation fields:
 
 ```
-expected_entities       list of expected nodes (type, canonical name, known aliases)
-expected_facts          list of expected fact-edges (entity refs, category, fact text, valid_at)
+expected_entities       list of expected nodes (type, canonical name, metadata)
+expected_facts          list of expected fact-edges (edge_label, fact_type, from_entity, to_entity, confidence, valid_until)
 is_noise                boolean — true if the record should produce zero graph writes
-resolution_pairs        list of (ref_a, ref_b, expected: merge | split)
-temporal_assertions     list of (fact ref, expected valid_at, expected invalid_at if applicable)
+resolution_pairs        list of (surface_a, surface_b, record_a, record_b, expected_outcome: merge | split | domain_inferred)
+temporal_assertions     list of (record_id, expected_edges: [{source_record, edge_label, fact_type, from_entity, stale, valid_until}])
 ```
 
-A fact-edge match between `X` and `E` requires agreement on: entity references, category, and fact semantics. Exact string match is used by default; semantic match is logged separately.
+A fact-edge match between `X` and `E` requires agreement on: `edge_label`, `fact_type`, `from_entity`, and `to_entity` (all case-insensitive). Confidence mismatches are logged as warnings but do not fail a match.
+
+Per-label F1 is reported for AFFILIATED, ASSERTED, and TRANSITIONED separately alongside the overall Graph Fidelity score.
 
 ---
 

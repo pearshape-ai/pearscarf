@@ -24,6 +24,8 @@ cp .env.example .env
 
 ```
 ANTHROPIC_API_KEY=sk-ant-your-key-here
+POSTGRES_PASSWORD=your-password
+NEO4J_PASSWORD=your-neo4j-password
 DISCORD_BOT_TOKEN=          # only needed for discord mode
 ```
 
@@ -133,7 +135,7 @@ When not configured, the system runs with zero tracing overhead.
 pearscarf run
 ```
 
-Starts worker agent + Gmail expert + session-aware REPL. All communication goes through Postgres.
+Starts all components: worker agent, Gmail expert, Linear expert (if configured), Retriever, Indexer, MCP server, and session-aware REPL. All agent communication goes through Postgres.
 
 ```
 [ses_001] > Read my latest emails

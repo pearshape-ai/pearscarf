@@ -4,7 +4,7 @@
 
 | Command | Description |
 |---|---|
-| `pearscarf run` | Full system: worker + experts + session REPL |
+| `pearscarf run` | Full system: worker + experts + indexer + MCP server + session REPL |
 | `pearscarf run --poll-email` | Full system with automatic email polling |
 | `pearscarf run --poll-linear` | Full system with automatic Linear issue polling |
 | `pearscarf discord` | Full system with Discord frontend |
@@ -37,6 +37,20 @@
 | `pearscarf integration-test` | Smoke test all context_query tools |
 
 All commands also available via `psc`.
+
+### `psc query` tool names
+
+Valid tools: `find_entity`, `get_facts`, `get_connections`, `get_relationship`, `get_conflicts`, `vector_search`.
+
+Examples:
+```bash
+psc query find_entity --name "Marcus Webb"
+psc query get_facts --entity-name "Marcus Webb" --edge-label AFFILIATED
+psc query get_connections --entity-name "Meridian Deal"
+psc query get_relationship --entity-a "Marcus Webb" --entity-b "Meridian Deal"
+psc query get_conflicts --entity-name "James Whitfield"
+psc query vector_search --name "contract markup"
+```
 
 ## Scripts
 
@@ -207,6 +221,10 @@ Auto-discovered at startup.
 | `NEO4J_URL` | `bolt://localhost:7687` | Neo4j bolt URL |
 | `NEO4J_USER` | `neo4j` | Neo4j username |
 | `NEO4J_PASSWORD` | (required) | Neo4j password |
+| `CURATOR_POLL_INTERVAL` | `30` | Curator poll interval in seconds |
+| `CURATOR_CLAIM_TIMEOUT` | `600` | Curator claim timeout in seconds |
+| `MCP_PORT` | `8090` | MCP server port |
+| `MCP_HOST` | `0.0.0.0` | MCP server bind address |
 | `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing (`true`/`false`) |
 | `LANGSMITH_API_KEY` | | LangSmith API key (required when tracing enabled) |
 | `LANGSMITH_PROJECT` | `pears` | LangSmith project name |
