@@ -164,6 +164,86 @@ def get_conflicts(entity_name: str = None) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Convenience tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(description=(
+    "Get a full picture of an entity — all current facts and direct connections. "
+    "Use this before acting on behalf of or about a person, company, or project. "
+    "Returns facts in chronological order by default, or grouped by edge label with format='clustered'."
+))
+def get_entity_context(
+    entity_name: str,
+    format: str = "chronological",
+    include_stale: bool = False,
+) -> dict:
+    """Full entity context: facts + connections."""
+    if format not in ("chronological", "clustered"):
+        return {"error": "invalid_format", "valid_values": ["chronological", "clustered"]}
+
+    entity, err = _resolve_entity(entity_name)
+    if err:
+        return err
+
+    facts = context_query.get_facts(entity["id"], include_stale=include_stale)
+    conns_result = context_query.get_connections(
+        entity["id"], max_depth=1, include_stale=include_stale
+    )
+    connections = [n for n in conns_result.get("nodes", []) if n.get("type") != "day"]
+
+    entity_info = {
+        "id": entity["id"],
+        "name": entity["name"],
+        "type": entity["type"],
+        "metadata": entity.get("metadata", {}),
+    }
+
+    if format == "chronological":
+        facts.sort(key=lambda f: f.get("source_at", ""))
+        return {
+            "entity": entity_info,
+            "facts": facts,
+            "connections": connections,
+            "count": len(facts),
+        }
+    else:
+        # Clustered by edge_label
+        clustered: dict[str, list] = {}
+        for f in facts:
+            label = f.get("edge_label", "OTHER")
+            clustered.setdefault(label, []).append(f)
+        return {
+            "entity": entity_info,
+            "facts": clustered,
+            "connections": connections,
+            "count": len(facts),
+        }
+
+
+@mcp.tool(description=(
+    "Get what is structurally true about an entity right now — "
+    "current role, employer, project memberships. "
+    "Returns AFFILIATED facts only. "
+    "Use when you need to know who someone works for or what projects they belong to."
+))
+def get_current_state(entity_name: str) -> dict:
+    """Current affiliations only."""
+    entity, err = _resolve_entity(entity_name)
+    if err:
+        return err
+
+    affiliations = context_query.get_facts(
+        entity["id"], edge_label="AFFILIATED", include_stale=False
+    )
+    return {
+        "entity": {"id": entity["id"], "name": entity["name"], "type": entity["type"]},
+        "affiliations": affiliations,
+        "count": len(affiliations),
+    }
+
+
 class MCPServer:
     """Background thread running the FastMCP server."""
 

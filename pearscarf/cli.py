@@ -393,7 +393,7 @@ def mcp_status():
     keys = list_mcp_keys()
     active = sum(1 for k in keys if not k["revoked"])
     click.echo(f"  Bind: {MCP_HOST}:{MCP_PORT}")
-    click.echo(f"  Tools: 5 (find_entity, get_facts, get_connections, get_relationship, get_conflicts)")
+    click.echo(f"  Tools: 7 (find_entity, get_facts, get_connections, get_relationship, get_conflicts, get_entity_context, get_current_state)")
     click.echo(f"  Keys: {active} active, {len(keys)} total")
 
 
@@ -438,6 +438,27 @@ def mcp_test(entity_name: str):
     click.echo(f"  {len(conflicts)} conflict(s)")
     for c in conflicts[:3]:
         click.echo(f"  {c['entity_name']}: {c['fact_a']} vs {c['fact_b']}")
+
+    # get_entity_context (chronological)
+    click.echo("\n--- get_entity_context (chronological) ---")
+    facts_chrono = context_query.get_facts(entity["id"])
+    facts_chrono.sort(key=lambda f: f.get("source_at", ""))
+    click.echo(f"  {len(facts_chrono)} fact(s)")
+
+    # get_entity_context (clustered)
+    click.echo("\n--- get_entity_context (clustered) ---")
+    clustered: dict[str, list] = {}
+    for f in facts_chrono:
+        clustered.setdefault(f.get("edge_label", "?"), []).append(f)
+    for label, lf in clustered.items():
+        click.echo(f"  {label}: {len(lf)} fact(s)")
+
+    # get_current_state
+    click.echo("\n--- get_current_state ---")
+    affiliations = context_query.get_facts(entity["id"], edge_label="AFFILIATED", include_stale=False)
+    click.echo(f"  {len(affiliations)} affiliation(s)")
+    for a in affiliations[:5]:
+        click.echo(f"  [{a.get('fact_type', '?')}] {a.get('fact', '')}")
 
 
 @mcp.group("keys")
