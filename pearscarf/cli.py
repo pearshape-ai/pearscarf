@@ -393,8 +393,44 @@ def mcp_status():
     keys = list_mcp_keys()
     active = sum(1 for k in keys if not k["revoked"])
     click.echo(f"  Bind: {MCP_HOST}:{MCP_PORT}")
-    click.echo(f"  Tools: 0 (registered in 1.15.2+)")
+    click.echo(f"  Tools: 3 (find_entity, get_facts, get_connections)")
     click.echo(f"  Keys: {active} active, {len(keys)} total")
+
+
+@mcp.command("test")
+@click.argument("entity_name")
+def mcp_test(entity_name: str):
+    """Smoke test: call all three primitive tools against an entity name."""
+    import json
+    from pearscarf import context_query
+    from pearscarf.db import init_db
+    init_db()
+
+    click.echo(f"Testing against: {entity_name}\n")
+
+    # find_entity
+    click.echo("--- find_entity ---")
+    results = context_query.find_entity(entity_name)
+    if not results:
+        click.echo(f"  Not found: {entity_name}")
+        return
+    entity = results[0]
+    click.echo(f"  {entity['name']} ({entity['type']}, id={entity['id']})")
+
+    # get_facts
+    click.echo("\n--- get_facts ---")
+    facts = context_query.get_facts(entity["id"])
+    click.echo(f"  {len(facts)} fact(s)")
+    for f in facts[:5]:
+        click.echo(f"  [{f.get('edge_label', '?')}/{f.get('fact_type', '?')}] {f.get('fact', '')}")
+
+    # get_connections
+    click.echo("\n--- get_connections ---")
+    conns = context_query.get_connections(entity["id"], max_depth=1)
+    nodes = [n for n in conns.get("nodes", []) if n.get("type") != "day"]
+    click.echo(f"  {len(nodes)} connection(s)")
+    for n in nodes[:5]:
+        click.echo(f"  {n['name']} ({n['type']})")
 
 
 @mcp.group("keys")
