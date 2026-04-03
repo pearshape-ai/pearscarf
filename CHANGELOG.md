@@ -1,5 +1,203 @@
 # Changelog
 
+## 1.15.6
+- Documentation pass: `docs/context_query.md` (data access layer reference), `docs/mcp_tools.md` (MCP tools reference for agent developers)
+- Architecture doc updated with data access diagram showing write path (Indexer/Curator) and read path (Retriever/MCP → context_query)
+- `psc query <tool> [--options]` — call any context_query tool directly from CLI, no MCP auth needed
+- `psc integration-test` — smoke test all context_query tools, validate response shapes
+- Retriever prompt updated to match current tool surface
+
+## 1.15.5
+- MCP convenience tools: `get_open_commitments`, `get_open_blockers`, `get_recent_activity`
+- `get_open_commitments` — ASSERTED/commitment with `valid_until`, optional entity scope, optional `before_date` filter
+- `get_open_blockers` — ASSERTED/blocker filtered to exclude those with subsequent TRANSITIONED/resolution
+- `get_recent_activity` — merges TRANSITIONED facts + ASSERTED/reference facts + Postgres email metadata, default 7-day window
+- MCP query surface complete: 5 primitives + 5 convenience tools
+
+## 1.15.4
+- MCP convenience tools: `get_entity_context`, `get_current_state`
+- `get_entity_context` — composes get_facts + get_connections, supports `chronological` and `clustered` formats
+- `get_current_state` — AFFILIATED-only current facts
+
+## 1.15.3
+- MCP primitive tools: `get_relationship`, `get_conflicts`
+- `get_relationship` — shortest path between two entities via current fact-edges
+- `get_conflicts` — finds AFFILIATED slots with multiple current edges
+
+## 1.15.2
+- MCP primitive tools: `find_entity`, `get_facts`, `get_connections`
+- Entity resolution pattern: tools resolve names internally via `find_entity`
+- Consistent error shape: `{"error": "not_found", "name": "..."}`
+- `psc mcp test <entity>` smoke test command
+
+## 1.15.1
+- MCP server bootstrap with FastMCP over HTTP/SSE
+- Named API key authentication: SHA-256 hashed keys, `Authorization: Bearer <key>`
+- `mcp_keys` Postgres table for key management
+- `/health` endpoint (no auth required)
+- `psc mcp start` (standalone foreground), `psc mcp status`, `psc mcp keys` (create/list/revoke)
+- MCP server auto-starts with `psc run` and `psc discord`
+- No tools registered — tool registration starts in 1.15.2
+
+## 1.15.0
+- `context_query.py` — single read-only data access layer for all context queries
+- Functions: `find_entity`, `get_facts`, `get_connections`, `get_facts_for_day`, `get_path`, `get_conflicts`, `get_communications`, `vector_search`
+- `graph.get_path()` — shortest path between two entities via current fact-edges
+- `graph.get_conflicts()` — finds AFFILIATED slots with multiple current edges
+- `store.get_communications_for_entity()` — ILIKE query on emails table
+- Retriever tools rewired: all five tools call `context_query` instead of `graph`/`vectorstore` directly
+
+## 1.14.5
+- Global confidence upgrade pass in Curator: upgrades edges from `inferred` to `stated` when merged `source_records` include a `stated` source
+- `source_records` schema changed from flat string list to `[{record_id, confidence}]`
+- `graph.append_source_record()` now accepts `confidence` parameter
+- `graph.get_inferred_multi_source_edges()` and `graph.set_edge_confidence()` added
+- `psc curator status` shows upgrade-eligible and expired-pending counts
+- `docs/curator.md` — full Curator agent documentation
+
+## 1.14.4
+- Curator expired commitment detection: stales ASSERTED/commitment and ASSERTED/promise edges where `valid_until` has passed
+- `graph.get_expired_commitments(today)` query
+- `_notify_expiry()` reserved hook (no-op)
+- Expiry scan runs globally every curator cycle after dedup passes
+
+## 1.14.3
+- Curator ASSERTED semantic dedup: LLM judge for collapsing equivalent claims
+- `prompts/curator_asserted.md` — high-bar equivalence prompt (false positives worse than false negatives)
+- Shared `_dedup_edges()` helper extracted — AFFILIATED and ASSERTED passes use identical structure
+- `_process()` runs two passes: AFFILIATED first, ASSERTED second
+
+## 1.14.2
+- Curator AFFILIATED semantic dedup: LLM judge groups semantically equivalent edges, stales older ones
+- `curator_judge.py` — `judge_equivalence(candidates, edge_label)` with one LLM call per slot
+- `prompts/curator_affiliated.md` — equivalence prompt for organizational affiliations
+- `graph.get_edges_by_source_record()` — returns edge/entity element IDs, uses `$rid IN r.source_records`
+- `graph.get_edges_for_slot()` — all current edges for a (from, label, type, to) slot
+
+## 1.14.1
+- `curator.py` — standalone worker loop mirroring indexer pattern: poll → claim → process → delete
+- Claim with `FOR UPDATE SKIP LOCKED`, timeout recovery for crashed claims
+- `_process()` is a stub — filled in by 1.14.2+
+- `CURATOR_POLL_INTERVAL` (30s default), `CURATOR_CLAIM_TIMEOUT` (600s default)
+- `psc curator start` (foreground) and `psc curator status`
+
+## 1.14.0
+- `curator_queue` Postgres table: `record_id` PK, `queued_at`, `claimed_at`
+- `store.enqueue_for_curation()` — INSERT ON CONFLICT DO NOTHING
+- Indexer enqueues after `_mark_indexed` (best-effort, try/except)
+- `psc queue` (summary), `psc queue list`, `psc queue clear --confirm`
+- `psc erase-all` and `scripts/erase_all.py` include `curator_queue` in TRUNCATE
+
+## 1.13.3
+- All downstream readers updated to new fact model field names
+- `scoring.py` — match key: `edge_label` + `fact_type` + `from_entity` + `to_entity`
+- `eval_runner.py` — reads `edge_label`/`fact_type`/`source_at` from graph
+- `cli_memory.py` — `edge_label/fact_type`, `stale`/`source_at`, `edge_label_counts`/`fact_type_counts`
+- `retriever.py` — `include_stale`, `edge_labels` param, `stale`/`source_at` temporal display
+- `prompts/retriever.md` — three edge labels, `[stale]` marker, `include_stale`
+
+## 1.13.2
+- Write loop literal dup check: `graph.find_exact_dup_edge()` matches on (from, to, label, type, source_record, fact)
+- `graph.append_source_record()` — appends to `source_records` list on dup merge
+- `_write_fact_edge()` helper on Indexer wraps dup check + create
+- `docs/data-model.md` — write loop section rewritten, staleness moved to verification agent
+
+## 1.13.1
+- Extraction prompts rewired: `category`/`valid_at` → `edge_label`/`fact_type`/`valid_until`
+- Three edge labels: AFFILIATED, ASSERTED, TRANSITIONED with full fact_type lists
+- Indexer `source_at` derivation per record type (received_at, linear_created_at, changed_at)
+- `to_entity` resolution with degradation: unresolvable targets fall through to Day node (never skip)
+- `extract_test.py` validates `edge_label`/`fact_type` against `FACT_CATEGORIES` dict
+
+## 1.13.0
+- `graph.py` refactored to new bi-temporal fact edge schema
+- `FACT_CATEGORIES` — dict mapping AFFILIATED/ASSERTED/TRANSITIONED to valid fact_type values
+- `create_fact_edge` — new signature: `edge_label`, `fact_type`, `source_at`, `valid_until`
+- `find_existing_fact_edge` and `mark_fact_stale` (replaces `invalidate_fact_edge`)
+- All read functions return `edge_label`/`fact_type`/`source_at`/`stale`/`replaced_by`
+- `graph_stats` — `edge_label_counts` + `fact_type_counts`
+- Callers intentionally break — fixed in 1.13.1 and 1.13.3
+
+## 1.12.5
+- IDENTIFIED_AS edge deduplication via MERGE: one edge per unique alias
+- `create_identified_as_edge` checks for existing edge with same `surface_form`
+- On subsequent match: updates `resolved_at`, appends `source_record` to `source_records`
+
+## 1.12.4
+- IDENTIFIED_AS self-edges written after confirmed resolution decisions
+- `graph.create_identified_as_edge()` — self-edge with `surface_form`, `confidence`, `reasoning`
+- Email/domain deterministic match → `confidence: stated`
+- LLM match → `confidence: inferred`
+- Skipped when surface form equals canonical name
+
+## 1.12.3
+- Entity resolution loop wired into indexer: real LLM decisions replace temporary fallback
+- `_resolve_entity()` rewritten: no candidates → create; exact name/email/domain → use; otherwise → LLM judge
+- Ambiguous entities → `resolution_pending` JSONB on records, `resolution_status` column
+- Records with unresolved entities not marked `indexed = TRUE`
+- `_build_source_context()` — short context string per record type for the judge
+- Poll query excludes `resolution_status = 'pending'`
+
+## 1.12.2
+- `prompts/entity_resolution.md` — three-way resolution judge (match/new/ambiguous)
+- `_resolve_entity_with_llm()` on Indexer — builds structured user message, calls LLM, parses JSON
+- Falls back to `new` on parse failure
+
+## 1.12.1
+- `graph.get_entity_context()` — builds context package per candidate (facts + 1-hop connections)
+- Indexer builds context packages for non-exact candidates, logs them
+
+## 1.12.0
+- Entity resolution candidate retrieval broadened
+- `graph.find_entity_candidates()` — cascading search: exact → email → domain → first-name prefix → substring → IDENTIFIED_AS
+- `_resolve_entity()` uses candidates with exact match fast path; non-exact creates new entity (pre-judge fallback)
+
+## 1.11.5
+- `scripts/erase_all.py` and `psc erase-all` — wipe all system state (Postgres, Neo4j, Qdrant)
+- Confirmation prompt, counts shown before acting
+- `db.close_pool()` + `atexit` handler for clean shutdown (fixes PythonFinalizationError)
+
+## 1.11.4
+- Graph-based eval replaces flat-file eval
+- `psc eval --dataset <path>` — ingest seed → ingest records → wait for indexer → query graph → score
+- Requires clean graph (aborts if non-empty) and running indexer
+- `ParseRecordFileTool.execute()` called directly, no agent overhead
+
+## 1.11.3
+- `ParseRecordFileTool` rewritten: schema validation, folder support, all-or-nothing batch semantics
+- `REQUIRED_FIELDS` / `OPTIONAL_FIELDS` per record type
+- Unknown fields flagged — catches eval-format records with wrong field names
+
+## 1.11.2
+- `psc expert ingest --seed <file>` and `psc expert ingest --record <file> --type <type>`
+- Non-interactive modes: single agent run, print result, exit
+- Interactive REPL without flags (unchanged)
+- Ingest prompt updated with mode detection and reply content spec
+
+## 1.11.1
+- Ingest expert tools fully implemented
+- `ParseSeedTool` — reads .md, calls `store.save_ingest()`
+- `ParseRecordFileTool` — reads JSON, routes to `save_email`/`save_issue`/`save_issue_change`, auto-classifies as relevant
+- `store.save_ingest()` — writes `ingest` record with `classification='relevant'`
+- Indexer `ingest` branch: `_build_content()` reads `raw`, `_extract()` uses `ingest_extraction.md`
+
+## 1.11.0
+- Ingest expert agent scaffolding
+- `ParseSeedTool` and `ParseRecordFileTool` (stubs)
+- `create_ingest_expert()` and `create_ingest_expert_for_runner()`
+- `prompts/ingest.md` — seed mode and record mode
+- `psc expert ingest` standalone command
+- Expert registry updated
+
+## 1.10.0
+- `psc eval --dataset <path>` — extraction eval against dataset with scoring
+- `scoring.py` — entity matching, fact matching, F1, NRR, ERA, Temporal Accuracy
+- `eval_report.py` — terminal report formatter + JSON results writer
+- `eval_runner.py` — dataset loader, extraction orchestrator, aggregator
+- `--verbose` flag for per-record debug output
+- `docs/eval-metrics.md` — scope clarification added
+- Roadmap eval harness checked off
+
 ## 1.9.1
 - CLI short alias changed from `ps` to `psc` — avoids conflict with macOS/Linux `ps` (process status) command
 - Full `pearscarf` command unchanged
