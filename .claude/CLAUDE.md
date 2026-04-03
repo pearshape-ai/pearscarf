@@ -1,49 +1,64 @@
+# Claude Code Context
 
-## Spec and Plan Folders
+## Read first
 
-- `ai-work/specs/` - Read dev specs here. what to build, how to build.
-    - Expect version in spec. If not specified, ask in terminal.
-- `ai-work/plans/` - Write execution plans here every time its generated.
-    - Present the prompt for executing the plan as well.
-    - use the same name as spec and save the plan
-    - Never modify files outside .claud/ unless explicitly asked
+Before touching any code, read:
 
-## Chores
+- `README.md` — what PearScarf is, what it does, how to run it
+- `docs/` — read all files here for architecture context. You will find:
+  - `architecture.md` — data model, design principles, system overview
+  - `context_query.md` — the read layer; what to call and what not to call directly
+  - `eval.md` — scorer, runner, ground truth format, metrics (relevant for eval work)
+- `CHANGELOG.md` — read the latest entry only; tells you the current version and what just changed
 
-- Always update the docs as per the latest changes once the plan is accepted
-    - Place documentation in the `docs` folder and add regular documentation on getting started, usage, architecture and other important pieces as per situation.
-- Always update the README.md as per the latest changes according to the plan accepted
-- Delete the .gitignore immediately after the first file is already written (thats not gitignored) in the folder
+---
 
-## Roadmap
+## How to work
 
-- `docs/roadmap.md` - The canonical list of what's built and what's next.
-    - Check off items when completed.
-    - Do not add new items — new items are added via specs from the planning process.
+Work is either driven by a Linear issue or by a direct instruction in the session.
 
-## Specs and Plans
+**When working from a Linear issue:**
+- Read the issue before touching any code — it is the source of truth for what to build and why
+- The issue has a parent epic — read it too; it holds the high-level intent and the decisions that shaped the issue
+- Work through the issue's changes one at a time, in order
+- Mark the issue Done once all changes are verified and committed
 
-Specs and plans serve different purposes. Do not mix them.
+**When working from a direct instruction (debugging, exploration, ad-hoc):**
+- Confirm your understanding of what's being asked before making changes
+- Keep changes small and targeted — do not over-reach
+- Still verify and commit after each meaningful change
 
-### Specs — what and why
+In both cases: one change at a time, verify before moving on, never batch.
 
-A spec says what the code should do and why. It provides enough specificity that the planner isn't guessing, but does not describe implementation.
+---
 
-- What is being built or changed, and the motivation behind it
-- What the expected behavior is after the change
-- What stays the same and what doesn't
-- Enough detail on intent that the plan can be concrete — e.g. "the Indexer class stays, _extract keeps its signature but returns empty dict" is a spec-level statement
-- No file-by-file change lists, no code snippets, no function bodies
+## Verification
 
-### Plans — what the code should look like
+Verification means confirming that the change you just made works as intended and hasn't broken anything adjacent. It is not optional.
 
-A plan says what the code should look like. It is the concrete implementation derived from a spec.
+After every meaningful change:
+- Run the most direct check available — if the change touches a specific function, call it; if it touches a pipeline, run it end to end on a small input
+- Confirm the output matches the expected behaviour described in the issue or instruction
+- Confirm nothing adjacent broke — run a broader check if the change touched shared code
+- Do not proceed to the next change until the current one is confirmed working
 
-- List every file that will be modified, created, or deleted
-- For each file, describe what changes and why
-- Show code snippets for new functions, significant rewrites, or non-obvious logic
-- For function changes, show the new signature and body — not just "update this function"
-- Include before/after for any tricky transformations
-- If touching a database schema, show the SQL
-- End with a verification section: how to confirm the plan was executed correctly
-- End with an execution prompt that can be copy-pasted to a fresh session
+If verification fails, fix it before moving on. Do not accumulate unverified changes.
+
+---
+
+## Chores (always, after every issue)
+
+- Update `docs/` to reflect any changed behaviour
+- Update `README.md` if the change affects public-facing usage or CLI output
+- Add an entry to `CHANGELOG.md` for the version
+
+---
+
+## What NOT to do
+
+- Do not make changes beyond what the issue or instruction asks — stay in scope
+- Do not move to the next change before verifying the current one
+- Do not generate a plan document unless explicitly asked — read the issue and work directly
+- Do not make assumptions about intent when something is ambiguous — ask
+- Do not commit broken code — every commit should leave the project in a working state
+- For project-specific constraints and architectural boundaries, refer to `docs/architecture.md`
