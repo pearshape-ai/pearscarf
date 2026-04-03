@@ -118,14 +118,16 @@ def noise_rejection_rate(per_record_results: list[dict]) -> float | None:
 def entity_resolution_accuracy(
     resolution_pairs: list[dict],
     extracted_entities_by_record: dict[str, list[dict]],
+    extracted_facts_by_record: dict[str, list[dict]] | None = None,
 ) -> float | None:
     """Check whether surface form variants resolve correctly.
 
     Each pair: {"surface_a": str, "surface_b": str, "record_a": str,
-                "record_b": str, "expected_outcome": "merge"|"split"}
+                "record_b": str, "expected_outcome": "merge"|"split"|"domain_inferred"}
 
     For merge: correct if both surface forms resolve to the same canonical name.
     For split: correct if they resolve to different canonical names.
+    For domain_inferred: correct if an AFFILIATED edge exists from surface_a to canonical_entity.
 
     Returns correct / total, or None if no pairs.
     """
@@ -147,11 +149,30 @@ def entity_resolution_accuracy(
 
     correct = 0
     for pair in resolution_pairs:
+        expected = pair["expected_outcome"]
+
+        # domain_inferred: check for AFFILIATED edge from surface_a to canonical_entity
+        if expected == "domain_inferred":
+            if extracted_facts_by_record is None:
+                continue
+            record_a = pair["record_a"]
+            surface_a = pair["surface_a"].lower()
+            canonical = pair.get("canonical_entity", "").lower()
+            facts = extracted_facts_by_record.get(record_a, [])
+            found = any(
+                f.get("edge_label", "").upper() == "AFFILIATED"
+                and (f.get("from_entity") or "").lower() == surface_a
+                and (f.get("to_entity") or "").lower() == canonical
+                for f in facts
+            )
+            if found:
+                correct += 1
+            continue
+
         name_a = _resolve(pair["surface_a"], pair["record_a"])
-        name_b = _resolve(pair["surface_b"], pair["record_b"])
+        name_b = _resolve(pair.get("surface_b", ""), pair.get("record_b", ""))
         if name_a is None or name_b is None:
             continue  # can't evaluate if entity wasn't extracted
-        expected = pair["expected_outcome"]
         if expected == "merge" and name_a.lower() == name_b.lower():
             correct += 1
         elif expected == "split" and name_a.lower() != name_b.lower():
@@ -164,38 +185,69 @@ def temporal_accuracy(
     temporal_assertions: list[dict],
     extracted_facts_by_record: dict[str, list[dict]],
 ) -> float | None:
-    """Check whether extracted facts carry the correct source_at.
+    """Check temporal correctness of extracted facts against expected edges.
 
-    Each assertion: {"record_id": str, "fact_category": str,
-                     "from_entity": str, "valid_at": str}
+    Supports two formats:
+    - New nested: {"record_id", "expected_edges": [{"source_record", "edge_label",
+      "fact_type", "from_entity", "stale", "valid_until"}]}
+    - Legacy flat: {"record_id", "fact_category", "from_entity", "valid_at"}
 
-    Compares date portion (first 10 chars) of source_at against valid_at
-    from ground truth.
     Returns correct / total, or None if no assertions.
     """
     if not temporal_assertions:
         return None
 
     correct = 0
+    total = 0
+
     for assertion in temporal_assertions:
-        record_id = assertion["record_id"]
-        facts = extracted_facts_by_record.get(record_id, [])
-        cat = assertion["fact_category"].upper()
-        from_e = assertion["from_entity"].lower()
+        expected_edges = assertion.get("expected_edges")
 
-        # Find matching extracted fact
-        for fact in facts:
-            if (
-                fact.get("edge_label", "").upper() == cat
-                and (fact.get("from_entity") or "").lower() == from_e
-            ):
-                extracted_valid = (fact.get("source_at") or "")[:10]
-                expected_valid = (assertion.get("valid_at") or "")[:10]
-                if extracted_valid == expected_valid:
-                    correct += 1
-                break
+        if expected_edges:
+            # New nested format
+            for edge in expected_edges:
+                total += 1
+                sr = edge.get("source_record", assertion.get("record_id", ""))
+                facts = extracted_facts_by_record.get(sr, [])
+                label = edge.get("edge_label", "").upper()
+                ft = edge.get("fact_type", "").lower()
+                from_e = edge.get("from_entity", "").lower()
 
-    return correct / len(temporal_assertions)
+                for fact in facts:
+                    if (
+                        fact.get("edge_label", "").upper() == label
+                        and fact.get("fact_type", "").lower() == ft
+                        and (fact.get("from_entity") or "").lower() == from_e
+                    ):
+                        # Check stale
+                        stale_ok = fact.get("stale", False) == edge.get("stale", False)
+                        # Check valid_until
+                        exp_vu = (edge.get("valid_until") or "")[:10]
+                        ext_vu = (fact.get("valid_until") or "")[:10]
+                        vu_ok = exp_vu == ext_vu if exp_vu else True
+                        if stale_ok and vu_ok:
+                            correct += 1
+                        break
+        else:
+            # Legacy flat format
+            total += 1
+            record_id = assertion["record_id"]
+            facts = extracted_facts_by_record.get(record_id, [])
+            cat = assertion.get("fact_category", "").upper()
+            from_e = assertion.get("from_entity", "").lower()
+
+            for fact in facts:
+                if (
+                    fact.get("edge_label", "").upper() == cat
+                    and (fact.get("from_entity") or "").lower() == from_e
+                ):
+                    extracted_valid = (fact.get("source_at") or "")[:10]
+                    expected_valid = (assertion.get("valid_at") or "")[:10]
+                    if extracted_valid == expected_valid:
+                        correct += 1
+                    break
+
+    return correct / total if total > 0 else None
 
 
 def score_record(extracted: dict, expected: dict) -> dict:
@@ -221,7 +273,7 @@ def score_record(extracted: dict, expected: dict) -> dict:
 
     extracted_empty = len(ext_entities) == 0 and len(ext_facts) == 0
 
-    return {
+    result = {
         "entity_precision": ent_prec,
         "entity_recall": ent_rec,
         "fact_precision": fact_prec,
@@ -235,3 +287,31 @@ def score_record(extracted: dict, expected: dict) -> dict:
         "fact_extracted": fact_extracted,
         "fact_expected": fact_expected,
     }
+
+    # Per-label fact counts
+    for label in ("AFFILIATED", "ASSERTED", "TRANSITIONED"):
+        label_ext = [f for f in ext_facts if f.get("edge_label", "").upper() == label]
+        label_exp = [f for f in exp_facts if f.get("edge_label", "").upper() == label]
+        lm, le, lex = match_facts(label_ext, label_exp)
+        result[f"{label.lower()}_matched"] = lm
+        result[f"{label.lower()}_extracted"] = le
+        result[f"{label.lower()}_expected"] = lex
+
+    # Confidence mismatch warnings
+    confidence_warnings: list[str] = []
+    for ext in ext_facts:
+        for exp in exp_facts:
+            if (
+                ext.get("edge_label", "").upper() == exp.get("edge_label", "").upper()
+                and ext.get("fact_type", "").lower() == exp.get("fact_type", "").lower()
+                and (ext.get("from_entity") or "").lower() == (exp.get("from_entity") or "").lower()
+                and (ext.get("to_entity") or "").lower() == (exp.get("to_entity") or "").lower()
+                and ext.get("confidence", "") != exp.get("confidence", "")
+            ):
+                confidence_warnings.append(
+                    f"{ext.get('from_entity', '?')}: extracted={ext.get('confidence', '?')} "
+                    f"expected={exp.get('confidence', '?')}"
+                )
+    result["confidence_warnings"] = confidence_warnings
+
+    return result

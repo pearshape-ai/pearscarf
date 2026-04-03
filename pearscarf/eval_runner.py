@@ -304,7 +304,8 @@ def run_graph_eval(dataset_path: str, *, verbose: bool = False, timeout: int = 1
     resolution_pairs = ground_truth.get("resolution_pairs")
     if resolution_pairs:
         era = scoring.entity_resolution_accuracy(
-            resolution_pairs, extracted_entities_by_record
+            resolution_pairs, extracted_entities_by_record,
+            extracted_facts_by_record=extracted_facts_by_record,
         )
         if era is not None:
             aggregate["entity_resolution_accuracy"] = era
