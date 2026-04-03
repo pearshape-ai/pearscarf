@@ -2,6 +2,11 @@
 
 ## System Diagram
 
+<p align="center"><img src="assets/architecture-system.svg" alt="PearScarf System Architecture" width="640"></p>
+
+<details>
+<summary>Text fallback</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Interfaces                            │
@@ -39,8 +44,14 @@
 │              │     │  confidence) │
 └──────────────┘     └──────────────┘
 ```
+</details>
 
 ## Email Pipeline
+
+<p align="center"><img src="assets/email-pipeline.svg" alt="Email Pipeline" width="640"></p>
+
+<details>
+<summary>Text fallback</summary>
 
 ```
 New email arrives
@@ -74,8 +85,14 @@ New email arrives
        ├── embed content → Qdrant
        └── mark as indexed
 ```
+</details>
 
 ## Retriever Query Flow
+
+<p align="center"><img src="assets/retriever-query-flow.svg" alt="Retriever Query Flow" width="640"></p>
+
+<details>
+<summary>Text fallback</summary>
 
 ```
 "What do I know about Acme Corp?"
@@ -111,6 +128,7 @@ New email arrives
        ▼
   Worker formats and responds to human
 ```
+</details>
 
 ## Overview
 
@@ -264,6 +282,10 @@ When the worker receives an email from the gmail expert, it classifies it before
 Human responses are captured as `human_context` on the record. The Indexer appends this context to the extraction prompt, enriching entity extraction. The Indexer only processes records with `classification = 'relevant'`.
 
 **Triage bypass:** Ingest records (`store.save_ingest()`) and issue change records (`store.save_issue_change()`) are auto-classified as `'relevant'` on save — they skip the worker triage step entirely.
+
+## Write Path
+
+<p align="center"><img src="assets/write-path.svg" alt="Write Path — Records to Graph" width="640"></p>
 
 ## Knowledge Graph
 

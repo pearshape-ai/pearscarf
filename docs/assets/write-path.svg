@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 560" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="13">
+  <defs>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.08"/>
+    </filter>
+    <marker id="aGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9e9e9e"/>
+    </marker>
+    <marker id="aOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f57f17"/>
+    </marker>
+    <marker id="aRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c62828"/>
+    </marker>
+    <marker id="aBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+
+  <rect width="780" height="560" fill="#fafafa" rx="8"/>
+  <text x="390" y="28" text-anchor="middle" font-size="16" font-weight="600" fill="#1a1a2e">Write Path — Records to Graph</text>
+
+  <!-- Data Sources -->
+  <rect x="60" y="48" width="140" height="40" rx="7" fill="#e3f2fd" stroke="#64b5f6" stroke-width="1.1" filter="url(#shadow)"/>
+  <text x="130" y="73" text-anchor="middle" font-weight="500" fill="#1565c0">Gmail</text>
+
+  <rect x="230" y="48" width="140" height="40" rx="7" fill="#e3f2fd" stroke="#64b5f6" stroke-width="1.1" filter="url(#shadow)"/>
+  <text x="300" y="73" text-anchor="middle" font-weight="500" fill="#1565c0">Linear</text>
+
+  <rect x="400" y="48" width="140" height="40" rx="7" fill="#e3f2fd" stroke="#64b5f6" stroke-width="1.1" filter="url(#shadow)"/>
+  <text x="470" y="73" text-anchor="middle" font-weight="500" fill="#1565c0">Ingest (files)</text>
+
+  <!-- Arrows: sources → Postgres -->
+  <line x1="130" y1="88" x2="260" y2="120" stroke="#1565c0" stroke-width="1.1" marker-end="url(#aBlue)"/>
+  <line x1="300" y1="88" x2="300" y2="120" stroke="#1565c0" stroke-width="1.1" marker-end="url(#aBlue)"/>
+  <line x1="470" y1="88" x2="340" y2="120" stroke="#1565c0" stroke-width="1.1" marker-end="url(#aBlue)"/>
+
+  <!-- Postgres records -->
+  <rect x="180" y="122" width="240" height="48" rx="8" fill="#eceff1" stroke="#90a4ae" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="300" y="144" text-anchor="middle" font-weight="600" fill="#37474f">Postgres</text>
+  <text x="300" y="160" text-anchor="middle" font-size="10" fill="#607d8b">records · emails · issues · issue_changes</text>
+
+  <line x1="300" y1="170" x2="300" y2="204" stroke="#9e9e9e" stroke-width="1.2" marker-end="url(#aGray)"/>
+  <text x="310" y="191" font-size="9" fill="#757575">indexed=FALSE</text>
+
+  <!-- ═══ INDEXER ═══ -->
+  <rect x="100" y="206" width="400" height="140" rx="10" fill="#fff8e1" stroke="#ffd54f" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="300" y="228" text-anchor="middle" font-weight="700" font-size="14" fill="#f57f17">Indexer</text>
+
+  <!-- Step boxes inside indexer -->
+  <rect x="120" y="238" width="170" height="28" rx="5" fill="#fff" stroke="#ffe082" stroke-width="1"/>
+  <text x="205" y="257" text-anchor="middle" font-size="10" fill="#f57f17">1. Build content string</text>
+
+  <rect x="310" y="238" width="170" height="28" rx="5" fill="#fff" stroke="#ffe082" stroke-width="1"/>
+  <text x="395" y="257" text-anchor="middle" font-size="10" fill="#f57f17">2. LLM extraction</text>
+
+  <rect x="120" y="274" width="170" height="28" rx="5" fill="#fff" stroke="#ffe082" stroke-width="1"/>
+  <text x="205" y="293" text-anchor="middle" font-size="10" fill="#f57f17">3. Entity resolution</text>
+
+  <rect x="310" y="274" width="170" height="28" rx="5" fill="#fff" stroke="#ffe082" stroke-width="1"/>
+  <text x="395" y="293" text-anchor="middle" font-size="10" fill="#f57f17">4. Dup check + write</text>
+
+  <rect x="120" y="310" width="170" height="28" rx="5" fill="#fff" stroke="#ffe082" stroke-width="1"/>
+  <text x="205" y="329" text-anchor="middle" font-size="10" fill="#f57f17">5. Qdrant embed</text>
+
+  <rect x="310" y="310" width="170" height="28" rx="5" fill="#fff" stroke="#ffe082" stroke-width="1"/>
+  <text x="395" y="329" text-anchor="middle" font-size="10" fill="#f57f17">6. Mark indexed + enqueue</text>
+
+  <!-- Arrows: Indexer writes to storage -->
+  <line x1="200" y1="346" x2="200" y2="400" stroke="#f57f17" stroke-width="1.2" marker-end="url(#aOrange)"/>
+  <line x1="400" y1="346" x2="400" y2="400" stroke="#f57f17" stroke-width="1.2" marker-end="url(#aOrange)"/>
+
+  <!-- Arrow: Indexer → curator_queue -->
+  <line x1="500" y1="310" x2="620" y2="310" stroke="#9e9e9e" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#aGray)"/>
+  <text x="560" y="302" text-anchor="middle" font-size="9" fill="#757575">curator_queue</text>
+
+  <!-- Storage row -->
+  <rect x="100" y="402" width="160" height="44" rx="7" fill="#eceff1" stroke="#90a4ae" stroke-width="1.1" filter="url(#shadow)"/>
+  <text x="180" y="420" text-anchor="middle" font-weight="600" fill="#37474f">Neo4j</text>
+  <text x="180" y="436" text-anchor="middle" font-size="10" fill="#607d8b">entities + fact-edges</text>
+
+  <rect x="290" y="402" width="160" height="44" rx="7" fill="#eceff1" stroke="#90a4ae" stroke-width="1.1" filter="url(#shadow)"/>
+  <text x="370" y="420" text-anchor="middle" font-weight="600" fill="#37474f">Qdrant</text>
+  <text x="370" y="436" text-anchor="middle" font-size="10" fill="#607d8b">vector embeddings</text>
+
+  <!-- ═══ CURATOR ═══ -->
+  <rect x="560" y="206" width="180" height="140" rx="10" fill="#fce4ec" stroke="#f48fb1" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="650" y="228" text-anchor="middle" font-weight="700" font-size="14" fill="#c62828">Curator</text>
+
+  <rect x="575" y="242" width="150" height="24" rx="4" fill="#fff" stroke="#f8bbd0" stroke-width="1"/>
+  <text x="650" y="259" text-anchor="middle" font-size="10" fill="#c62828">AFFILIATED dedup</text>
+
+  <rect x="575" y="272" width="150" height="24" rx="4" fill="#fff" stroke="#f8bbd0" stroke-width="1"/>
+  <text x="650" y="289" text-anchor="middle" font-size="10" fill="#c62828">ASSERTED dedup</text>
+
+  <rect x="575" y="302" width="150" height="24" rx="4" fill="#fff" stroke="#f8bbd0" stroke-width="1"/>
+  <text x="650" y="319" text-anchor="middle" font-size="10" fill="#c62828">Expiry detection</text>
+
+  <rect x="575" y="332" width="150" height="24" rx="4" fill="#fff" stroke="#f8bbd0" stroke-width="1"/>
+  <text x="650" y="349" text-anchor="middle" font-size="10" fill="#c62828">Confidence upgrade</text>
+
+  <!-- Curator → Neo4j -->
+  <line x1="650" y1="356" x2="650" y2="402" stroke="#c62828" stroke-width="1.2"/>
+  <line x1="650" y1="402" x2="260" y2="420" stroke="#c62828" stroke-width="1.2" marker-end="url(#aRed)"/>
+  <text x="480" y="395" font-size="9" fill="#c62828">mark_fact_stale · set_edge_confidence</text>
+
+  <!-- Note: eventual consistency -->
+  <rect x="60" y="475" width="660" height="50" rx="8" fill="#fff" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="390" y="496" text-anchor="middle" font-weight="500" fill="#424242">Eventual Consistency</text>
+  <text x="390" y="514" text-anchor="middle" font-size="11" fill="#757575">Structurally correct at write time. Semantically correct after the Curator runs.</text>
+
+  <!-- Ambiguous note -->
+  <rect x="60" y="534" width="660" height="20" rx="4" fill="#fff3e0" stroke="#ffe0b2" stroke-width="1"/>
+  <text x="390" y="549" text-anchor="middle" font-size="10" fill="#ef6c00">Ambiguous entity resolution → record stays resolution_status='pending', not indexed, retried after HIL</text>
+</svg>
