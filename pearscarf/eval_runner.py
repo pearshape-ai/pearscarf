@@ -78,7 +78,7 @@ def _load_ground_truth(dataset_path: str) -> tuple[dict, dict, str]:
 def _graph_is_empty() -> bool:
     """Check if Neo4j has any nodes."""
     stats = graph.graph_stats()
-    return stats.get("total_entities", 0) == 0 and stats.get("day_count", 0) == 0
+    return stats.get("total_entities", 0) == 0 and stats.get("day_nodes", 0) == 0
 
 
 def _pending_record_count() -> int:
@@ -117,6 +117,8 @@ def _build_extracted_from_graph(record_id: str) -> dict:
             "to_entity": to_name if to_name and not _is_day(to_name) else None,
             "confidence": item.get("confidence", ""),
             "source_at": item.get("source_at", ""),
+            "stale": item.get("stale", False),
+            "valid_until": item.get("valid_until"),
         }
         facts.append(fact)
 
@@ -163,8 +165,9 @@ def _print_verbose_graph(
     print("\n--- Expected Facts ---")
     for f in expected.get("expected_facts", []):
         to_str = f" -> {f['to_entity']}" if f.get("to_entity") else ""
-        valid = f"  (valid_at: {f['valid_at']})" if f.get("valid_at") else ""
-        print(f"  [{f.get('confidence', '?')}] {f.get('category', '?')}: {f.get('from_entity', '?')}{to_str}{valid}")
+        valid = f"  (valid_until: {f['valid_until']})" if f.get("valid_until") else ""
+        label = f"{f.get('edge_label', '?')}/{f.get('fact_type', '?')}"
+        print(f"  [{f.get('confidence', '?')}] {label}: {f.get('from_entity', '?')}{to_str}{valid}")
 
     print("\n--- Graph Entities ---")
     for e in extracted.get("entities", []):
@@ -173,7 +176,9 @@ def _print_verbose_graph(
     print("\n--- Graph Facts ---")
     for f in extracted.get("facts", []):
         to_str = f" -> {f['to_entity']}" if f.get("to_entity") else ""
-        valid = f"  (source_at: {f['source_at']})" if f.get("source_at") else ""
+        valid = f"  (valid_until: {f['valid_until']})" if f.get("valid_until") else (
+            f"  (source_at: {f['source_at']})" if f.get("source_at") else ""
+        )
         label = f"{f.get('edge_label', '?')}/{f.get('fact_type', '?')}"
         print(f"  [{f.get('confidence', '?')}] {label}: {f.get('from_entity', '?')}{to_str}{valid}")
 
@@ -272,6 +277,10 @@ def run_graph_eval(dataset_path: str, *, verbose: bool = False, timeout: int = 1
         if verbose:
             _print_verbose_graph(record_id, extracted, expected)
 
+        # Confidence warnings
+        for w in scores.get("confidence_warnings", []):
+            print(f"    ⚠ confidence: {w}")
+
         # Progress
         if scores["is_noise"]:
             status = "ok" if scores["noise_correctly_empty"] else "FAIL"
@@ -299,6 +308,17 @@ def run_graph_eval(dataset_path: str, *, verbose: bool = False, timeout: int = 1
     }
     if agg_nrr is not None:
         aggregate["noise_rejection_rate"] = agg_nrr
+
+    # Per-label F1
+    per_label = {}
+    for label in ("affiliated", "asserted", "transitioned"):
+        lm = sum(r.get(f"{label}_matched", 0) for r in per_record.values())
+        le = sum(r.get(f"{label}_extracted", 0) for r in per_record.values())
+        lx = sum(r.get(f"{label}_expected", 0) for r in per_record.values())
+        lp = scoring.precision(lm, le)
+        lr = scoring.recall(lm, lx)
+        per_label[label] = {"precision": lp, "recall": lr, "f1": scoring.f1(lp, lr)}
+    aggregate["per_label_f1"] = per_label
 
     # ERA (optional)
     resolution_pairs = ground_truth.get("resolution_pairs")

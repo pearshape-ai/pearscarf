@@ -897,7 +897,7 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
             "RETURN a.name AS from_name, a.date AS from_date, labels(a) AS from_labels, "
             "type(r) AS edge_label, r.fact_type AS fact_type, "
             "r.fact AS fact, r.confidence AS confidence, "
-            "r.source_at AS source_at, r.stale AS stale, "
+            "r.source_at AS source_at, r.stale AS stale, r.valid_until AS valid_until, "
             "b.name AS to_name, b.date AS to_date, labels(b) AS to_labels",
             rid=record_id,
         )
@@ -917,6 +917,7 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
                 "confidence": record["confidence"] or "",
                 "source_at": record["source_at"] or "",
                 "stale": record["stale"] or False,
+                "valid_until": record["valid_until"],
             })
         return items
 

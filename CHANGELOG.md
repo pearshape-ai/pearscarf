@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.16.1
+- `get_nodes_by_source_record` now returns `valid_until` from fact edges
+- `_build_extracted_from_graph` passes `stale` and `valid_until` through to scorer
+- Verbose mode fixed: expected facts show `edge_label/fact_type` and `valid_until`; graph facts prefer `valid_until` over `source_at`
+- Confidence warnings surfaced after each record in eval output
+- Per-label F1 aggregation: `per_label_f1` dict with precision/recall/F1 per AFFILIATED/ASSERTED/TRANSITIONED
+- Bug fix: `_graph_is_empty` checked `day_count` instead of `day_nodes` — eval could run on dirty graph
+
 ## 1.16.0
 - `score_record` extended with per-label fact counts: `affiliated_matched/extracted/expected`, `asserted_*`, `transitioned_*`
 - `score_record` adds `confidence_warnings` list — identity-matched facts with mismatched confidence (informational, does not affect scores)
