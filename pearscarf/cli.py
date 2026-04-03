@@ -393,7 +393,7 @@ def mcp_status():
     keys = list_mcp_keys()
     active = sum(1 for k in keys if not k["revoked"])
     click.echo(f"  Bind: {MCP_HOST}:{MCP_PORT}")
-    click.echo(f"  Tools: 7 (find_entity, get_facts, get_connections, get_relationship, get_conflicts, get_entity_context, get_current_state)")
+    click.echo(f"  Tools: 10")
     click.echo(f"  Keys: {active} active, {len(keys)} total")
 
 
@@ -459,6 +459,29 @@ def mcp_test(entity_name: str):
     click.echo(f"  {len(affiliations)} affiliation(s)")
     for a in affiliations[:5]:
         click.echo(f"  [{a.get('fact_type', '?')}] {a.get('fact', '')}")
+
+    # get_open_commitments
+    click.echo("\n--- get_open_commitments ---")
+    commitments = context_query.get_facts(entity["id"], edge_label="ASSERTED", fact_type="commitment", include_stale=False)
+    commitments = [c for c in commitments if c.get("valid_until")]
+    click.echo(f"  {len(commitments)} open commitment(s)")
+    for c in commitments[:3]:
+        click.echo(f"  {c.get('fact', '')} (until: {c.get('valid_until', '?')})")
+
+    # get_open_blockers
+    click.echo("\n--- get_open_blockers ---")
+    blockers = context_query.get_facts(entity["id"], edge_label="ASSERTED", fact_type="blocker", include_stale=False)
+    click.echo(f"  {len(blockers)} blocker(s)")
+    for b in blockers[:3]:
+        click.echo(f"  {b.get('fact', '')}")
+
+    # get_recent_activity
+    click.echo("\n--- get_recent_activity (30 days) ---")
+    from datetime import datetime, timezone, timedelta
+    since_30d = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    transitions = context_query.get_facts(entity["id"], edge_label="TRANSITIONED", since=since_30d)
+    comms = context_query.get_communications(entity["id"], since=since_30d)
+    click.echo(f"  {len(transitions)} transition(s), {len(comms)} communication(s)")
 
 
 @mcp.group("keys")
