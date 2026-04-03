@@ -244,6 +244,182 @@ def get_current_state(entity_name: str) -> dict:
     }
 
 
+@mcp.tool(description=(
+    "Get pending commitments — what has been promised, by whom, and by when. "
+    "Only returns commitments with an explicit deadline (valid_until). "
+    "Use for morning briefings, deadline tracking, and accountability queries."
+))
+def get_open_commitments(
+    entity_name: str = None,
+    before_date: str = None,
+    format: str = "chronological",
+) -> dict:
+    """Open commitments with deadlines."""
+    if format not in ("chronological", "clustered"):
+        return {"error": "invalid_format", "valid_values": ["chronological", "clustered"]}
+
+    entity_id = None
+    entity_info = None
+    if entity_name:
+        entity, err = _resolve_entity(entity_name)
+        if err:
+            return err
+        entity_id = entity["id"]
+        entity_info = {"id": entity["id"], "name": entity["name"], "type": entity["type"]}
+
+    if entity_id:
+        commitments = context_query.get_facts(
+            entity_id, edge_label="ASSERTED", fact_type="commitment", include_stale=False
+        )
+    else:
+        # Global — need all entities' commitments. Use graph query directly.
+        from pearscarf import graph
+        # Get all current ASSERTED/commitment edges
+        all_facts = []
+        stats = graph.graph_stats()
+        # Fall back to searching all entities
+        entities = graph.search_entities("", limit=100)
+        seen_edges: set[str] = set()
+        for ent in entities:
+            facts = context_query.get_facts(
+                ent["id"], edge_label="ASSERTED", fact_type="commitment", include_stale=False
+            )
+            for f in facts:
+                eid = f.get("id", "")
+                if eid not in seen_edges:
+                    seen_edges.add(eid)
+                    all_facts.append(f)
+        commitments = all_facts
+
+    # Filter to only those with valid_until
+    commitments = [c for c in commitments if c.get("valid_until")]
+
+    # Filter by before_date
+    if before_date:
+        commitments = [c for c in commitments if (c.get("valid_until") or "") <= before_date]
+
+    commitments.sort(key=lambda c: c.get("valid_until", ""))
+
+    result: dict = {"commitments": commitments, "count": len(commitments)}
+    if entity_info:
+        result["entity"] = entity_info
+    return result
+
+
+@mcp.tool(description=(
+    "Get what is currently blocked. "
+    "Returns ASSERTED[blocker] facts that have no subsequent TRANSITIONED[resolution]. "
+    "Use when preparing a status update or surfacing impediments."
+))
+def get_open_blockers(entity_name: str = None) -> dict:
+    """Current blockers without resolution."""
+    entity_id = None
+    entity_info = None
+    if entity_name:
+        entity, err = _resolve_entity(entity_name)
+        if err:
+            return err
+        entity_id = entity["id"]
+        entity_info = {"id": entity["id"], "name": entity["name"], "type": entity["type"]}
+
+    if entity_id:
+        blockers = context_query.get_facts(
+            entity_id, edge_label="ASSERTED", fact_type="blocker", include_stale=False
+        )
+
+        # Filter out blockers that have a subsequent resolution
+        resolutions = context_query.get_facts(
+            entity_id, edge_label="TRANSITIONED", fact_type="resolution", include_stale=False
+        )
+        resolution_times = {r.get("source_at", "") for r in resolutions}
+        # Exclude blockers where a resolution exists with source_at > blocker's source_at
+        open_blockers = []
+        for b in blockers:
+            b_time = b.get("source_at", "")
+            has_resolution = any(rt > b_time for rt in resolution_times if rt)
+            if not has_resolution:
+                open_blockers.append(b)
+        blockers = open_blockers
+    else:
+        blockers = []
+
+    result: dict = {"blockers": blockers, "count": len(blockers)}
+    if entity_info:
+        result["entity"] = entity_info
+    return result
+
+
+@mcp.tool(description=(
+    "Get what happened around an entity recently — transitions, references, and communications. "
+    "Combines graph facts (state changes, mentions) with email metadata (who communicated with whom). "
+    "Use when catching up on a deal, project, or person after time away."
+))
+def get_recent_activity(
+    entity_name: str,
+    since: str = None,
+    format: str = "chronological",
+) -> dict:
+    """Recent activity: transitions + references + communications."""
+    if format not in ("chronological", "clustered"):
+        return {"error": "invalid_format", "valid_values": ["chronological", "clustered"]}
+
+    entity, err = _resolve_entity(entity_name)
+    if err:
+        return err
+
+    # Default since: 7 days ago
+    if not since:
+        from datetime import datetime, timezone, timedelta
+        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+    entity_id = entity["id"]
+
+    # Three sources
+    transitions = context_query.get_facts(
+        entity_id, edge_label="TRANSITIONED", since=since
+    )
+    references = context_query.get_facts(
+        entity_id, edge_label="ASSERTED", fact_type="reference", since=since
+    )
+    communications = context_query.get_communications(entity_id, since=since)
+
+    # Build unified activity list
+    activity: list[dict] = []
+
+    for f in transitions + references:
+        activity.append({
+            "type": "fact",
+            "edge_label": f.get("edge_label", ""),
+            "fact_type": f.get("fact_type", ""),
+            "fact": f.get("fact", ""),
+            "source_at": f.get("source_at", ""),
+            "source_record": f.get("source_record", ""),
+        })
+
+    for c in communications:
+        activity.append({
+            "type": "communication",
+            "sender": c.get("sender", ""),
+            "recipient": c.get("recipient", ""),
+            "subject": c.get("subject", ""),
+            "received_at": str(c.get("received_at", "")),
+            "record_id": c.get("record_id", ""),
+        })
+
+    # Sort by timestamp descending
+    def _sort_key(item: dict) -> str:
+        return item.get("source_at") or item.get("received_at") or ""
+
+    activity.sort(key=_sort_key, reverse=True)
+
+    return {
+        "entity": {"id": entity["id"], "name": entity["name"], "type": entity["type"]},
+        "activity": activity,
+        "count": len(activity),
+        "since": since,
+    }
+
+
 class MCPServer:
     """Background thread running the FastMCP server."""
 
