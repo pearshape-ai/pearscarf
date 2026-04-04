@@ -188,7 +188,7 @@ def _print_verbose_graph(
 # --- Main pipeline ---
 
 
-def run_graph_eval(dataset_path: str, *, verbose: bool = False, timeout: int = 120) -> None:
+def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
     """Graph-based eval: ingest -> index -> query graph -> score."""
     from pearscarf import __version__ as pearscarf_version
     from pearscarf import store
@@ -249,13 +249,8 @@ def run_graph_eval(dataset_path: str, *, verbose: bool = False, timeout: int = 1
         if pending == 0:
             print("Indexer finished — all records processed.")
             break
-        elapsed = time.time() - start
-        if elapsed > timeout:
-            raise SystemExit(
-                f"Timeout: {pending} record(s) still pending after {timeout}s. "
-                "Is the indexer running? Start with `psc run` or `psc discord`."
-            )
-        print(f"  {pending} record(s) remaining... ({int(elapsed)}s)")
+        elapsed = int(time.time() - start)
+        print(f"  {pending} record(s) remaining... ({elapsed}s)")
         time.sleep(2)
 
     print()
