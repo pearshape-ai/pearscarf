@@ -125,15 +125,33 @@ def _build_extracted_from_graph(record_id: str) -> dict:
         # Collect entities (skip Day nodes)
         if from_name and not _is_day(from_name):
             if from_name not in entity_set:
-                entity_set[from_name] = {"name": from_name, "type": ""}
+                entity_set[from_name] = {"name": from_name, "type": item.get("from_type", "")}
         if to_name and not _is_day(to_name):
             if to_name not in entity_set:
-                entity_set[to_name] = {"name": to_name, "type": ""}
+                entity_set[to_name] = {"name": to_name, "type": item.get("to_type", "")}
+
+    # Enrich entities with aliases from IDENTIFIED_AS edges
+    for ent in entity_set.values():
+        aliases = _get_aliases(ent["name"])
+        if aliases:
+            ent["aliases"] = aliases
 
     return {
         "entities": list(entity_set.values()),
         "facts": facts,
     }
+
+
+def _get_aliases(entity_name: str) -> list[str]:
+    """Get surface forms that resolved to this entity via IDENTIFIED_AS edges."""
+    with graph.get_session() as session:
+        result = session.run(
+            "MATCH (n)-[r:IDENTIFIED_AS]->(n) "
+            "WHERE toLower(n.name) = toLower($name) AND r.surface_form IS NOT NULL "
+            "RETURN r.surface_form AS sf",
+            name=entity_name,
+        )
+        return [r["sf"] for r in result if r["sf"].lower() != entity_name.lower()]
 
 
 def _is_day(name: str) -> bool:

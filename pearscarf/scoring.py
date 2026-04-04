@@ -145,6 +145,9 @@ def entity_resolution_accuracy(
             meta = ent.get("metadata", {})
             if meta.get("email", "").lower() == ref_lower:
                 return name
+            for alias in ent.get("aliases", []):
+                if alias.lower() == ref_lower:
+                    return name
         return None
 
     correct = 0

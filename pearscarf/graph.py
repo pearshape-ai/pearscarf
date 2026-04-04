@@ -185,7 +185,7 @@ def _label_to_type(labels: list[str]) -> str:
     return ""
 
 
-def _find_by_identified_as(name: str) -> list[dict]:
+def find_by_identified_as(name: str) -> list[dict]:
     """Find entities that have an IDENTIFIED_AS edge where surface_form matches name."""
     with get_session() as session:
         result = session.run(
@@ -281,7 +281,7 @@ def find_entity_candidates(
         _add(entity)
 
     # 6. IDENTIFIED_AS edge match
-    for entity in _find_by_identified_as(name):
+    for entity in find_by_identified_as(name):
         _add(entity)
 
     return candidates
@@ -911,7 +911,9 @@ def get_nodes_by_source_record(record_id: str) -> list[dict]:
                 "fact_type": record["fact_type"] or "",
                 "fact": record["fact"] or "",
                 "from": from_display,
+                "from_type": _label_to_type(from_labels) or "",
                 "to": to_display,
+                "to_type": _label_to_type(to_labels) or "",
                 "confidence": record["confidence"] or "",
                 "source_at": record["source_at"] or "",
                 "stale": record["stale"] or False,

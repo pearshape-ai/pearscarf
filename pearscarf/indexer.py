@@ -25,8 +25,43 @@ from pearscarf.prompts import load as load_prompt
 from pearscarf.tracing import trace_span
 
 
+import re
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _sentence_window(text: str, mention: str, radius: int = 2) -> str:
+    """Extract sentences around all occurrences of a mention.
+
+    Finds every sentence containing the mention, includes `radius` sentences
+    before and after each, merges overlapping windows, and joins with '...'
+    for gaps. Falls back to full text if short or mention not found.
+    """
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    if not mention or len(sentences) <= (2 * radius + 1):
+        return text
+
+    mention_lower = mention.lower()
+    included: set[int] = set()
+    for i, s in enumerate(sentences):
+        if mention_lower in s.lower():
+            for j in range(max(0, i - radius), min(len(sentences), i + radius + 1)):
+                included.add(j)
+
+    if not included:
+        return text[:600]
+
+    parts: list[str] = []
+    prev = -2
+    for i in sorted(included):
+        if i > prev + 1 and parts:
+            parts.append("...")
+        parts.append(sentences[i])
+        prev = i
+
+    return " ".join(parts)
 
 
 class Indexer:
@@ -150,8 +185,12 @@ class Indexer:
         # Fallback: use raw content from records table
         return record.get("raw") or "(no content)"
 
-    def _build_source_context(self, record: dict) -> str:
-        """Build a short context string from the record for the resolution judge."""
+    def _build_source_context(self, record: dict, entity_name: str = "") -> str:
+        """Build a context string from the record for the resolution judge.
+
+        If entity_name is provided, extracts a sentence window around each
+        mention instead of truncating from the start.
+        """
         record_type = record.get("type", "")
         record_id = record["id"]
 
@@ -170,7 +209,7 @@ class Indexer:
                 if row["subject"]:
                     parts.append(f"Subject: {row['subject']}")
                 if row["body"]:
-                    parts.append(f"Body: {row['body'][:300]}")
+                    parts.append(f"Body: {_sentence_window(row['body'], entity_name)}")
                 return "\n".join(parts)
 
         elif record_type == "issue":
@@ -216,7 +255,9 @@ class Indexer:
 
         elif record_type == "ingest":
             raw = record.get("raw", "")
-            return raw[:500] if raw else "(seed file)"
+            if not raw:
+                return "(seed file)"
+            return _sentence_window(raw, entity_name) if entity_name else raw[:500]
 
         return "(no context)"
 
@@ -564,9 +605,6 @@ class Indexer:
             self._mark_indexed(record_id)
             return
 
-        # Build source context for resolution judge
-        source_context = self._build_source_context(record)
-
         # Step 2: Resolve entities — build name → element ID map
         entity_id_map: dict[str, str] = {}
         unresolved: list[dict] = []
@@ -575,6 +613,7 @@ class Indexer:
             name = entity.get("name", "")
             if not name:
                 continue
+            source_context = self._build_source_context(record, name)
             eid = self._resolve_entity(entity, source_context)
             if eid is None:
                 # Ambiguous — collect for pending state
@@ -688,7 +727,7 @@ class Indexer:
                                 to_ctx = [graph.get_entity_context(c["id"]) for c in to_candidates]
                                 decision = self._resolve_entity_with_llm(
                                     {"name": to_name, "type": "", "metadata": {}},
-                                    source_context, to_ctx,
+                                    self._build_source_context(record, to_name), to_ctx,
                                 )
                                 verdict = decision.get("decision", "new")
                                 if verdict == "match":
