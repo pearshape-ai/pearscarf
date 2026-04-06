@@ -5,7 +5,7 @@
 <h1 align="center">PearScarf</h1>
 
 <p align="center">
-  Context engine for teams of agents.
+  Self-improving context engine for teams of agents.
 </p>
 
 <p align="center">
