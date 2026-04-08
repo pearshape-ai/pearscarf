@@ -11,7 +11,7 @@ from typing import Any
 from pearscarf.query import context_query
 from pearscarf.agents.expert import ExpertAgent
 from pearscarf.bus import MessageBus
-from pearscarf.prompts import load as load_prompt
+from pearscarf.knowledge import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
 # ---------------------------------------------------------------------------

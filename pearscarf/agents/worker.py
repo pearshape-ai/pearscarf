@@ -7,7 +7,7 @@ from pearscarf.storage import graph
 from pearscarf import log
 from pearscarf.agents.base import BaseAgent
 from pearscarf.bus import MessageBus
-from pearscarf.prompts import load as load_prompt
+from pearscarf.knowledge import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
 

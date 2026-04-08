@@ -12,7 +12,7 @@ import os
 from typing import Any
 
 from pearscarf.agents.expert import ExpertAgent
-from pearscarf.prompts import load as load_prompt
+from pearscarf.knowledge import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ import anthropic
 
 from pearscarf import log
 from pearscarf.config import ANTHROPIC_API_KEY, EXTRACTION_MODEL
-from pearscarf.prompts import load as load_prompt
+from pearscarf.knowledge import load as load_prompt
 from pearscarf.tracing import trace_span
 
 

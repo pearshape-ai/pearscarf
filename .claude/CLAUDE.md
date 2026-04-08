@@ -34,7 +34,7 @@ In both cases: one change at a time, verify before moving on, never batch.
 
 ## Verification
 
-Verification means confirming that the change you just made works as intended and hasn't broken anything adjacent. It is not optional.
+Verification means confirming that the change you just made works as intended and hasn't broken anything adjacent. It is not optional.s
 
 After every meaningful change:
 - Run the most direct check available — if the change touches a specific function, call it; if it touches a pipeline, run it end to end on a small input
