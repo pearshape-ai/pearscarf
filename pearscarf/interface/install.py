@@ -498,6 +498,134 @@ _ENV_DIR = _REPO_ROOT / "env"
 _GITIGNORE = _REPO_ROOT / ".gitignore"
 
 
+# --- Pre-startup credential check ---
+#
+# Convention for `.env.example`:
+#   KEY=        → required, operator must fill in
+#   KEY=value   → optional with a working default; check skips it
+# The check requires every "required" var to have a non-empty value in
+# the operator's env file.
+
+
+@dataclass
+class CredentialError:
+    expert_name: str
+    var_name: str
+    env_path: Path
+    reason: str
+
+
+def _parse_env_file(path: Path) -> dict[str, str]:
+    """Parse a `KEY=VALUE` env file. Returns {key: value} (no expansion, no quotes)."""
+    if not path.is_file():
+        return {}
+    result: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        result[key.strip()] = value.strip()
+    return result
+
+
+def check_expert_credentials(expert) -> list[CredentialError]:
+    """Verify the operator has filled in every required env var for an expert.
+
+    Required vars are detected from the expert's `.env.example` file —
+    any var with an empty value in the example is required. The
+    operator's file at `env/.<name>.env` must contain a non-empty value
+    for each. Vars with non-empty defaults in the example are skipped.
+    """
+    errors: list[CredentialError] = []
+    example_path = expert.path / ".env.example"
+    if not example_path.is_file():
+        return errors  # expert declares no credentials
+
+    example_vars = _parse_env_file(example_path)
+    target_path = _ENV_DIR / f".{expert.name}.env"
+
+    if not target_path.is_file():
+        # The whole credentials file is missing — flag every required var
+        for key, example_value in example_vars.items():
+            if example_value:
+                continue
+            errors.append(CredentialError(
+                expert_name=expert.name,
+                var_name=key,
+                env_path=target_path,
+                reason="credentials file missing — copy .env.example and fill in",
+            ))
+        return errors
+
+    operator_vars = _parse_env_file(target_path)
+
+    for key, example_value in example_vars.items():
+        if example_value:
+            # Optional var with a default — skip
+            continue
+        operator_value = operator_vars.get(key)
+        if operator_value is None:
+            errors.append(CredentialError(
+                expert_name=expert.name,
+                var_name=key,
+                env_path=target_path,
+                reason="missing from env file",
+            ))
+            continue
+        if not operator_value:
+            errors.append(CredentialError(
+                expert_name=expert.name,
+                var_name=key,
+                env_path=target_path,
+                reason="empty",
+            ))
+
+    return errors
+
+
+def check_credentials_for_enabled_experts() -> list[CredentialError]:
+    """Run credential checks against every currently enabled expert."""
+    from pearscarf.indexing.registry import get_registry
+
+    errors: list[CredentialError] = []
+    for expert in get_registry().enabled_experts():
+        errors.extend(check_expert_credentials(expert))
+    return errors
+
+
+def enforce_credentials_or_exit() -> None:
+    """Run the credential check and exit with a clear report on any failure.
+
+    Called by `psc run` and `psc discord` before starting any expert.
+    """
+    errors = check_credentials_for_enabled_experts()
+    if not errors:
+        return
+
+    click.echo(click.style(
+        "Credential check failed. The following expert credentials are missing or unfilled:",
+        fg="red",
+    ))
+    click.echo()
+
+    by_expert: dict[str, list[CredentialError]] = {}
+    for err in errors:
+        by_expert.setdefault(err.expert_name, []).append(err)
+
+    for name, expert_errors in by_expert.items():
+        env_path = expert_errors[0].env_path
+        click.echo(click.style(f"  {name}", fg="cyan") + f"  → {env_path}")
+        for err in expert_errors:
+            click.echo(f"    {click.style(err.var_name, fg='yellow')}: {err.reason}")
+        click.echo()
+
+    click.echo("Edit the env file(s) above and try again.")
+    raise SystemExit(1)
+
+
 def scaffold_credentials(ctx: ValidationContext) -> Path | None:
     """Copy <package>/.env.example → env/.<name>.env. Returns target path or None."""
     assert ctx.package_dir is not None
