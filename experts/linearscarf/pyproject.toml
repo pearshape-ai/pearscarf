@@ -1,0 +1,15 @@
+[project]
+name = "linearscarf"
+version = "0.1.0"
+description = "Linear expert for PearScarf — polls issues and changes via the Linear GraphQL API"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

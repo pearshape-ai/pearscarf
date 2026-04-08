@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.17.10
+- Added `pearscarf install <source>` — the operator-facing way to add an expert. Detects whether the source is a local path, git URL, or PyPI name, runs an 8-stage validation pipeline (pip install, package locatable, manifest valid, knowledge contract, connector contract, conflict checks, identifier patterns, eval dataset), and writes DB rows on success. Local installs skip pip entirely (the package must already be importable, typically because it lives under `experts/`).
+- New entity types declared by an expert require operator approval before any DB writes happen. `--yes`/`-y` skips the prompt for non-interactive installs.
+- Credential scaffolding: on a successful install, the expert's `.env.example` is copied to `env/.<name>.env` and `env/` is added to `.gitignore` if missing.
+- Added `pearscarf expert list` and `pearscarf expert inspect <name>` for inspecting installed experts — name, source type, version, enabled flag, package directory, declared entity types, identifier patterns, and credential file location.
+- Added `pyproject.toml` to `gmailscarf` and `linearscarf` so they can be packaged if needed. Local installs still register the package directly without invoking pip.
+- New file `pearscarf/interface/install.py` owns the install command, validation pipeline, and inspect/list commands. `cli.py` just registers them on the right Click groups.
+
 ## 1.17.9
 - Added Postgres tables for expert registration: `experts`, `entity_types`, `identifier_patterns`. Schema migrates non-destructively. The `experts` table is the install record (name, version, source_type, package_name, install_method, enabled); the other two are populated by the install command in a future iteration.
 - Storage helpers added for the `experts` table only (`list_registered_experts`, `register_expert`, `set_expert_enabled`, `unregister_expert`). The `entity_types` and `identifier_patterns` tables exist as empty schemas — read/write surfaces will land when the install command needs them.
