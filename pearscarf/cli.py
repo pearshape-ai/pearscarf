@@ -358,6 +358,16 @@ def extract_test(record_ids: tuple[str, ...]) -> None:
     run_extraction(list(record_ids) if record_ids else None)
 
 
+@cli.command("test")
+def test_cmd() -> None:
+    """Run the execution harness (pytest tests/test_harness.py)."""
+    import subprocess
+    import sys
+    raise SystemExit(
+        subprocess.call([sys.executable, "-m", "pytest", "tests/test_harness.py", "-v"])
+    )
+
+
 @cli.command("eval")
 @click.option("--dataset", required=True, type=click.Path(exists=True), help="Path to eval dataset directory")
 @click.option("--verbose", "-v", is_flag=True, help="Print record content, expected and extracted entities/facts per record")

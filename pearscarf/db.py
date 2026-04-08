@@ -32,6 +32,7 @@ def _get_pool() -> ConnectionPool:
             min_size=2,
             max_size=10,
             kwargs={"row_factory": dict_row, "autocommit": False},
+            open=True,
         )
         atexit.register(close_pool)
     return _pool

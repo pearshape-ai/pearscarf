@@ -1,0 +1,13 @@
+{
+  "record_id": "test_issue_001",
+  "linear_id": "test_linear_001",
+  "identifier": "ENG-101",
+  "title": "Implement Meridian API integration",
+  "description": "Build the connector layer for the Meridian Systems API. Owner: David Kim. Blocked on credentials from the Meridian team.",
+  "status": "In Progress",
+  "priority": "High",
+  "assignee": "David Kim",
+  "project": "Meridian API Integration",
+  "linear_created_at": "2026-04-01T10:00:00+00:00",
+  "linear_updated_at": "2026-04-01T10:00:00+00:00"
+}
