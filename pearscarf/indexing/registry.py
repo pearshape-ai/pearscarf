@@ -20,6 +20,8 @@ singleton for the lifetime of the process.
 
 from __future__ import annotations
 
+import importlib
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -39,8 +41,23 @@ class Expert:
     knowledge_dir: Path
     extraction_path: Path | None
     connector_path: Path
+    connector_module: str
     new_entity_types: list[dict] = field(default_factory=list)
     record_types: list[str] = field(default_factory=list)
+
+    def start(self, bus: Any) -> threading.Thread | None:
+        """Import the connector entry point and call its start(bus).
+
+        Returns whatever the connector returns — typically a polling
+        thread, or None if credentials are missing.
+        """
+        module = importlib.import_module(self.connector_module)
+        start_fn = getattr(module, "start", None)
+        if start_fn is None:
+            raise RuntimeError(
+                f"{self.name}: {self.connector_module} has no start(bus) function"
+            )
+        return start_fn(bus)
 
 
 class Registry:
@@ -88,6 +105,13 @@ class Registry:
         connector_rel = data.get("connector", "connector/agent.py")
         connector_path = package_dir / connector_rel
 
+        # Derive the importable module name from the connector path,
+        # e.g. "connector/agent.py" → "<name>.connector.agent"
+        connector_relative_no_ext = Path(connector_rel).with_suffix("")
+        connector_module = (
+            f"{name}." + connector_relative_no_ext.as_posix().replace("/", ".")
+        )
+
         return Expert(
             name=str(name),
             version=str(data.get("version", "0.0.0")),
@@ -97,6 +121,7 @@ class Registry:
             knowledge_dir=knowledge_dir,
             extraction_path=extraction_md if extraction_md.is_file() else None,
             connector_path=connector_path,
+            connector_module=connector_module,
             new_entity_types=list(data.get("new_entity_types") or []),
             record_types=[str(rt) for rt in (data.get("record_types") or [])],
         )
@@ -124,6 +149,15 @@ class Registry:
     def all(self) -> list[Expert]:
         """All registered experts, sorted by name."""
         return [self._by_name[n] for n in sorted(self._by_name)]
+
+    def enabled_experts(self) -> list[Expert]:
+        """Experts that should be started by `pearscarf run`.
+
+        Today every discovered expert is implicitly enabled — there is no
+        DB or per-expert toggle yet. This method exists so callers don't
+        couple to `all()` and survive the day enabled state lands.
+        """
+        return self.all()
 
     # --- Layer 1 / Layer 2 prompt assembly ---
 

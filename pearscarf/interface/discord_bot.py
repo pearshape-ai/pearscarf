@@ -161,42 +161,35 @@ class PearscarfBot(discord.Client):
             await asyncio.sleep(1)
 
 
-def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
+def run_bot(poll: bool = False) -> None:
     from pearscarf import __version__
     print(f"PearScarf v{__version__}")
 
     if not DISCORD_BOT_TOKEN:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 
-    from gmailscarf.connector.agent import start as start_gmail_connector
-    from linearscarf.connector.agent import start as start_linear_connector
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
+    from pearscarf.indexing.registry import get_registry
 
     bus = MessageBus()
 
-    # Start Gmail connector if requested. The LLM agent layer is offline
-    # until the registry can auto-load it from knowledge/agent.md.
-    if poll_email:
-        thread = start_gmail_connector(bus)
-        if thread is None:
-            raise SystemExit(
-                "Email polling requires Gmail OAuth credentials.\n"
-                "Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN in .env.\n"
-                "Run 'pearscarf gmail --auth' to set up OAuth."
-            )
-        print("Gmail connector started.")
-
-    # Start Linear connector if requested. The LLM agent layer is offline
-    # until the registry can auto-load it from knowledge/agent.md.
-    if poll_linear:
-        thread = start_linear_connector(bus)
-        if thread is None:
-            raise SystemExit(
-                "Linear polling requires LINEAR_API_KEY.\n"
-                "Set LINEAR_API_KEY in .env."
-            )
-        print("Linear connector started.")
+    # Start every enabled expert's connector via the registry. Each
+    # expert.start(bus) returns its polling thread or None if its
+    # credentials are missing — missing creds log a warning and skip,
+    # so the bot still boots without every expert configured.
+    if poll:
+        registry = get_registry()
+        for expert in registry.enabled_experts():
+            try:
+                thread = expert.start(bus)
+            except Exception as exc:
+                print(f"{expert.name} failed to start: {exc}")
+                continue
+            if thread is None:
+                print(f"{expert.name} skipped (credentials missing).")
+            else:
+                print(f"{expert.name} connector started.")
 
     # Start Retriever expert runner
     retriever_factory = create_retriever_for_runner(bus=bus)
