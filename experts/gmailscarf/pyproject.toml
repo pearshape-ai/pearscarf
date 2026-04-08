@@ -1,0 +1,16 @@
+[project]
+name = "gmailscarf"
+version = "0.1.0"
+description = "Gmail expert for PearScarf — polls and writes back via the Gmail API"
+requires-python = ">=3.12"
+dependencies = [
+    "google-api-python-client",
+    "google-auth-oauthlib",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

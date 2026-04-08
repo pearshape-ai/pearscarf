@@ -534,3 +534,122 @@ def unregister_expert(name: str) -> bool:
         cur = conn.execute("DELETE FROM experts WHERE name = %s", (name,))
         conn.commit()
         return cur.rowcount > 0
+
+
+
+def insert_entity_type(expert_name: str, type_name: str, knowledge_path: str) -> None:
+    """Insert an entity_type row owned by an expert. Idempotent on (expert_name, type_name)."""
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO entity_types (expert_name, type_name, knowledge_path) "
+            "VALUES (%s, %s, %s) "
+            "ON CONFLICT (expert_name, type_name) DO UPDATE SET "
+            "knowledge_path = EXCLUDED.knowledge_path",
+            (expert_name, type_name, knowledge_path),
+        )
+        conn.commit()
+
+
+def list_entity_types_for_expert(expert_name: str) -> list[dict]:
+    """List entity_types declared by a specific expert."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT expert_name, type_name, knowledge_path FROM entity_types "
+            "WHERE expert_name = %s ORDER BY type_name",
+            (expert_name,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_all_entity_types() -> list[dict]:
+    """List entity_types from every installed expert."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT expert_name, type_name, knowledge_path FROM entity_types "
+            "ORDER BY expert_name, type_name"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def insert_identifier_pattern(
+    expert_name: str,
+    pattern_or_field: str,
+    entity_type: str,
+    scope: str,
+) -> None:
+    """Insert an identifier_pattern row owned by an expert."""
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO identifier_patterns "
+            "(expert_name, pattern_or_field, entity_type, scope) "
+            "VALUES (%s, %s, %s, %s)",
+            (expert_name, pattern_or_field, entity_type, scope),
+        )
+        conn.commit()
+
+
+def list_identifier_patterns_for_expert(expert_name: str) -> list[dict]:
+    """List identifier_patterns declared by a specific expert."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, expert_name, pattern_or_field, entity_type, scope "
+            "FROM identifier_patterns WHERE expert_name = %s ORDER BY id",
+            (expert_name,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+
+def write_full_registration(
+    name: str,
+    version: str,
+    source_type: str,
+    package_name: str,
+    install_method: str,
+    enabled: bool,
+    entity_types: list[dict],
+    identifier_patterns: list[dict],
+) -> None:
+    """Write expert + entity_types + identifier_patterns in a single transaction.
+
+    Used by the install command. Reinstalling an expert overwrites its
+    existing entity_types and identifier_patterns rows so the registry
+    state always matches the manifest.
+
+    entity_types items: {type_name, knowledge_path}
+    identifier_patterns items: {pattern_or_field, entity_type, scope}
+    """
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO experts (name, version, source_type, package_name, "
+            "install_method, enabled) VALUES (%s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (name) DO UPDATE SET "
+            "version = EXCLUDED.version, source_type = EXCLUDED.source_type, "
+            "package_name = EXCLUDED.package_name, "
+            "install_method = EXCLUDED.install_method, enabled = EXCLUDED.enabled",
+            (name, version, source_type, package_name, install_method, enabled),
+        )
+        conn.execute("DELETE FROM entity_types WHERE expert_name = %s", (name,))
+        conn.execute(
+            "DELETE FROM identifier_patterns WHERE expert_name = %s", (name,)
+        )
+        for et in entity_types:
+            conn.execute(
+                "INSERT INTO entity_types (expert_name, type_name, knowledge_path) "
+                "VALUES (%s, %s, %s)",
+                (name, et["type_name"], et["knowledge_path"]),
+            )
+        for ip in identifier_patterns:
+            conn.execute(
+                "INSERT INTO identifier_patterns "
+                "(expert_name, pattern_or_field, entity_type, scope) "
+                "VALUES (%s, %s, %s, %s)",
+                (name, ip["pattern_or_field"], ip["entity_type"], ip["scope"]),
+            )
+        conn.commit()

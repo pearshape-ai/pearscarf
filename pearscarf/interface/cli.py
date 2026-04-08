@@ -148,6 +148,18 @@ def expert() -> None:
     """Expert agent utilities."""
 
 
+# Install / list / inspect commands live in interface/install.py — registered here.
+from pearscarf.interface.install import (
+    expert_inspect_command,
+    expert_list_command,
+    install_command,
+)
+
+cli.add_command(install_command)
+expert.add_command(expert_list_command)
+expert.add_command(expert_inspect_command)
+
+
 @expert.command()
 @click.option("--auth", is_flag=True, help="Run Gmail OAuth flow for API-based access.")
 def gmail(auth: bool) -> None:

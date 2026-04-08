@@ -313,10 +313,34 @@ def get_registry() -> Registry:
 
 def reset_registry() -> None:
     """Drop the cached registry. Used by tests that need a clean slate."""
-    global _registry
+    global _registry, _base_entity_types_cache
     _registry = None
+    _base_entity_types_cache = None
 
 
 def compose_prompt(record: dict) -> str:
     """Convenience: delegates to the process-wide registry."""
     return get_registry().compose_prompt(record)
+
+
+# --- Base entity types (Layer 2 source of truth) ---
+
+
+_base_entity_types_cache: set[str] | None = None
+
+
+def base_entity_types() -> set[str]:
+    """Lowercased base entity type names declared by core/entities/*.md.
+
+    The file set is static after startup, so the result is cached for the
+    process lifetime. `reset_registry()` clears the cache.
+    """
+    global _base_entity_types_cache
+    if _base_entity_types_cache is None:
+        from pearscarf.knowledge import KNOWLEDGE_DIR
+
+        entities_dir = KNOWLEDGE_DIR / "core" / "entities"
+        _base_entity_types_cache = {
+            p.stem.lower() for p in entities_dir.glob("*.md")
+        }
+    return _base_entity_types_cache
