@@ -467,142 +467,164 @@ def validate_mcp_key(raw_key: str) -> bool:
 
 
 # --- Expert registration ---
+#
+# The experts table has one row per (name, version) combination. Multiple
+# versions of the same expert can coexist; at most one is enabled at any
+# time. The enabled row is the "active" version. Helpers below distinguish
+# between "look up by name" (which means the active row) and "look up by
+# name + version" (which can target a specific historical row).
 
 
-def list_registered_experts() -> list[dict]:
-    """List all experts registered in the experts table."""
+_EXPERTS_COLUMNS = (
+    "id, name, version, source_type, package_name, install_method, "
+    "enabled, installed_at"
+)
+
+
+def list_registered_experts(enabled_only: bool = False) -> list[dict]:
+    """List rows from the experts table.
+
+    If `enabled_only` is True, only currently active rows are returned —
+    one per name. Otherwise every row (every historical version) is
+    returned, ordered by name then installed_at descending.
+    """
     init_db()
+    sql = f"SELECT {_EXPERTS_COLUMNS} FROM experts"
+    if enabled_only:
+        sql += " WHERE enabled = TRUE"
+    sql += " ORDER BY name, installed_at DESC"
     with _get_conn() as conn:
-        rows = conn.execute(
-            "SELECT name, version, source_type, package_name, install_method, "
-            "enabled, installed_at FROM experts ORDER BY name"
-        ).fetchall()
+        rows = conn.execute(sql).fetchall()
         return [dict(r) for r in rows]
 
 
-def get_registered_expert(name: str) -> dict | None:
-    """Look up a registered expert by name."""
+def get_enabled_expert(name: str) -> dict | None:
+    """Return the currently enabled row for a given expert name, or None."""
     init_db()
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT name, version, source_type, package_name, install_method, "
-            "enabled, installed_at FROM experts WHERE name = %s",
+            f"SELECT {_EXPERTS_COLUMNS} FROM experts "
+            "WHERE name = %s AND enabled = TRUE",
             (name,),
         ).fetchone()
         return dict(row) if row else None
 
 
-def register_expert(
-    name: str,
-    version: str,
-    source_type: str,
-    package_name: str,
-    install_method: str,
-    enabled: bool = True,
-) -> None:
-    """Insert or upsert an expert registration row."""
+def get_expert_version(name: str, version: str) -> dict | None:
+    """Return the row for a specific (name, version) pair, or None."""
     init_db()
     with _get_conn() as conn:
-        conn.execute(
-            "INSERT INTO experts (name, version, source_type, package_name, "
-            "install_method, enabled) VALUES (%s, %s, %s, %s, %s, %s) "
-            "ON CONFLICT (name) DO UPDATE SET "
-            "version = EXCLUDED.version, source_type = EXCLUDED.source_type, "
-            "package_name = EXCLUDED.package_name, "
-            "install_method = EXCLUDED.install_method, enabled = EXCLUDED.enabled",
-            (name, version, source_type, package_name, install_method, enabled),
-        )
-        conn.commit()
+        row = conn.execute(
+            f"SELECT {_EXPERTS_COLUMNS} FROM experts "
+            "WHERE name = %s AND version = %s",
+            (name, version),
+        ).fetchone()
+        return dict(row) if row else None
 
 
-def set_expert_enabled(name: str, enabled: bool) -> bool:
-    """Toggle the enabled flag on a registered expert. Returns True if updated."""
+def list_versions_of_expert(name: str) -> list[dict]:
+    """All historical rows for a given expert name, newest installed_at first."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT {_EXPERTS_COLUMNS} FROM experts "
+            "WHERE name = %s ORDER BY installed_at DESC",
+            (name,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def disable_enabled_expert(name: str) -> bool:
+    """Set enabled=false on the currently enabled row of `name`. Returns True if updated."""
     init_db()
     with _get_conn() as conn:
         cur = conn.execute(
-            "UPDATE experts SET enabled = %s WHERE name = %s",
-            (enabled, name),
+            "UPDATE experts SET enabled = FALSE "
+            "WHERE name = %s AND enabled = TRUE",
+            (name,),
         )
         conn.commit()
         return cur.rowcount > 0
 
 
-def unregister_expert(name: str) -> bool:
-    """Delete an expert registration row. Cascades to entity_types and identifier_patterns."""
+def enable_latest_disabled_expert(name: str) -> dict | None:
+    """Re-enable the most recently installed disabled row for `name`.
+
+    Returns the row that was enabled, or None if there was nothing to
+    enable.
+    """
+    init_db()
+    with _get_conn() as conn:
+        # Pick the most recently installed disabled row
+        target = conn.execute(
+            f"SELECT {_EXPERTS_COLUMNS} FROM experts "
+            "WHERE name = %s AND enabled = FALSE "
+            "ORDER BY installed_at DESC LIMIT 1",
+            (name,),
+        ).fetchone()
+        if target is None:
+            return None
+        conn.execute(
+            "UPDATE experts SET enabled = TRUE WHERE id = %s",
+            (target["id"],),
+        )
+        conn.commit()
+        return dict(target)
+
+
+def delete_expert_cascade(name: str) -> int:
+    """Delete every row for an expert by name. Cascades to entity_types and identifier_patterns.
+
+    Returns the number of rows removed from the experts table.
+    """
     init_db()
     with _get_conn() as conn:
         cur = conn.execute("DELETE FROM experts WHERE name = %s", (name,))
         conn.commit()
-        return cur.rowcount > 0
+        return cur.rowcount
 
 
-
-def insert_entity_type(expert_name: str, type_name: str, knowledge_path: str) -> None:
-    """Insert an entity_type row owned by an expert. Idempotent on (expert_name, type_name)."""
-    init_db()
-    with _get_conn() as conn:
-        conn.execute(
-            "INSERT INTO entity_types (expert_name, type_name, knowledge_path) "
-            "VALUES (%s, %s, %s) "
-            "ON CONFLICT (expert_name, type_name) DO UPDATE SET "
-            "knowledge_path = EXCLUDED.knowledge_path",
-            (expert_name, type_name, knowledge_path),
-        )
-        conn.commit()
-
-
-def list_entity_types_for_expert(expert_name: str) -> list[dict]:
-    """List entity_types declared by a specific expert."""
+def list_entity_types_for_expert_id(expert_id: int) -> list[dict]:
+    """List entity_types declared by a specific expert row (by id)."""
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT expert_name, type_name, knowledge_path FROM entity_types "
-            "WHERE expert_name = %s ORDER BY type_name",
-            (expert_name,),
+            "SELECT expert_id, type_name, knowledge_path FROM entity_types "
+            "WHERE expert_id = %s ORDER BY type_name",
+            (expert_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def list_all_entity_types() -> list[dict]:
-    """List entity_types from every installed expert."""
+def list_entity_types_for_enabled_experts() -> list[dict]:
+    """List entity_types contributed by every currently enabled expert.
+
+    Used by the install validator to detect new_entity_type collisions
+    against the active world schema. Joins entity_types → experts so
+    historical (disabled) expert versions are excluded.
+    """
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT expert_name, type_name, knowledge_path FROM entity_types "
-            "ORDER BY expert_name, type_name"
+            "SELECT e.name AS expert_name, et.type_name, et.knowledge_path "
+            "FROM entity_types et "
+            "JOIN experts e ON e.id = et.expert_id "
+            "WHERE e.enabled = TRUE "
+            "ORDER BY e.name, et.type_name"
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def insert_identifier_pattern(
-    expert_name: str,
-    pattern_or_field: str,
-    entity_type: str,
-    scope: str,
-) -> None:
-    """Insert an identifier_pattern row owned by an expert."""
-    init_db()
-    with _get_conn() as conn:
-        conn.execute(
-            "INSERT INTO identifier_patterns "
-            "(expert_name, pattern_or_field, entity_type, scope) "
-            "VALUES (%s, %s, %s, %s)",
-            (expert_name, pattern_or_field, entity_type, scope),
-        )
-        conn.commit()
-
-
-def list_identifier_patterns_for_expert(expert_name: str) -> list[dict]:
-    """List identifier_patterns declared by a specific expert."""
+def list_identifier_patterns_for_expert_id(expert_id: int) -> list[dict]:
+    """List identifier_patterns declared by a specific expert row (by id)."""
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, expert_name, pattern_or_field, entity_type, scope "
-            "FROM identifier_patterns WHERE expert_name = %s ORDER BY id",
-            (expert_name,),
+            "SELECT id, expert_id, pattern_or_field, entity_type, scope "
+            "FROM identifier_patterns WHERE expert_id = %s ORDER BY id",
+            (expert_id,),
         ).fetchall()
         return [dict(r) for r in rows]
-
 
 
 def write_full_registration(
@@ -614,42 +636,60 @@ def write_full_registration(
     enabled: bool,
     entity_types: list[dict],
     identifier_patterns: list[dict],
-) -> None:
-    """Write expert + entity_types + identifier_patterns in a single transaction.
+) -> int:
+    """Write expert + entity_types + identifier_patterns in one transaction.
 
-    Used by the install command. Reinstalling an expert overwrites its
-    existing entity_types and identifier_patterns rows so the registry
-    state always matches the manifest.
+    If a row already exists for (name, version), it's replaced (along
+    with its child rows). If `enabled` is True, any other enabled row for
+    the same name is first disabled — there is at most one enabled row
+    per name at any time.
 
     entity_types items: {type_name, knowledge_path}
     identifier_patterns items: {pattern_or_field, entity_type, scope}
+
+    Returns the id of the inserted/updated experts row.
     """
     init_db()
     with _get_conn() as conn:
-        conn.execute(
+        # Enforce single-enabled-per-name invariant
+        if enabled:
+            conn.execute(
+                "UPDATE experts SET enabled = FALSE "
+                "WHERE name = %s AND enabled = TRUE",
+                (name,),
+            )
+
+        # Upsert the (name, version) row, capturing the id
+        row = conn.execute(
             "INSERT INTO experts (name, version, source_type, package_name, "
             "install_method, enabled) VALUES (%s, %s, %s, %s, %s, %s) "
-            "ON CONFLICT (name) DO UPDATE SET "
-            "version = EXCLUDED.version, source_type = EXCLUDED.source_type, "
+            "ON CONFLICT (name, version) DO UPDATE SET "
+            "source_type = EXCLUDED.source_type, "
             "package_name = EXCLUDED.package_name, "
-            "install_method = EXCLUDED.install_method, enabled = EXCLUDED.enabled",
+            "install_method = EXCLUDED.install_method, "
+            "enabled = EXCLUDED.enabled "
+            "RETURNING id",
             (name, version, source_type, package_name, install_method, enabled),
-        )
-        conn.execute("DELETE FROM entity_types WHERE expert_name = %s", (name,))
+        ).fetchone()
+        expert_id = row["id"]
+
+        # Replace child rows for this version
+        conn.execute("DELETE FROM entity_types WHERE expert_id = %s", (expert_id,))
         conn.execute(
-            "DELETE FROM identifier_patterns WHERE expert_name = %s", (name,)
+            "DELETE FROM identifier_patterns WHERE expert_id = %s", (expert_id,)
         )
         for et in entity_types:
             conn.execute(
-                "INSERT INTO entity_types (expert_name, type_name, knowledge_path) "
+                "INSERT INTO entity_types (expert_id, type_name, knowledge_path) "
                 "VALUES (%s, %s, %s)",
-                (name, et["type_name"], et["knowledge_path"]),
+                (expert_id, et["type_name"], et["knowledge_path"]),
             )
         for ip in identifier_patterns:
             conn.execute(
                 "INSERT INTO identifier_patterns "
-                "(expert_name, pattern_or_field, entity_type, scope) "
+                "(expert_id, pattern_or_field, entity_type, scope) "
                 "VALUES (%s, %s, %s, %s)",
-                (name, ip["pattern_or_field"], ip["entity_type"], ip["scope"]),
+                (expert_id, ip["pattern_or_field"], ip["entity_type"], ip["scope"]),
             )
         conn.commit()
+        return expert_id

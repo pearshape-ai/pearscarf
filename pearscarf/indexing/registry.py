@@ -84,11 +84,15 @@ class Registry:
         self._load_from_filesystem()
 
     def _db_rows(self) -> list[dict]:
-        """Return registered expert rows from the DB. Empty list on any failure."""
+        """Return enabled expert rows from the DB. Empty list on any failure.
+
+        Disabled rows are historical — only one row per name is enabled
+        at a time, and that's the one the registry loads.
+        """
         try:
             from pearscarf.storage.store import list_registered_experts
 
-            return list_registered_experts()
+            return list_registered_experts(enabled_only=True)
         except Exception:
             # DB unavailable or schema not yet migrated — fall back to scan.
             return []
