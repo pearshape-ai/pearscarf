@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.17.5
+- Gmail expert encapsulation. `pearscarf/experts/gmail.py` is **deleted**. The Gmail agent is now defined entirely by `experts/gmailscarf/knowledge/agent.md` (no Python). Connector code is split by responsibility under `experts/gmailscarf/connector/`:
+  - `api_client.py` — `GmailAPIClient` (OAuth wrapper, list/read/search/mark_as_read), `has_credentials()`, `create_client()`, `run_oauth_flow()`. Owns auth and token refresh.
+  - `poller.py` — `class GmailPoller`. Owns the polling loop. Daemon-thread `run()` fetches new emails, dedups against the SOR, saves them, and posts a worker session per record. Retries via the loop's exception handler.
+  - `writer.py` — `class GmailWriter`. Handles write-back requests via `send_reply`, `create_draft`, `mark_as_read`, plus `handle(action, **kwargs)` for bus dispatch. Unsupported operations return `{ok: false, supported: false, reason: "..."}` — never raises on a missing capability.
+  - `agent.py` — wiring only. `start(bus)` reads OAuth credentials, builds the API client, instantiates Poller and Writer (sharing the client), starts the Poller daemon thread, and returns the thread. Returns `None` if credentials are missing so PearScarf can boot without Gmail configured.
+  - `tools.py` — `BaseTool` subclasses the LLM agent will use once the registry can wire them up: `GmailGetUnreadTool`, `GmailReadEmailTool`, `GmailSearchTool`, `GmailMarkAsReadTool`, `GmailSendReplyTool`, `SaveEmailTool`. Plus `build_tools(client, writer)` factory.
+- **Browser path deleted entirely.** `BrowserManager`, all `BrowserNavigateTool`/`BrowserClickTool`/etc., the browser-based Gmail tools (`GmailGetUnreadTool` browser variant), the `--login` flag on `psc expert gmail`, and `pearscarf/knowledge/gmail/browser.md` are all gone. `gmail_browser` removed from the prompt loader's `_KNOWLEDGE_MAP`.
+- `experts/gmailscarf/knowledge/agent.md`, `knowledge/extraction.md`, `knowledge/records/email.md` populated with real content (Gmail agent system prompt, Layer 3 extraction guidance, email record schema).
+- `pearscarf/__init__.py` adds `experts/` to `sys.path` at import time so `import gmailscarf` works without pip install. Temporary scaffolding until the registry is built.
+- **The Gmail LLM agent layer is offline** until the registry can auto-load it from `knowledge/agent.md`. `psc run --poll-email` brings up only the connector daemon for Gmail. Polling, dedup, and indexing of new emails work exactly as before. The standalone interactive `psc expert gmail` mode prints a notice and exits — `psc expert gmail --auth` (OAuth setup) still works.
+- Call sites updated:
+  - `pearscarf/interface/cli.py` — `from gmailscarf.connector.agent import start as start_gmail_connector`; `from gmailscarf.connector.api_client import run_oauth_flow`. AgentRunner setup for `gmail_expert` removed.
+  - `pearscarf/interface/discord_bot.py` — same pattern
+  - `pearscarf/experts/__init__.py` — `EXPERTS["gmail"]` now points to `gmailscarf` (will be replaced by registry-driven discovery)
+
 ## 1.17.4
 - Added `compose_prompt(record)` in `pearscarf/knowledge/__init__.py`. Builds the extraction system prompt per record:
   - **Layer 1** (`core/extraction.md` + `core/facts.md` + `core/output_format.md`) — universal extraction rules, edge labels, output schema. Cached after first use.

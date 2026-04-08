@@ -36,3 +36,6 @@ path = "pearscarf/__init__.py"
 dev = [
     "pytest>=9.0.3",
 ]
+
+[tool.pyright]
+extraPaths = ["experts"]

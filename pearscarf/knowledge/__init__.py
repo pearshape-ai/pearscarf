@@ -38,7 +38,6 @@ _KNOWLEDGE_MAP: dict[str, str] = {
     "curator_affiliated": "curator/affiliated.md",
     "curator_asserted": "curator/asserted.md",
     "gmail_mcp": "gmail/agent.md",
-    "gmail_browser": "gmail/browser.md",
     "linear": "linear/agent.md",
 }
 

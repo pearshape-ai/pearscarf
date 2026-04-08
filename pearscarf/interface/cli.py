@@ -35,7 +35,7 @@ def run(poll_email: bool, poll_linear: bool) -> None:
     from pearscarf.agents.runner import AgentRunner
     from pearscarf.agents.worker import create_worker_agent
     from pearscarf.bus import MessageBus
-    from pearscarf.experts.gmail import create_gmail_expert_for_runner, start_email_polling
+    from gmailscarf.connector.agent import start as start_gmail_connector
     from pearscarf.experts.linear import create_linear_expert_for_runner, start_issue_polling
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
@@ -45,23 +45,19 @@ def run(poll_email: bool, poll_linear: bool) -> None:
 
     bus = MessageBus()
 
-    # Start Gmail expert runner
-    gmail_factory, gmail_manager, mcp_client = create_gmail_expert_for_runner(bus=bus)
-    gmail_runner = AgentRunner("gmail_expert", gmail_factory, bus)
-    gmail_runner.start()
-    sys.stdout.write("Gmail expert started.\r\n")
-    sys.stdout.flush()
-
-    # Start email polling if requested
+    # Start Gmail connector if requested. The LLM agent layer is not yet
+    # auto-loaded from knowledge/agent.md — that's the registry's job in
+    # a follow-up. For now psc run brings up only the connector daemon
+    # for Gmail; the LLM expert agent comes back online with the registry.
     if poll_email:
-        if not mcp_client:
+        thread = start_gmail_connector(bus)
+        if thread is None:
             raise SystemExit(
                 "Email polling requires Gmail OAuth credentials.\n"
                 "Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN in .env.\n"
                 "Run 'pearscarf gmail --auth' to set up OAuth."
             )
-        start_email_polling(bus, mcp_client)
-        sys.stdout.write("Email polling started.\r\n")
+        sys.stdout.write("Gmail connector started.\r\n")
         sys.stdout.flush()
 
     # Start Linear expert runner (if configured)
@@ -171,52 +167,21 @@ def expert() -> None:
 
 
 @expert.command()
-@click.option("--login", is_flag=True, help="Open a visible browser to log into Gmail.")
 @click.option("--auth", is_flag=True, help="Run Gmail OAuth flow for API-based access.")
-def gmail(login: bool, auth: bool) -> None:
-    """Gmail expert — login, OAuth setup, or direct standalone mode."""
+def gmail(auth: bool) -> None:
+    """Gmail expert — OAuth setup."""
     if auth:
-        from pearscarf.experts.gmail import run_oauth_flow
+        from gmailscarf.connector.api_client import run_oauth_flow
 
         run_oauth_flow()
         return
 
-    from pearscarf.experts.gmail import create_gmail_expert
-    from pearscarf.experts.gmail import login as gmail_login
-
-    if login:
-        gmail_login(headed=True)
-        return
-
-    def on_tool_call(name, args):
-        click.echo(click.style(f"  [tool] {name}", fg="cyan") + f"({args})")
-
-    def on_text(text):
-        click.echo(click.style("  [thinking] ", fg="yellow") + text)
-
-    def on_tool_result(name, result):
-        preview = result[:200] + "..." if len(result) > 200 else result
-        click.echo(click.style(f"  [result] {name}", fg="green") + f": {preview}")
-
-    agent, manager = create_gmail_expert(
-        on_tool_call=on_tool_call,
-        on_text=on_text,
-        on_tool_result=on_tool_result,
+    click.echo(
+        "Standalone interactive Gmail mode is offline during the expert "
+        "encapsulation rework. Run 'psc run --poll-email' to start the "
+        "Gmail connector instead. Use 'psc expert gmail --auth' to set up "
+        "OAuth credentials."
     )
-
-    click.echo("Gmail expert — standalone (type 'exit' or Ctrl+C to quit)\n")
-
-    try:
-        while True:
-            user_input = click.prompt("you", prompt_suffix=" > ")
-            if user_input.strip().lower() in ("exit", "quit"):
-                break
-            response = agent.run(user_input)
-            click.echo(f"\n{click.style('expert', fg='magenta')} > {response}\n")
-    except (KeyboardInterrupt, EOFError):
-        click.echo("\nbye.")
-    finally:
-        manager.close()
 
 
 @expert.command("linear")
@@ -342,7 +307,7 @@ def ingest(seed: str | None, record: str | None, record_type: str | None) -> Non
 def gmail_shortcut(auth: bool) -> None:
     """Gmail utilities (shortcut for 'expert gmail')."""
     if auth:
-        from pearscarf.experts.gmail import run_oauth_flow
+        from gmailscarf.connector.api_client import run_oauth_flow
 
         run_oauth_flow()
         return
@@ -557,21 +522,28 @@ def curator_status() -> None:
     from pearscarf.config import CURATOR_CLAIM_TIMEOUT
     init_db()
     with _get_conn() as conn:
-        unclaimed = conn.execute(
+        row = conn.execute(
             "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NULL"
-        ).fetchone()["c"]
-        claimed = conn.execute(
+        ).fetchone()
+        unclaimed = row["c"] if row else 0
+
+        row = conn.execute(
             "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NOT NULL"
-        ).fetchone()["c"]
-        oldest = conn.execute(
+        ).fetchone()
+        claimed = row["c"] if row else 0
+
+        row = conn.execute(
             "SELECT MIN(queued_at) AS oldest FROM curator_queue WHERE claimed_at IS NULL"
-        ).fetchone()["oldest"]
-        timed_out = conn.execute(
+        ).fetchone()
+        oldest = row["oldest"] if row else None
+
+        row = conn.execute(
             "SELECT COUNT(*) AS c FROM curator_queue "
             "WHERE claimed_at IS NOT NULL "
             "AND claimed_at < now() - interval '%s seconds'",
             (CURATOR_CLAIM_TIMEOUT,),
-        ).fetchone()["c"]
+        ).fetchone()
+        timed_out = row["c"] if row else 0
     click.echo(f"  Unclaimed:  {unclaimed}")
     click.echo(f"  Claimed:    {claimed}")
     click.echo(f"  Timed out:  {timed_out}")
