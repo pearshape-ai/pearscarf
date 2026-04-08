@@ -11,9 +11,11 @@ import threading
 import traceback
 from datetime import datetime, timezone
 
-from pearscarf import curator_judge, graph, log
+from pearscarf import log
+from pearscarf.curation import curator_judge
+from pearscarf.storage import graph
 from pearscarf.config import CURATOR_CLAIM_TIMEOUT, CURATOR_POLL_INTERVAL
-from pearscarf.db import _get_conn, init_db
+from pearscarf.storage.db import _get_conn, init_db
 
 
 def _now() -> str:

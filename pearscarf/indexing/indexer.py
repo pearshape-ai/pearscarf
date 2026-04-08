@@ -13,14 +13,15 @@ from datetime import datetime, timezone
 
 import anthropic
 
-from pearscarf import graph, log, vectorstore
+from pearscarf.storage import graph, vectorstore
+from pearscarf import log
 from pearscarf.config import (
     ANTHROPIC_API_KEY,
     EXTRACTION_MAX_TOKENS,
     EXTRACTION_MODEL,
     EXTRACTION_TEMPERATURE,
 )
-from pearscarf.db import _get_conn, init_db
+from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.prompts import load as load_prompt
 from pearscarf.tracing import trace_span
 
@@ -779,7 +780,7 @@ class Indexer:
         if not unresolved:
             self._mark_indexed(record_id)
             try:
-                from pearscarf.store import enqueue_for_curation
+                from pearscarf.storage.store import enqueue_for_curation
                 enqueue_for_curation(record_id)
             except Exception as exc:
                 log.write(

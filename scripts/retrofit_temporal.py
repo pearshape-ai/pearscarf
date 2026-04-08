@@ -4,7 +4,7 @@ Sets valid_at = created_at and invalid_at = null on all edges and facts
 that don't already have temporal timestamps. Safe to run multiple times.
 """
 
-from pearscarf.graph import retrofit_temporal
+from pearscarf.storage.graph import retrofit_temporal
 
 if __name__ == "__main__":
     print("Retrofitting temporal timestamps on existing graph data...")

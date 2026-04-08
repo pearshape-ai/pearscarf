@@ -15,7 +15,7 @@ from pearscarf import log
 from pearscarf.agents.expert import ExpertAgent
 from pearscarf.bus import MessageBus
 from pearscarf.config import LINEAR_API_KEY, LINEAR_POLL_INTERVAL, LINEAR_TEAM_ID
-from pearscarf.linear_client import LinearClient
+from pearscarf.experts.linear_client import LinearClient
 from pearscarf.prompts import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
@@ -310,7 +310,7 @@ class SaveIssueTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf import store
+        from pearscarf.storage import store
 
         record_id, is_new = store.save_issue(
             source="linear_expert",
@@ -420,7 +420,7 @@ def _sync_issue_changes(
     since: str | None,
 ) -> int:
     """Fetch and save history changes for an issue. Returns count of new changes saved."""
-    from pearscarf import store
+    from pearscarf.storage import store
 
     changes = client.get_issue_history(issue["id"], since=since)
     saved = 0
@@ -441,7 +441,7 @@ def _sync_issue_changes(
 
 def _save_issue_from_poll(issue: dict) -> tuple[str, bool]:
     """Save a polled issue to the SOR. Returns (record_id, is_new)."""
-    from pearscarf import store
+    from pearscarf.storage import store
 
     return store.save_issue(
         source="linear_expert",

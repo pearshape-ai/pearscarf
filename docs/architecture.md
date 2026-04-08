@@ -134,58 +134,66 @@ New email arrives
 
 ```
 pearscarf/
+├── storage/                # Persistence layer
+│   ├── db.py               # Postgres schema + queries (sessions, messages, records, graph)
+│   ├── store.py            # System of Record — structured record/email/issue storage + curator queue
+│   ├── graph.py            # Knowledge graph CRUD — entities, fact-edges, traversal
+│   ├── neo4j_client.py     # Neo4j connection manager
+│   └── vectorstore.py      # Qdrant vector storage — semantic search via sentence-transformers
+├── indexing/
+│   └── indexer.py          # Indexer — background LLM extraction into knowledge graph
+├── curation/
+│   ├── curator.py          # Curator — background worker for graph quality (dedup, expiry, confidence)
+│   └── curator_judge.py    # LLM judge for semantic equivalence of fact-edges
+├── query/
+│   └── context_query.py    # Read-only data access layer — single query surface for retriever + MCP
+├── mcp/
+│   └── mcp_server.py       # MCP server — FastMCP over HTTP/SSE, exposes 10 tools
 ├── agents/
-│   ├── base.py           # BaseAgent — agentic loop on raw Anthropic SDK
-│   ├── worker.py          # WorkerAgent — context-aware, routes to experts
-│   ├── expert.py          # ExpertAgent — domain-specialized, knowledge-collecting
-│   └── runner.py          # AgentRunner — polling loop that feeds bus messages to agents
+│   ├── base.py             # BaseAgent — agentic loop on raw Anthropic SDK
+│   ├── worker.py           # WorkerAgent — context-aware, routes to experts
+│   ├── expert.py           # ExpertAgent — domain-specialized, knowledge-collecting
+│   └── runner.py           # AgentRunner — polling loop that feeds bus messages to agents
 ├── experts/
-│   ├── __init__.py        # Expert registry
-│   ├── gmail.py           # Gmail expert — OAuth API + headless browser fallback
-│   ├── linear.py          # Linear expert — GraphQL API, issue CRUD
-│   ├── ingest.py          # Ingest expert — file-based data entry (seed + JSON records)
-│   └── retriever.py       # Retriever expert — context queries via context_query.py
-├── prompts/               # System prompts as standalone markdown files
-│   ├── __init__.py        # load(name) — prompt loader
-│   ├── worker.md          # Worker agent system prompt
-│   ├── gmail_browser.md   # Gmail expert browser transport prompt
-│   ├── gmail_mcp.md       # Gmail expert MCP/API transport prompt
-│   ├── linear.md          # Linear expert system prompt
-│   ├── retriever.md       # Retriever expert system prompt
-│   ├── ingest.md          # Ingest expert system prompt
-│   ├── extraction.md      # Indexer LLM extraction template
-│   ├── ingest_extraction.md # Seed file extraction template
-│   ├── entity_resolution.md # Entity resolution LLM judge prompt
-│   ├── curator_affiliated.md # Curator AFFILIATED dedup judge
-│   └── curator_asserted.md  # Curator ASSERTED dedup judge
+│   ├── gmail.py            # Gmail expert — OAuth API + headless browser fallback
+│   ├── linear.py           # Linear expert — GraphQL API, issue CRUD
+│   ├── linear_client.py    # Linear GraphQL API client
+│   ├── ingest.py           # Ingest expert — file-based data entry (seed + JSON records)
+│   └── retriever.py        # Retriever expert — context queries via context_query.py
 ├── tools/
-│   ├── __init__.py        # BaseTool + ToolRegistry with auto-discovery
-│   ├── math.py            # Safe math expression evaluator
-│   └── web_search.py      # DuckDuckGo web search
-├── context_query.py       # Read-only data access layer — single query surface for retriever + MCP
-├── mcp_server.py          # MCP server — FastMCP over HTTP/SSE, exposes 10 tools
-├── curator.py             # Curator — background worker for graph quality (dedup, expiry, confidence)
-├── curator_judge.py       # LLM judge for semantic equivalence of fact-edges
-├── indexer.py             # Indexer — background LLM extraction into knowledge graph
-├── graph.py               # Knowledge graph CRUD — entities, fact-edges, traversal
-├── db.py                  # Postgres schema + queries (sessions, messages, records, graph)
-├── bus.py                 # MessageBus — send/receive/poll over Postgres
-├── store.py               # System of Record — structured record/email/issue storage + curator queue
-├── vectorstore.py         # Qdrant vector storage — semantic search via sentence-transformers
-├── scoring.py             # Eval scoring — entity/fact matching, F1, NRR, ERA, temporal accuracy
-├── eval_runner.py         # Eval pipeline — ingest, index, query graph, score
-├── eval_report.py         # Eval terminal report formatter + JSON results writer
-├── neo4j_client.py        # Neo4j connection manager
-├── linear_client.py       # Linear GraphQL API client
-├── tracing.py             # LangSmith tracing utilities
-├── log.py                 # Shared session logger — unified timeline
-├── status.py              # In-memory agent activity registry
-├── config.py              # Environment-based configuration
-├── terminal.py            # Raw terminal I/O for non-blocking REPL
-├── repl.py                # Non-blocking session-aware REPL
-├── cli.py                 # Click CLI — run, discord, eval, query, mcp, curator, queue, erase-all
-├── cli_memory.py          # Memory inspection CLI commands (psc memory)
-└── discord_bot.py         # Discord bot with thread-per-session
+│   ├── __init__.py         # BaseTool + ToolRegistry with auto-discovery
+│   ├── math.py             # Safe math expression evaluator
+│   └── web_search.py       # DuckDuckGo web search
+├── interface/              # Human / external interfaces
+│   ├── cli.py              # Click CLI — run, discord, eval, query, mcp, curator, queue, erase-all
+│   ├── cli_memory.py       # Memory inspection CLI commands (psc memory)
+│   ├── repl.py             # Non-blocking session-aware REPL
+│   ├── terminal.py         # Raw terminal I/O for non-blocking REPL
+│   └── discord_bot.py      # Discord bot with thread-per-session
+├── eval/
+│   ├── runner.py           # Eval pipeline — ingest, index, query graph, score
+│   ├── report.py           # Eval terminal report formatter + JSON results writer
+│   └── scoring.py          # Eval scoring — entity/fact matching, F1, NRR, ERA, temporal accuracy
+├── prompts/                # System prompts as standalone markdown files
+│   ├── __init__.py         # load(name) — prompt loader
+│   ├── worker.md
+│   ├── gmail_browser.md
+│   ├── gmail_mcp.md
+│   ├── linear.md
+│   ├── retriever.md
+│   ├── ingest.md
+│   ├── extraction.md
+│   ├── ingest_extraction.md
+│   ├── entity_resolution.md
+│   ├── curator_affiliated.md
+│   └── curator_asserted.md
+├── knowledge/              # (reserved — will replace prompts/ in 1.17.3)
+├── bus.py                  # MessageBus — send/receive/poll over Postgres
+├── config.py               # Environment-based configuration
+├── log.py                  # Shared session logger — unified timeline
+├── status.py               # In-memory agent activity registry
+├── tracing.py              # LangSmith tracing utilities
+└── __init__.py
 ```
 
 ## Agent Communication

@@ -18,10 +18,11 @@ import os
 import re
 import time
 
-from pearscarf import graph, scoring
+from pearscarf.storage import graph
+from pearscarf.eval import scoring
 from pearscarf.config import EXTRACTION_MODEL, EXTRACTION_TEMPERATURE, EXTRACTION_MAX_TOKENS
-from pearscarf.db import _get_conn, init_db
-from pearscarf.eval_report import print_report, write_results
+from pearscarf.storage.db import _get_conn, init_db
+from pearscarf.eval.report import print_report, write_results
 from pearscarf.experts.ingest import ParseRecordFileTool
 
 
@@ -209,7 +210,7 @@ def _print_verbose_graph(
 def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
     """Graph-based eval: ingest -> index -> query graph -> score."""
     from pearscarf import __version__ as pearscarf_version
-    from pearscarf import store
+    from pearscarf.storage import store
 
     init_db()
 

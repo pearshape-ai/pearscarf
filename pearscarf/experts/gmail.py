@@ -877,7 +877,7 @@ class SaveEmailTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf import store
+        from pearscarf.storage import store
 
         record_id = store.save_email(
             source="gmail_expert",
@@ -1008,7 +1008,8 @@ def start_email_polling(
     Each new email gets saved to the SOR and creates a session for the worker.
     Returns the thread (already started).
     """
-    from pearscarf import config, store
+    from pearscarf import config
+    from pearscarf.storage import store
 
     if interval is None:
         interval = config.GMAIL_POLL_INTERVAL

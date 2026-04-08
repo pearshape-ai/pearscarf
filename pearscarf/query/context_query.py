@@ -6,8 +6,8 @@ access graph, vector, and record data. All functions are read-only.
 
 from __future__ import annotations
 
-from pearscarf import graph, vectorstore
-from pearscarf.store import get_communications_for_entity
+from pearscarf.storage import graph, vectorstore
+from pearscarf.storage.store import get_communications_for_entity
 
 
 def find_entity(name: str, entity_type: str | None = None) -> list[dict]:

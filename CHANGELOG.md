@@ -1,6 +1,18 @@
 # Changelog
 
 ## 1.17.1
+- Restructured flat `pearscarf/` into grouped module folders:
+  - `storage/` — db, store, graph, neo4j_client, vectorstore
+  - `indexing/` — indexer
+  - `curation/` — curator, curator_judge
+  - `query/` — context_query
+  - `mcp/` — mcp_server
+  - `interface/` — cli, cli_memory, repl, terminal, discord_bot
+  - `eval/` — runner (was eval_runner), report (was eval_report), scoring
+  - `experts/` — added linear_client (peer of linear.py)
+- Root now contains only cross-cutting modules: `bus.py`, `config.py`, `log.py`, `status.py`, `tracing.py`, `__init__.py`
+- All internal imports updated; entry point `pearscarf.cli:cli` → `pearscarf.interface.cli:cli`
+- Behavior unchanged — file move only
 - Moved `pearscarf/extract_test.py` → `scripts/extract_test.py` (no longer importable as a package module)
 - Removed `pearscarf extract-test` CLI command (use `python scripts/extract_test.py [record_ids...]` instead)
 - Removed `scripts/test_extraction.py` (16-line wrapper, replaced by self-contained `scripts/extract_test.py`)

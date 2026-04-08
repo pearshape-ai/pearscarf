@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from pearscarf.config import TIMEZONE
-from pearscarf.neo4j_client import get_session
+from pearscarf.storage.neo4j_client import get_session
 
 # Label map: extraction entity type string → Neo4j node label
 _LABELS = {

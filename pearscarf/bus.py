@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pearscarf import db
+from pearscarf.storage import db
 
 
 class MessageBus:

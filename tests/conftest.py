@@ -19,8 +19,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from pearscarf.db import _get_conn, init_db
-from pearscarf.neo4j_client import get_session
+from pearscarf.storage.db import _get_conn, init_db
+from pearscarf.storage.neo4j_client import get_session
 
 
 @pytest.fixture(autouse=True)
