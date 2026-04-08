@@ -28,7 +28,7 @@ from pearscarf.config import (
 from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.storage.graph import FACT_CATEGORIES
 from pearscarf.indexing.indexer import Indexer
-from pearscarf.knowledge import compose_prompt
+from pearscarf.indexing.registry import compose_prompt
 from pearscarf.tracing import trace_span
 
 

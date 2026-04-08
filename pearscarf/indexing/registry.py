@@ -1,0 +1,239 @@
+"""Expert registry — discovers installed experts and exposes runtime lookups.
+
+The registry scans the experts/ directory at the repo root, parses each
+manifest.yaml it finds, and builds in-memory indexes. It then serves the
+runtime needs of the indexer:
+
+* `get(source_type)` / `get_by_record_type(record_type)` — find the expert
+  responsible for a given source or record type
+* `core_prompt()` — Layer 1 of the extraction prompt (cached)
+* `schema_fragment()` — Layer 2 entity types, including any new types
+  declared by registered experts (cached)
+* `agent_factory(expert_name)` — placeholder for the LLM agent factory,
+  wired up in a follow-up
+
+This is path-based today: experts live as local subdirectories of
+`<repo>/experts/`. There's no database yet — discovery happens on first
+use of `get_registry()` and the result is held in a module-level
+singleton for the lifetime of the process.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable
+
+import yaml
+
+
+@dataclass
+class Expert:
+    """An installed expert package, materialised from its manifest."""
+
+    name: str
+    version: str
+    source_type: str
+    description: str
+    path: Path
+    knowledge_dir: Path
+    extraction_path: Path | None
+    connector_path: Path
+    new_entity_types: list[dict] = field(default_factory=list)
+    record_types: list[str] = field(default_factory=list)
+
+
+class Registry:
+    """In-memory expert registry. Built once by scanning experts/."""
+
+    def __init__(self, experts_dir: Path) -> None:
+        self._experts_dir = experts_dir
+        self._by_source: dict[str, Expert] = {}
+        self._by_name: dict[str, Expert] = {}
+        self._by_record_type: dict[str, Expert] = {}
+        self._core_cache: str | None = None
+        self._schema_cache: str | None = None
+        self._load()
+
+    # --- Discovery ---
+
+    def _load(self) -> None:
+        """Scan experts/ for subdirs containing manifest.yaml."""
+        if not self._experts_dir.is_dir():
+            return
+        for child in sorted(self._experts_dir.iterdir()):
+            if not child.is_dir():
+                continue
+            manifest_path = child / "manifest.yaml"
+            if not manifest_path.is_file():
+                continue
+            try:
+                expert = self._parse_manifest(child, manifest_path)
+            except Exception as exc:  # noqa: BLE001
+                # Bad manifest — skip the package, don't crash startup
+                print(f"[registry] failed to load {child.name}: {exc}")
+                continue
+            self._register(expert)
+
+    def _parse_manifest(self, package_dir: Path, manifest_path: Path) -> Expert:
+        data: dict[str, Any] = yaml.safe_load(manifest_path.read_text()) or {}
+
+        name = data.get("name")
+        source_type = data.get("source_type")
+        if not name or not source_type:
+            raise ValueError("manifest missing required field: name or source_type")
+
+        knowledge_dir = package_dir / "knowledge"
+        extraction_md = knowledge_dir / "extraction.md"
+        connector_rel = data.get("connector", "connector/agent.py")
+        connector_path = package_dir / connector_rel
+
+        return Expert(
+            name=str(name),
+            version=str(data.get("version", "0.0.0")),
+            source_type=str(source_type),
+            description=str(data.get("description", "")),
+            path=package_dir,
+            knowledge_dir=knowledge_dir,
+            extraction_path=extraction_md if extraction_md.is_file() else None,
+            connector_path=connector_path,
+            new_entity_types=list(data.get("new_entity_types") or []),
+            record_types=[str(rt) for rt in (data.get("record_types") or [])],
+        )
+
+    def _register(self, expert: Expert) -> None:
+        self._by_source[expert.source_type] = expert
+        self._by_name[expert.name] = expert
+        for rt in expert.record_types:
+            self._by_record_type[rt] = expert
+
+    # --- Public lookups ---
+
+    def get(self, source_type: str) -> Expert | None:
+        """Find an expert by its source_type (e.g. 'gmail')."""
+        return self._by_source.get(source_type)
+
+    def get_by_name(self, name: str) -> Expert | None:
+        """Find an expert by its package name (e.g. 'gmailscarf')."""
+        return self._by_name.get(name)
+
+    def get_by_record_type(self, record_type: str) -> Expert | None:
+        """Find the expert that owns a given record type (e.g. 'email' → gmailscarf)."""
+        return self._by_record_type.get(record_type)
+
+    def all(self) -> list[Expert]:
+        """All registered experts, sorted by name."""
+        return [self._by_name[n] for n in sorted(self._by_name)]
+
+    # --- Layer 1 / Layer 2 prompt assembly ---
+
+    def core_prompt(self) -> str:
+        """Layer 1 — universal extraction rules. Cached on first call."""
+        if self._core_cache is None:
+            from pearscarf.knowledge import KNOWLEDGE_DIR
+
+            core = KNOWLEDGE_DIR / "core"
+            parts = [
+                (core / "extraction.md").read_text(),
+                "## Fact Edge Labels\n",
+                (core / "facts.md").read_text(),
+                (core / "output_format.md").read_text(),
+            ]
+            self._core_cache = "\n".join(parts)
+        return self._core_cache
+
+    def schema_fragment(self) -> str:
+        """Layer 2 — entity type definitions, including expert-declared types.
+
+        Reads the base entity types from pearscarf/knowledge/core/entities/
+        and then loops over registered experts to append any extra entity
+        files declared via `new_entity_types` in the manifest. The expert
+        loop is a no-op until an expert declares new types.
+        """
+        if self._schema_cache is None:
+            from pearscarf.knowledge import KNOWLEDGE_DIR
+
+            entities_dir = KNOWLEDGE_DIR / "core" / "entities"
+            parts: list[str] = ["## Entity Types\n"]
+            for entity_file in sorted(entities_dir.glob("*.md")):
+                parts.append(entity_file.read_text())
+
+            for expert in self.all():
+                for entry in expert.new_entity_types:
+                    type_name = entry.get("name") if isinstance(entry, dict) else None
+                    if not type_name:
+                        continue
+                    md_path = expert.knowledge_dir / "entities" / f"{type_name.lower()}.md"
+                    if md_path.is_file():
+                        parts.append(md_path.read_text())
+
+            self._schema_cache = "\n".join(parts)
+        return self._schema_cache
+
+    # --- Extraction prompt composition ---
+
+    def compose_prompt(self, record: dict) -> str:
+        """Compose the extraction system prompt for a given record.
+
+        Ingest records use ingest/extraction.md as a complete prompt — they
+        do not participate in layered composition. Every other record gets:
+
+            Layer 1 (core_prompt)
+          + Layer 2 (schema_fragment)
+          + Layer 3 (expert.extraction_path, if the record's type belongs
+                     to a registered expert that ships extraction.md)
+        """
+        from pearscarf.knowledge import load
+
+        record_type = record.get("type", "")
+
+        if record_type == "ingest":
+            return load("ingest_extraction")
+
+        parts: list[str] = [self.core_prompt(), self.schema_fragment()]
+
+        expert = self.get_by_record_type(record_type)
+        if expert and expert.extraction_path is not None:
+            parts.append(expert.extraction_path.read_text())
+
+        return "\n\n".join(parts)
+
+    # --- Future hook ---
+
+    def agent_factory(self, expert_name: str) -> Callable | None:
+        """Return a callable that creates the LLM agent for an expert.
+
+        Placeholder — wired up in a follow-up that introduces
+        registry-driven CLI startup. Returns None today.
+        """
+        return None
+
+
+# --- Module-level singleton ---
+
+
+_registry: Registry | None = None
+
+
+def _default_experts_dir() -> Path:
+    """Resolve <repo>/experts/ from this module's location."""
+    return Path(__file__).resolve().parent.parent.parent / "experts"
+
+
+def get_registry() -> Registry:
+    """Return the process-wide registry, building it on first call."""
+    global _registry
+    if _registry is None:
+        _registry = Registry(_default_experts_dir())
+    return _registry
+
+
+def reset_registry() -> None:
+    """Drop the cached registry. Used by tests that need a clean slate."""
+    global _registry
+    _registry = None
+
+
+def compose_prompt(record: dict) -> str:
+    """Convenience: delegates to the process-wide registry."""
+    return get_registry().compose_prompt(record)

@@ -175,7 +175,7 @@ pearscarf/
 │   ├── report.py           # Eval terminal report formatter + JSON results writer
 │   └── scoring.py          # Eval scoring — entity/fact matching, F1, NRR, ERA, temporal accuracy
 ├── knowledge/              # System prompts (read) + runtime knowledge stores (write)
-│   ├── __init__.py         # load(name) prompt loader + KnowledgeStore class
+│   ├── __init__.py         # load(name) prompt loader
 │   ├── core/               # Layer 1/2 base extraction prompt, split by concern
 │   │   ├── extraction.md   # Universal extraction rules
 │   │   ├── facts.md        # Edge labels + fact_types (AFFILIATED/ASSERTED/TRANSITIONED)
@@ -354,7 +354,7 @@ User-facing agent with a `send_message` tool for all outbound communication. Aut
 
 ### ExpertAgent (`agents/expert.py`)
 
-Domain-specialized with knowledge accumulation. Built-in `save_knowledge` tool and `reply` tool for sending results back. System prompt includes all previously stored knowledge.
+Domain-specialized expert that operates on a single source. Built-in `reply` tool for sending results back via the bus. System prompt is the expert's `knowledge/agent.md`.
 
 ### Retriever (`experts/retriever.py`)
 

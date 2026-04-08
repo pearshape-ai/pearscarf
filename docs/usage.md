@@ -145,11 +145,7 @@ Routes tasks to expert agents (e.g. `gmail_expert` for email operations)
 
 ### Browser transport (legacy)
 
-**Browser:** `browser_navigate`, `browser_click`, `browser_type`, `browser_get_text`, `browser_get_html`, `browser_screenshot`, `browser_wait`
-
-**Gmail:** `gmail_get_unread`, `gmail_read_latest`, `gmail_mark_as_read`
-
-**Knowledge:** `save_knowledge` — stores operational knowledge for future sessions
+**Gmail:** `gmail_get_unread`, `gmail_read_email`, `gmail_search`, `gmail_mark_as_read`, `gmail_send_reply`, `save_email`
 
 ## Email Polling
 
