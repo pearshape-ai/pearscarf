@@ -36,7 +36,7 @@ def run(poll_email: bool, poll_linear: bool) -> None:
     from pearscarf.agents.worker import create_worker_agent
     from pearscarf.bus import MessageBus
     from gmailscarf.connector.agent import start as start_gmail_connector
-    from pearscarf.experts.linear import create_linear_expert_for_runner, start_issue_polling
+    from linearscarf.connector.agent import start as start_linear_connector
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
     from pearscarf.interface.repl import SessionRepl
@@ -60,24 +60,17 @@ def run(poll_email: bool, poll_linear: bool) -> None:
         sys.stdout.write("Gmail connector started.\r\n")
         sys.stdout.flush()
 
-    # Start Linear expert runner (if configured)
-    linear_factory, linear_client = create_linear_expert_for_runner(bus=bus)
-    linear_runner = None
-    if linear_factory:
-        linear_runner = AgentRunner("linear_expert", linear_factory, bus)
-        linear_runner.start()
-        sys.stdout.write("Linear expert started.\r\n")
+    # Start Linear connector if requested. The LLM agent layer is offline
+    # until the registry can auto-load it from knowledge/agent.md.
+    if poll_linear:
+        thread = start_linear_connector(bus)
+        if thread is None:
+            raise SystemExit(
+                "Linear polling requires LINEAR_API_KEY.\n"
+                "Set LINEAR_API_KEY in .env."
+            )
+        sys.stdout.write("Linear connector started.\r\n")
         sys.stdout.flush()
-
-        if poll_linear:
-            start_issue_polling(bus, linear_client)
-            sys.stdout.write("Linear polling started.\r\n")
-            sys.stdout.flush()
-    elif poll_linear:
-        raise SystemExit(
-            "Linear polling requires LINEAR_API_KEY.\n"
-            "Set LINEAR_API_KEY in .env."
-        )
 
     # Start Retriever expert runner
     retriever_factory = create_retriever_for_runner(bus=bus)
@@ -187,65 +180,11 @@ def gmail(auth: bool) -> None:
 @expert.command("linear")
 def linear() -> None:
     """Linear expert — standalone mode for direct interaction."""
-    from pearscarf.experts.linear import create_linear_expert_for_runner
-    from pearscarf.experts.linear_client import LinearClient
-    from pearscarf.config import LINEAR_API_KEY
-
-    if not LINEAR_API_KEY:
-        raise SystemExit("LINEAR_API_KEY is not set in .env.")
-
-    from pearscarf.experts.linear import _create_linear_client
-    from pearscarf.knowledge import load as load_prompt
-    from pearscarf.tools import ToolRegistry
-    from pearscarf.agents.expert import ExpertAgent
-
-    client = _create_linear_client()
-
-    from pearscarf.experts.linear import (
-        LinearListIssuesTool, LinearGetIssueTool, LinearCreateIssueTool,
-        LinearUpdateIssueTool, LinearAddCommentTool, LinearSearchIssuesTool,
-        SaveIssueTool,
+    click.echo(
+        "Standalone interactive Linear mode is offline during the expert "
+        "encapsulation rework. Run 'psc run --poll-linear' to start the "
+        "Linear connector instead."
     )
-
-    registry = ToolRegistry()
-    registry.register(LinearListIssuesTool(client))
-    registry.register(LinearGetIssueTool(client))
-    registry.register(LinearCreateIssueTool(client))
-    registry.register(LinearUpdateIssueTool(client))
-    registry.register(LinearAddCommentTool(client))
-    registry.register(LinearSearchIssuesTool(client))
-    registry.register(SaveIssueTool())
-
-    def on_tool_call(name, args):
-        click.echo(click.style(f"  [tool] {name}", fg="cyan") + f"({args})")
-
-    def on_text(text):
-        click.echo(click.style("  [thinking] ", fg="yellow") + text)
-
-    def on_tool_result(name, result):
-        preview = result[:200] + "..." if len(result) > 200 else result
-        click.echo(click.style(f"  [result] {name}", fg="green") + f": {preview}")
-
-    agent = ExpertAgent(
-        domain="linear",
-        domain_prompt=load_prompt("linear"),
-        tool_registry=registry,
-        on_tool_call=on_tool_call,
-        on_text=on_text,
-        on_tool_result=on_tool_result,
-    )
-
-    click.echo("Linear expert — standalone (type 'exit' or Ctrl+C to quit)\n")
-
-    try:
-        while True:
-            user_input = click.prompt("you", prompt_suffix=" > ")
-            if user_input.strip().lower() in ("exit", "quit"):
-                break
-            response = agent.run(user_input)
-            click.echo(f"\n{click.style('expert', fg='magenta')} > {response}\n")
-    except (KeyboardInterrupt, EOFError):
-        click.echo("\nbye.")
 
 
 @expert.command("ingest")

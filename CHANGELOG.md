@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.17.6
+- Linear expert encapsulation. `pearscarf/experts/linear.py` and `pearscarf/experts/linear_client.py` are **deleted**. The Linear agent is now defined entirely by `experts/linearscarf/knowledge/agent.md` (no Python). Connector code is split by responsibility under `experts/linearscarf/connector/`:
+  - `api_client.py` — `LinearClient` (GraphQL wrapper, list/get/search/create/update/comment, team/user/project/label resolution), `has_credentials()`, `create_client()`. Migrated from `pearscarf/experts/linear_client.py`.
+  - `poller.py` — `class LinearPoller`. Owns the polling loop. First cycle does a bulk load and posts a single batch-triage session; subsequent cycles incrementally fetch updated issues, sync history changes, and post one session per genuinely new issue.
+  - `writer.py` — `class LinearWriter`. **Real** write-back operations (not stubs): `create_issue`, `update_status`, `add_comment`, plus `handle(action, **kwargs)` for bus dispatch. API errors are wrapped in `{ok: false, supported: true, reason}`. Unknown actions return `{ok: false, supported: false, reason}`.
+  - `agent.py` — wiring only. `start(bus)` reads `LINEAR_API_KEY`, builds the API client, instantiates Poller and Writer (sharing the client), starts the Poller daemon thread, and returns the thread. Returns `None` if credentials are missing.
+  - `tools.py` — `BaseTool` subclasses for the LLM agent: `LinearListIssuesTool`, `LinearGetIssueTool`, `LinearSearchIssuesTool`, `LinearCreateIssueTool`, `LinearUpdateIssueTool`, `LinearAddCommentTool`, `SaveIssueTool`. Plus `build_tools(client, writer)` factory. Read-only tools take the client; write tools take the writer (so all write-back goes through one place).
+- `experts/linearscarf/knowledge/agent.md`, `knowledge/extraction.md`, `knowledge/records/issue.md`, `knowledge/records/issue_change.md` populated with real content (system prompt, Layer 3 extraction guidance for issues + changes, record schemas, source-timing notes).
+- `__init__.py` files added to `linearscarf/` and `linearscarf/connector/` so the package is Python-importable.
+- **The Linear LLM agent layer is offline** until the registry can auto-load it from `knowledge/agent.md`. `psc run --poll-linear` brings up only the connector daemon for Linear. Polling, dedup, and indexing of new issues and changes work exactly as before. The standalone interactive `psc expert linear` mode prints a notice and exits.
+- Call sites updated:
+  - `pearscarf/interface/cli.py` — `from linearscarf.connector.agent import start as start_linear_connector`. AgentRunner setup for `linear_expert` removed.
+  - `pearscarf/interface/discord_bot.py` — same pattern.
+  - `pearscarf/experts/__init__.py` — `EXPERTS["linear"]` added, points to `linearscarf`.
+
 ## 1.17.5
 - Gmail expert encapsulation. `pearscarf/experts/gmail.py` is **deleted**. The Gmail agent is now defined entirely by `experts/gmailscarf/knowledge/agent.md` (no Python). Connector code is split by responsibility under `experts/gmailscarf/connector/`:
   - `api_client.py` — `GmailAPIClient` (OAuth wrapper, list/read/search/mark_as_read), `has_credentials()`, `create_client()`, `run_oauth_flow()`. Owns auth and token refresh.
