@@ -44,6 +44,7 @@ class Expert:
     connector_module: str
     new_entity_types: list[dict] = field(default_factory=list)
     record_types: list[str] = field(default_factory=list)
+    enabled: bool = True
 
     def start(self, bus: Any) -> threading.Thread | None:
         """Import the connector entry point and call its start(bus).
@@ -75,6 +76,54 @@ class Registry:
     # --- Discovery ---
 
     def _load(self) -> None:
+        """Load experts. Prefer DB registrations, fall back to filesystem scan."""
+        rows = self._db_rows()
+        if rows:
+            self._load_from_db(rows)
+            return
+        self._load_from_filesystem()
+
+    def _db_rows(self) -> list[dict]:
+        """Return registered expert rows from the DB. Empty list on any failure."""
+        try:
+            from pearscarf.storage.store import list_registered_experts
+
+            return list_registered_experts()
+        except Exception:
+            # DB unavailable or schema not yet migrated — fall back to scan.
+            return []
+
+    def _load_from_db(self, rows: list[dict]) -> None:
+        """Load each registered expert by resolving its package via importlib."""
+        import importlib.util
+
+        for row in rows:
+            package_name = row["package_name"]
+            try:
+                spec = importlib.util.find_spec(package_name)
+            except Exception as exc:
+                print(f"[registry] {row['name']}: find_spec failed: {exc}")
+                continue
+            if not spec or not spec.submodule_search_locations:
+                print(f"[registry] {row['name']}: package '{package_name}' not found")
+                continue
+
+            package_dir = Path(next(iter(spec.submodule_search_locations)))
+            manifest_path = package_dir / "manifest.yaml"
+            if not manifest_path.is_file():
+                print(f"[registry] {row['name']}: manifest missing at {manifest_path}")
+                continue
+
+            try:
+                expert = self._parse_manifest(package_dir, manifest_path)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[registry] {row['name']}: failed to parse manifest: {exc}")
+                continue
+
+            expert.enabled = bool(row.get("enabled", True))
+            self._register(expert)
+
+    def _load_from_filesystem(self) -> None:
         """Scan experts/ for subdirs containing manifest.yaml."""
         if not self._experts_dir.is_dir():
             return
@@ -153,11 +202,11 @@ class Registry:
     def enabled_experts(self) -> list[Expert]:
         """Experts that should be started by `pearscarf run`.
 
-        Today every discovered expert is implicitly enabled — there is no
-        DB or per-expert toggle yet. This method exists so callers don't
-        couple to `all()` and survive the day enabled state lands.
+        Filters by the `enabled` flag. Filesystem-loaded experts default
+        to enabled=True; DB-loaded experts honor the `enabled` column on
+        the experts table.
         """
-        return self.all()
+        return [e for e in self.all() if e.enabled]
 
     # --- Layer 1 / Layer 2 prompt assembly ---
 

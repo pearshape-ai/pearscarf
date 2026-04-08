@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.9
+- Added Postgres tables for expert registration: `experts`, `entity_types`, `identifier_patterns`. Schema migrates non-destructively. The `experts` table is the install record (name, version, source_type, package_name, install_method, enabled); the other two are populated by the install command in a future iteration.
+- Storage helpers added for the `experts` table only (`list_registered_experts`, `register_expert`, `set_expert_enabled`, `unregister_expert`). The `entity_types` and `identifier_patterns` tables exist as empty schemas — read/write surfaces will land when the install command needs them.
+- Registry now reads from the DB when populated and falls back to filesystem manifest scanning when empty. `Expert.enabled` field added — DB-loaded experts honor the column, filesystem-loaded experts default to enabled. `enabled_experts()` filters accordingly.
+
 ## 1.17.8
 - Expert startup is now registry-driven. `psc run` and `psc discord` no longer import any expert by name; they iterate `registry.enabled_experts()` and call `expert.start(bus)` on each. Missing credentials are skipped with a warning instead of crashing the boot.
 - The per-source `--poll-email` and `--poll-linear` flags are replaced by a single `--poll` flag that brings up every enabled expert. Per-source filtering will return when enable/disable lands in the registry.
