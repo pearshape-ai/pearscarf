@@ -11,7 +11,6 @@ from pearscarf.agents.runner import AgentRunner
 from pearscarf.agents.worker import create_worker_agent
 from pearscarf.bus import MessageBus
 from pearscarf.config import DISCORD_BOT_TOKEN
-from pearscarf.experts.gmail import create_gmail_expert_for_runner
 
 
 class PearscarfBot(discord.Client):
@@ -169,29 +168,24 @@ def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
     if not DISCORD_BOT_TOKEN:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 
-    from pearscarf.experts.gmail import start_email_polling
+    from gmailscarf.connector.agent import start as start_gmail_connector
     from pearscarf.experts.linear import create_linear_expert_for_runner, start_issue_polling
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
 
     bus = MessageBus()
 
-    # Start Gmail expert runner
-    gmail_factory, gmail_manager, mcp_client = create_gmail_expert_for_runner(bus=bus)
-    gmail_runner = AgentRunner("gmail_expert", gmail_factory, bus)
-    gmail_runner.start()
-    print("Gmail expert started.")
-
-    # Start email polling if requested
+    # Start Gmail connector if requested. The LLM agent layer is offline
+    # until the registry can auto-load it from knowledge/agent.md.
     if poll_email:
-        if not mcp_client:
+        thread = start_gmail_connector(bus)
+        if thread is None:
             raise SystemExit(
                 "Email polling requires Gmail OAuth credentials.\n"
                 "Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN in .env.\n"
                 "Run 'pearscarf gmail --auth' to set up OAuth."
             )
-        start_email_polling(bus, mcp_client)
-        print("Email polling started.")
+        print("Gmail connector started.")
 
     # Start Linear expert runner (if configured)
     linear_factory, linear_client = create_linear_expert_for_runner(bus=bus)
