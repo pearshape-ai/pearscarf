@@ -175,7 +175,6 @@ pearscarf/
 ├── scoring.py             # Eval scoring — entity/fact matching, F1, NRR, ERA, temporal accuracy
 ├── eval_runner.py         # Eval pipeline — ingest, index, query graph, score
 ├── eval_report.py         # Eval terminal report formatter + JSON results writer
-├── extract_test.py        # Extraction prompt testing utility (no writes)
 ├── neo4j_client.py        # Neo4j connection manager
 ├── linear_client.py       # Linear GraphQL API client
 ├── tracing.py             # LangSmith tracing utilities

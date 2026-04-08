@@ -1,14 +1,12 @@
 """Extraction prompt testing utility.
 
-Runs the extraction prompt against stored emails and prints results.
+Runs the extraction prompt against stored records and prints results.
 No writes to graph, vector store, or any storage. Pure evaluation.
 
-Usage as script:
-    python -m pearscarf.extract_test
-    python -m pearscarf.extract_test email_042
-    python -m pearscarf.extract_test email_001 email_005
-
-Also available as: pearscarf extract-test [record_ids...]
+Usage:
+    python scripts/extract_test.py                       # all relevant records
+    python scripts/extract_test.py email_042             # single record
+    python scripts/extract_test.py email_001 email_005   # multiple records
 """
 
 from __future__ import annotations
@@ -17,6 +15,9 @@ import json
 import sys
 
 import anthropic
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from pearscarf.config import (
     ANTHROPIC_API_KEY,
@@ -204,8 +205,5 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
 # 
 
 if __name__ == "__main__":
-    from dotenv import load_dotenv
-
-    load_dotenv()
     record_ids = sys.argv[1:] if len(sys.argv) > 1 else None
     run_extraction(record_ids)

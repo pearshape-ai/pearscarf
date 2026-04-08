@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.17.1
+- Moved `pearscarf/extract_test.py` → `scripts/extract_test.py` (no longer importable as a package module)
+- Removed `pearscarf extract-test` CLI command (use `python scripts/extract_test.py [record_ids...]` instead)
+- Removed `scripts/test_extraction.py` (16-line wrapper, replaced by self-contained `scripts/extract_test.py`)
+
+## 1.17.0
+- Added integration test harness (`tests/test_harness.py`) covering 6 main pipeline branches: graph write, entity resolution, gmail extraction, linear extraction, ingest, curator
+- Added `psc test` CLI command — runs `pytest tests/test_harness.py`
+- Added `tests/conftest.py` with `clean_graph`, `clean_records`, `mock_anthropic` fixtures for isolated, deterministic tests
+- Added `tests/fixtures/` — seed.md, email.json, issue.json, llm_responses.py registry
+- Added `pytest` as a dev dependency
+- Full harness completes in ~6s; only the LLM is mocked, all other infrastructure (Postgres, Neo4j, Qdrant) is real
+
 ## 1.16.1
 - `get_nodes_by_source_record` now returns `valid_until` from fact edges
 - `_build_extracted_from_graph` passes `stale` and `valid_until` through to scorer
