@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.2
+- Created top-level `experts/` directory at the repo root (sibling of `pearscarf/`, no `__init__.py` — folder only, not importable)
+- Added `experts/gmailscarf/` skeleton: `manifest.yaml`, `.env.example`, `connector/{agent,poller,writer}.py` stubs, `knowledge/{agent.md,extraction.md,entities/,records/}` stubs, `eval/`
+- Added `experts/linearscarf/` skeleton: same shape as gmailscarf, scoped to Linear
+- Skeletons are inert — no code moved, nothing imports from them yet
+- `pearscarf/experts/gmail.py` and `pearscarf/experts/linear.py` remain untouched (extraction happens in PEA-57/PEA-58)
+
 ## 1.17.1
 - Restructured flat `pearscarf/` into grouped module folders:
   - `storage/` — db, store, graph, neo4j_client, vectorstore

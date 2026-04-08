@@ -1,0 +1,12 @@
+name: gmailscarf
+version: 0.1.0
+source_type: gmail
+author: pearshape-ai
+description: Gmail expert for PearScarf — polls and writes back via the Gmail API
+
+new_entity_types: []
+
+identifier_patterns: []
+
+connector: connector/agent.py
+eval: eval/
