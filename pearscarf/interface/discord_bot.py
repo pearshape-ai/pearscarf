@@ -171,6 +171,11 @@ def run_bot(poll: bool = False) -> None:
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
     from pearscarf.indexing.registry import get_registry
+    from pearscarf.interface.install import enforce_credentials_or_exit
+
+    # Pre-startup credential check — refuses to boot if any enabled expert
+    # has missing or unfilled required env vars.
+    enforce_credentials_or_exit()
 
     bus = MessageBus()
 

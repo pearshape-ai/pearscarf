@@ -36,9 +36,15 @@ def run(poll: bool) -> None:
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
     from pearscarf.indexing.registry import get_registry
+    from pearscarf.interface.install import enforce_credentials_or_exit
     from pearscarf.interface.repl import SessionRepl
 
     click.echo(f"PearScarf v{__version__}")
+
+    # Pre-startup credential check — refuses to boot if any enabled expert
+    # has missing or unfilled required env vars. Runs regardless of --poll
+    # because the LLM agent layer can still call expert tools.
+    enforce_credentials_or_exit()
 
     bus = MessageBus()
 

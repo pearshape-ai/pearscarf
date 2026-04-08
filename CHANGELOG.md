@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.17.12
+- `pearscarf run` and `pearscarf discord` now run a credential pre-flight check before starting any expert. For each enabled expert, the check reads the package's `.env.example` to learn which env vars are required (vars with empty values in the example are required; vars with non-empty defaults are optional and skipped) and verifies the operator's `env/.<name>.env` has a non-empty value for each one. On any miss, prints the expert name, the missing var, and the path to the env file to edit, then exits without starting anything. The check runs unconditionally — even without `--poll` — because the LLM agent layer can still call expert tools that need credentials.
+
 ## 1.17.11
 - Added the four expert lifecycle commands: `pearscarf expert disable <name>`, `pearscarf expert enable <name>`, `pearscarf expert uninstall <name>`, and `pearscarf update <name>`. Disable and enable are reversible toggles on the active row. Uninstall prompts by default (`--yes`/`-y` to skip), removes every row for the name, and runs `pip uninstall` for non-local installs. Graph data is never touched.
 - Update treats every install method the same way (local included): re-read the on-disk manifest, compare versions, and on a version change disable the currently enabled row and insert a new row with the same name and the new version. The historical row is preserved as an audit record.
