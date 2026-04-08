@@ -22,7 +22,7 @@ from pearscarf.config import (
     EXTRACTION_TEMPERATURE,
 )
 from pearscarf.storage.db import _get_conn, init_db
-from pearscarf.knowledge import load as load_prompt
+from pearscarf.knowledge import compose_prompt, load as load_prompt
 from pearscarf.tracing import trace_span
 
 
@@ -72,8 +72,6 @@ class Indexer:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
-        self._system_prompt = load_prompt("extraction")
-        self._ingest_system_prompt = load_prompt("ingest_extraction")
         self._resolution_prompt = load_prompt("entity_resolution")
 
     def _build_content(self, record: dict) -> str:
@@ -275,15 +273,13 @@ class Indexer:
         except json.JSONDecodeError:
             return None
 
-    def _extract(self, record_type: str, record_id: str, content: str) -> dict:
+    def _extract(self, record: dict, content: str) -> dict:
         """Call Claude to extract entities and facts."""
+        record_id = record["id"]
+        record_type = record["type"]
         user_message = f"Record ({record_id}, {record_type}):\n\n{content}"
 
-        system_prompt = (
-            self._ingest_system_prompt
-            if record_type == "ingest"
-            else self._system_prompt
-        )
+        system_prompt = compose_prompt(record)
 
         with trace_span(
             "indexer_extract",
@@ -600,7 +596,7 @@ class Indexer:
             content += f"\n\nAdditional context from human:\n{record['human_context']}"
 
         # Step 1: Extract
-        extracted = self._extract(record_type, record_id, content)
+        extracted = self._extract(record, content)
         if not extracted:
             log.write("indexer", "--", "action", f"no extraction result for {record_id}")
             self._mark_indexed(record_id)
