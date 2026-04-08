@@ -28,7 +28,7 @@ from pearscarf.config import (
 from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.storage.graph import FACT_CATEGORIES
 from pearscarf.indexing.indexer import Indexer
-from pearscarf.knowledge import load as load_prompt
+from pearscarf.knowledge import compose_prompt
 from pearscarf.tracing import trace_span
 
 
@@ -75,7 +75,6 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
 
     indexer = Indexer()
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
-    system_prompt = load_prompt("extraction")
 
     # Resolve records
     if record_ids:
@@ -104,6 +103,9 @@ def run_extraction(record_ids: list[str] | None = None) -> None:
         content = indexer._build_content(record)
         if record.get("human_context"):
             content += f"\n\nAdditional context from human:\n{record['human_context']}"
+
+        # Per-record system prompt — Layer 1+2 cached, Layer 3 chosen by source
+        system_prompt = compose_prompt(record)
 
         # User message — fixed template, not in prompt file
         user_message = f"Record ({record_id}, {record_type}):\n\n{content}"

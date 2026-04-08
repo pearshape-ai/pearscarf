@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.17.4
+- Added `compose_prompt(record)` in `pearscarf/knowledge/__init__.py`. Builds the extraction system prompt per record:
+  - **Layer 1** (`core/extraction.md` + `core/facts.md` + `core/output_format.md`) — universal extraction rules, edge labels, output schema. Cached after first use.
+  - **Layer 2** (`core/entities/*.md`) — base entity type descriptions. Cached alongside Layer 1.
+  - **Layer 3** (`{source}/extraction.md`) — source-specific guidance, selected by `record["type"]` via a hardwired mapping (`email → gmail`, `issue/issue_change → linear`).
+  - Ingest records skip the layered composition entirely and use `ingest/extraction.md` as their full prompt.
+- Moved Issue-specific and Change-specific guidance from `core/extraction.md` to a new `linear/extraction.md`. `core/extraction.md` is now truly source-agnostic.
+- Added `gmail/extraction.md` as a stub — no Gmail-specific extraction guidance exists yet.
+- `Indexer.__init__` no longer pre-loads `extraction` and `ingest_extraction` prompts. `Indexer._extract` now takes the full record and calls `compose_prompt(record)` per call.
+- `scripts/extract_test.py` updated to compose per-record prompts instead of loading one shared `extraction` prompt for all records.
+- Removed the temporary `_load_extraction()` shim from the previous iteration. `load("extraction")` no longer exists; use `compose_prompt(record)` instead.
+
 ## 1.17.3
 - Migrated `pearscarf/prompts/` → `pearscarf/knowledge/`. The `prompts/` directory is deleted.
 - Split the monolithic extraction prompt into layered files under `knowledge/core/`:
