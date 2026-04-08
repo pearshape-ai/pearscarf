@@ -167,6 +167,42 @@ CREATE TABLE IF NOT EXISTS mcp_keys (
     last_used_at TIMESTAMPTZ,
     revoked BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+-- Expert registration. Populated by `pearscarf install` (separate issue);
+-- the registry reads from here and falls back to scanning experts/ when empty.
+CREATE TABLE IF NOT EXISTS experts (
+    name TEXT PRIMARY KEY,
+    version TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    package_name TEXT NOT NULL,
+    install_method TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    installed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_experts_source_type ON experts(source_type);
+
+-- Entity types declared by an expert at install time. Read by the registry
+-- to extend Layer 2 of the extraction prompt with new entity descriptions.
+-- No read path yet — tables exist for the install command to populate.
+CREATE TABLE IF NOT EXISTS entity_types (
+    expert_name TEXT NOT NULL REFERENCES experts(name) ON DELETE CASCADE,
+    type_name TEXT NOT NULL,
+    knowledge_path TEXT NOT NULL,
+    PRIMARY KEY (expert_name, type_name)
+);
+
+-- Identifier patterns declared by an expert at install time. Used by the
+-- entity resolver for candidate retrieval. No read path yet.
+CREATE TABLE IF NOT EXISTS identifier_patterns (
+    id SERIAL PRIMARY KEY,
+    expert_name TEXT NOT NULL REFERENCES experts(name) ON DELETE CASCADE,
+    pattern_or_field TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK (scope IN ('global', 'source'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_identifier_patterns_scope ON identifier_patterns(scope);
 """
 
 def init_db() -> None:

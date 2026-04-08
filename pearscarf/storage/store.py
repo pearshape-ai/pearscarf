@@ -463,3 +463,74 @@ def validate_mcp_key(raw_key: str) -> bool:
         )
         conn.commit()
         return True
+
+
+
+# --- Expert registration ---
+
+
+def list_registered_experts() -> list[dict]:
+    """List all experts registered in the experts table."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT name, version, source_type, package_name, install_method, "
+            "enabled, installed_at FROM experts ORDER BY name"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_registered_expert(name: str) -> dict | None:
+    """Look up a registered expert by name."""
+    init_db()
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT name, version, source_type, package_name, install_method, "
+            "enabled, installed_at FROM experts WHERE name = %s",
+            (name,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def register_expert(
+    name: str,
+    version: str,
+    source_type: str,
+    package_name: str,
+    install_method: str,
+    enabled: bool = True,
+) -> None:
+    """Insert or upsert an expert registration row."""
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO experts (name, version, source_type, package_name, "
+            "install_method, enabled) VALUES (%s, %s, %s, %s, %s, %s) "
+            "ON CONFLICT (name) DO UPDATE SET "
+            "version = EXCLUDED.version, source_type = EXCLUDED.source_type, "
+            "package_name = EXCLUDED.package_name, "
+            "install_method = EXCLUDED.install_method, enabled = EXCLUDED.enabled",
+            (name, version, source_type, package_name, install_method, enabled),
+        )
+        conn.commit()
+
+
+def set_expert_enabled(name: str, enabled: bool) -> bool:
+    """Toggle the enabled flag on a registered expert. Returns True if updated."""
+    init_db()
+    with _get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE experts SET enabled = %s WHERE name = %s",
+            (enabled, name),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def unregister_expert(name: str) -> bool:
+    """Delete an expert registration row. Cascades to entity_types and identifier_patterns."""
+    init_db()
+    with _get_conn() as conn:
+        cur = conn.execute("DELETE FROM experts WHERE name = %s", (name,))
+        conn.commit()
+        return cur.rowcount > 0
