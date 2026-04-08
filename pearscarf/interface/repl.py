@@ -6,7 +6,7 @@ import click
 
 from pearscarf import __version__, log, status
 from pearscarf.bus import MessageBus
-from pearscarf.terminal import TerminalUI
+from pearscarf.interface.terminal import TerminalUI
 
 def _color(text: str, fg: str) -> str:
     """Apply click-style ANSI color without a trailing reset quirk."""
@@ -152,7 +152,7 @@ class SessionRepl:
 
     def _handle_memory_command(self, text: str) -> None:
         """Handle /memory subcommands."""
-        from pearscarf.cli_memory import (
+        from pearscarf.interface.cli_memory import (
             _get_all,
             _get_entity,
             _get_memories_for_record,

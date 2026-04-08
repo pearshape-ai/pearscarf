@@ -6,9 +6,9 @@ import threading
 
 from fastmcp import FastMCP
 
-from pearscarf import context_query
+from pearscarf.query import context_query
 from pearscarf.config import MCP_HOST, MCP_PORT
-from pearscarf.db import init_db
+from pearscarf.storage.db import init_db
 
 
 mcp = FastMCP("PearScarf")
@@ -273,7 +273,7 @@ def get_open_commitments(
         )
     else:
         # Global — need all entities' commitments. Use graph query directly.
-        from pearscarf import graph
+        from pearscarf.storage import graph
         # Get all current ASSERTED/commitment edges
         all_facts = []
         stats = graph.graph_stats()

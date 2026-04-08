@@ -27,7 +27,7 @@ from pearscarf.config import (
     POSTGRES_PORT,
     POSTGRES_USER,
 )
-from pearscarf.db import init_db
+from pearscarf.storage.db import init_db
 
 SQLITE_PATH = sys.argv[1] if len(sys.argv) > 1 else "data/pearscarf.db"
 

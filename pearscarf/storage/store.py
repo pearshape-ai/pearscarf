@@ -6,7 +6,7 @@ The worker reads from storage for context.
 
 from __future__ import annotations
 
-from pearscarf.db import _get_conn, _now, init_db
+from pearscarf.storage.db import _get_conn, _now, init_db
 
 
 def _next_email_id() -> str:

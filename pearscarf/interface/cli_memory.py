@@ -6,8 +6,8 @@ import time
 
 import click
 
-from pearscarf import graph, vectorstore
-from pearscarf.cli import cli
+from pearscarf.storage import graph, vectorstore
+from pearscarf.interface.cli import cli
 
 
 # ---------------------------------------------------------------------------

@@ -11,9 +11,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from pearscarf import vectorstore
-from pearscarf.db import _get_conn, close_pool, init_db
-from pearscarf.neo4j_client import close as neo4j_close, get_session
+from pearscarf.storage import vectorstore
+from pearscarf.storage.db import _get_conn, close_pool, init_db
+from pearscarf.storage.neo4j_client import close as neo4j_close, get_session
 
 
 def main() -> None:

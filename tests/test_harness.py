@@ -8,8 +8,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pearscarf import graph
-from pearscarf.db import _get_conn
+from pearscarf.storage import graph
+from pearscarf.storage.db import _get_conn
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -140,7 +140,7 @@ VALID_EDGE_LABELS = {"AFFILIATED", "ASSERTED", "TRANSITIONED"}
 def test_gmail_extraction(clean_graph, clean_records, mock_anthropic):
     """A fixture email record produces non-empty facts with valid edge labels."""
     from tests.fixtures import llm_responses
-    from pearscarf.indexer import Indexer
+    from pearscarf.indexing.indexer import Indexer
 
     # Canned extraction: 2 entities + 2 facts
     llm_responses.RESPONSES["entity extraction system"] = json.dumps({
@@ -177,7 +177,7 @@ def test_gmail_extraction(clean_graph, clean_records, mock_anthropic):
 def test_linear_extraction(clean_graph, clean_records, mock_anthropic):
     """A fixture Linear issue produces non-empty facts with valid edge labels."""
     from tests.fixtures import llm_responses
-    from pearscarf.indexer import Indexer
+    from pearscarf.indexing.indexer import Indexer
 
     llm_responses.RESPONSES["operational"] = json.dumps({
         "entities": [
@@ -211,7 +211,7 @@ def test_linear_extraction(clean_graph, clean_records, mock_anthropic):
 def test_ingest_seed(clean_graph, clean_records, mock_anthropic):
     """A seed file is processed end-to-end into the graph."""
     from tests.fixtures import llm_responses
-    from pearscarf.indexer import Indexer
+    from pearscarf.indexing.indexer import Indexer
 
     llm_responses.RESPONSES["seed data files"] = json.dumps({
         "entities": [
@@ -250,7 +250,7 @@ def test_ingest_seed(clean_graph, clean_records, mock_anthropic):
 
 def test_curator(clean_graph, clean_records, mock_anthropic):
     """AFFILIATED and ASSERTED facts both pass through the curator without error."""
-    from pearscarf.curator import Curator
+    from pearscarf.curation.curator import Curator
 
     # Pre-create entities
     david_id = graph.create_entity("person", "David Kim", {"email": "david@pearventures.io"})

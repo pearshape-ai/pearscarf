@@ -5,7 +5,8 @@ import threading
 
 import discord
 
-from pearscarf import db, log
+from pearscarf import log
+from pearscarf.storage import db
 from pearscarf.agents.runner import AgentRunner
 from pearscarf.agents.worker import create_worker_agent
 from pearscarf.bus import MessageBus
@@ -171,7 +172,7 @@ def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
     from pearscarf.experts.gmail import start_email_polling
     from pearscarf.experts.linear import create_linear_expert_for_runner, start_issue_polling
     from pearscarf.experts.retriever import create_retriever_for_runner
-    from pearscarf.indexer import Indexer
+    from pearscarf.indexing.indexer import Indexer
 
     bus = MessageBus()
 
@@ -229,7 +230,7 @@ def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
     print("Indexer started.")
 
     # Start MCP server
-    from pearscarf.mcp_server import MCPServer
+    from pearscarf.mcp.mcp_server import MCPServer
     mcp_srv = MCPServer()
     mcp_srv.start()
     print("MCP server started.")

@@ -116,7 +116,7 @@ class ParseSeedTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf import store
+        from pearscarf.storage import store
 
         file_path = kwargs["file_path"]
         if not os.path.isfile(file_path):
@@ -159,7 +159,7 @@ class ParseRecordFileTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf import store
+        from pearscarf.storage import store
 
         file_path = kwargs["file_path"]
         record_type = kwargs["record_type"]

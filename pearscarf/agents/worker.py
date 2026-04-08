@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from pearscarf import graph, log
+from pearscarf.storage import graph
+from pearscarf import log
 from pearscarf.agents.base import BaseAgent
 from pearscarf.bus import MessageBus
 from pearscarf.prompts import load as load_prompt
@@ -79,7 +80,7 @@ class LookupEmailTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf import store
+        from pearscarf.storage import store
 
         record_id = kwargs["record_id"]
         email = store.get_email(record_id)
@@ -128,7 +129,7 @@ class ClassifyRecordTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf import store
+        from pearscarf.storage import store
 
         ok = store.classify_record(
             record_id=kwargs["record_id"],
@@ -161,7 +162,7 @@ class LookupIssueTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf import store
+        from pearscarf.storage import store
 
         record_id = kwargs["record_id"]
         issue = store.get_issue(record_id)
