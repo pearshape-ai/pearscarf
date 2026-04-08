@@ -1,6 +1,9 @@
 """Linear GraphQL API client.
 
-Thin wrapper around Linear's API for issue management.
+Thin wrapper around Linear's API for issue management. Owns HTTP, auth,
+team/user/label/state resolution, and issue CRUD. The connector imports
+LinearClient and uses has_credentials() / create_client() at startup to
+build a single shared instance.
 """
 
 from __future__ import annotations
@@ -8,6 +11,8 @@ from __future__ import annotations
 import time
 
 import httpx
+
+from pearscarf import config, log
 
 _ISSUE_FIELDS = """
     id identifier title description
@@ -541,3 +546,22 @@ class LinearClient:
             "created_at": node.get("createdAt", ""),
             "updated_at": node.get("updatedAt", ""),
         }
+
+
+
+def has_credentials() -> bool:
+    """True if a Linear API key is present in the environment."""
+    return bool(config.LINEAR_API_KEY)
+
+
+def create_client() -> LinearClient | None:
+    """Build a LinearClient from env credentials. Returns None if missing."""
+    if not has_credentials():
+        return None
+    try:
+        client = LinearClient(config.LINEAR_API_KEY)
+        log.write('linear_expert', '--', 'action', 'Linear API client initialised')
+        return client
+    except Exception as e:
+        log.write('linear_expert', '--', 'error', f'Linear API client init failed: {e}')
+        return None

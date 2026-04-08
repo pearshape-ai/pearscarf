@@ -169,7 +169,7 @@ def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 
     from gmailscarf.connector.agent import start as start_gmail_connector
-    from pearscarf.experts.linear import create_linear_expert_for_runner, start_issue_polling
+    from linearscarf.connector.agent import start as start_linear_connector
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
 
@@ -187,22 +187,16 @@ def run_bot(poll_email: bool = False, poll_linear: bool = False) -> None:
             )
         print("Gmail connector started.")
 
-    # Start Linear expert runner (if configured)
-    linear_factory, linear_client = create_linear_expert_for_runner(bus=bus)
-    linear_runner = None
-    if linear_factory:
-        linear_runner = AgentRunner("linear_expert", linear_factory, bus)
-        linear_runner.start()
-        print("Linear expert started.")
-
-        if poll_linear:
-            start_issue_polling(bus, linear_client)
-            print("Linear polling started.")
-    elif poll_linear:
-        raise SystemExit(
-            "Linear polling requires LINEAR_API_KEY.\n"
-            "Set LINEAR_API_KEY in .env."
-        )
+    # Start Linear connector if requested. The LLM agent layer is offline
+    # until the registry can auto-load it from knowledge/agent.md.
+    if poll_linear:
+        thread = start_linear_connector(bus)
+        if thread is None:
+            raise SystemExit(
+                "Linear polling requires LINEAR_API_KEY.\n"
+                "Set LINEAR_API_KEY in .env."
+            )
+        print("Linear connector started.")
 
     # Start Retriever expert runner
     retriever_factory = create_retriever_for_runner(bus=bus)
