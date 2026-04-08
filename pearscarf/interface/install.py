@@ -279,12 +279,10 @@ def stage_conflicts(ctx: ValidationContext) -> StageResult:
                 f"source_type '{source_type}' already registered by '{e['name']}'"
             )
 
-    # Build record_type → expert map for collision check
+    # Build record_type → expert map for collision check.
+    # Read each other expert's record_types from its on-disk manifest via importlib.
     rt_map: dict[str, str] = {}
     for e in others:
-        for rt in store.list_entity_types_for_expert(e["name"]):
-            pass  # entity types — checked separately below
-        # Need record_types per other expert; refetch from their manifest via importlib
         spec = importlib.util.find_spec(e["package_name"])
         if spec and spec.submodule_search_locations:
             other_dir = Path(next(iter(spec.submodule_search_locations)))
@@ -305,7 +303,7 @@ def stage_conflicts(ctx: ValidationContext) -> StageResult:
 
     # New entity type collisions: against base types and against installed entity types
     existing_entity_types: set[str] = set()
-    for et in store.list_all_entity_types():
+    for et in store.list_entity_types_for_enabled_experts():
         if et["expert_name"] == name:
             continue  # this expert's own previous registration — allowed (upsert)
         existing_entity_types.add(et["type_name"].lower())
@@ -604,13 +602,12 @@ def install_command(source: str, assume_yes: bool) -> None:
             click.echo(click.style(f"  warning: {w}", fg="yellow"))
 
     # Reset the registry so the next call picks up the new DB row
-    from pearscarf.indexing.registry import reset_registry
-    reset_registry()
+    _reset_runtime_registry()
 
 
 @click.command("list")
 def expert_list_command() -> None:
-    """List installed experts."""
+    """List installed experts (every version, including disabled)."""
     rows = store.list_registered_experts()
     if not rows:
         click.echo(
@@ -632,10 +629,13 @@ def expert_list_command() -> None:
 @click.command("inspect")
 @click.argument("name")
 def expert_inspect_command(name: str) -> None:
-    """Show full detail for an installed expert."""
-    row = store.get_registered_expert(name)
+    """Show full detail for the currently enabled version of an expert."""
+    row = store.get_enabled_expert(name)
     if not row:
-        click.echo(f"No expert registered with name '{name}'.")
+        click.echo(f"No enabled expert registered with name '{name}'.")
+        history = store.list_versions_of_expert(name)
+        if history:
+            click.echo(f"  ({len(history)} historical row(s) found — see 'psc expert list'.)")
         raise SystemExit(1)
 
     click.echo(click.style(f"{row['name']} v{row['version']}", fg="cyan"))
@@ -656,13 +656,13 @@ def expert_inspect_command(name: str) -> None:
     else:
         click.echo("  package_dir:   (unresolved)")
 
-    entity_types = store.list_entity_types_for_expert(name)
+    entity_types = store.list_entity_types_for_expert_id(row["id"])
     click.echo()
     click.echo(f"Entity types ({len(entity_types)}):")
     for et in entity_types:
         click.echo(f"  • {et['type_name']} → {et['knowledge_path']}")
 
-    patterns = store.list_identifier_patterns_for_expert(name)
+    patterns = store.list_identifier_patterns_for_expert_id(row["id"])
     click.echo()
     click.echo(f"Identifier patterns ({len(patterns)}):")
     for p in patterns:
@@ -676,3 +676,214 @@ def expert_inspect_command(name: str) -> None:
         click.echo(f"Credentials: {cred_path}")
     else:
         click.echo(f"Credentials: (none — expected at {cred_path})")
+
+
+# --- Lifecycle commands ---
+
+
+def _reset_runtime_registry() -> None:
+    """Drop the cached registry so the next process call sees fresh DB state."""
+    from pearscarf.indexing.registry import reset_registry
+    reset_registry()
+
+
+def _pip_uninstall(package_name: str) -> bool:
+    """Run `pip uninstall -y <package>`. Returns True on success."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "pip", "uninstall", "-y", package_name],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode == 0:
+        click.echo(click.style(f"  uninstalled {package_name} via pip", fg="yellow"))
+        return True
+    click.echo(click.style(
+        f"  pip uninstall failed: {proc.stderr.strip()}", fg="red"
+    ))
+    return False
+
+
+@click.command("disable")
+@click.argument("name")
+def expert_disable_command(name: str) -> None:
+    """Disable the currently enabled version of an expert (reversible)."""
+    row = store.get_enabled_expert(name)
+    if not row:
+        click.echo(f"No enabled expert named '{name}'.")
+        raise SystemExit(1)
+
+    store.disable_enabled_expert(name)
+    _reset_runtime_registry()
+    click.echo(click.style(
+        f"✓ {name} v{row['version']} disabled. Reversible via 'psc expert enable {name}'.",
+        fg="yellow",
+    ))
+    click.echo("  (graph data is untouched.)")
+
+
+@click.command("enable")
+@click.argument("name")
+def expert_enable_command(name: str) -> None:
+    """Re-enable the most recently installed disabled version of an expert."""
+    if store.get_enabled_expert(name):
+        click.echo(f"{name} is already enabled.")
+        return
+
+    row = store.enable_latest_disabled_expert(name)
+    if not row:
+        click.echo(f"No disabled version of '{name}' found to enable.")
+        raise SystemExit(1)
+
+    _reset_runtime_registry()
+    click.echo(click.style(
+        f"✓ {name} v{row['version']} enabled.", fg="green"
+    ))
+
+
+@click.command("uninstall")
+@click.argument("name")
+@click.option("-y", "--yes", "assume_yes", is_flag=True, default=False,
+              help="Skip the confirmation prompt")
+def expert_uninstall_command(name: str, assume_yes: bool) -> None:
+    """Uninstall an expert. Removes all DB rows; pip uninstall for non-local installs."""
+    rows = store.list_versions_of_expert(name)
+    if not rows:
+        click.echo(f"No expert named '{name}' registered.")
+        raise SystemExit(1)
+
+    enabled = next((r for r in rows if r["enabled"]), None)
+    summary_version = (enabled or rows[0])["version"]
+    package_name = (enabled or rows[0])["package_name"]
+    install_method = (enabled or rows[0])["install_method"]
+
+    click.echo(f"This will uninstall '{name}' v{summary_version} "
+               f"and remove {len(rows)} DB row(s).")
+    if install_method != "local":
+        click.echo(f"  pip uninstall {package_name} will also run.")
+    click.echo("  Graph data (entities, fact edges) is preserved.")
+
+    if not assume_yes and not click.confirm("Proceed?", default=False):
+        click.echo("Cancelled.")
+        return
+
+    # 1. pip uninstall (non-local only)
+    if install_method != "local":
+        _pip_uninstall(package_name)
+
+    # 2. Delete DB rows (cascades to entity_types and identifier_patterns)
+    removed = store.delete_expert_cascade(name)
+    _reset_runtime_registry()
+
+    click.echo(click.style(
+        f"✓ {name} uninstalled ({removed} row(s) removed). "
+        f"Graph data preserved.",
+        fg="green",
+    ))
+
+
+def _read_manifest_version(package_name: str) -> tuple[str | None, Path | None]:
+    """Read a package's manifest.yaml and return (version, package_dir).
+
+    Resolves the package via importlib so it works for both local
+    (sys.path-resident) and pip-installed packages.
+    """
+    try:
+        spec = importlib.util.find_spec(package_name)
+    except Exception:
+        return None, None
+    if not spec or not spec.submodule_search_locations:
+        return None, None
+    package_dir = Path(next(iter(spec.submodule_search_locations)))
+    manifest_path = package_dir / "manifest.yaml"
+    if not manifest_path.is_file():
+        return None, package_dir
+    try:
+        data = yaml.safe_load(manifest_path.read_text()) or {}
+    except yaml.YAMLError:
+        return None, package_dir
+    return str(data.get("version") or ""), package_dir
+
+
+@click.command("update")
+@click.argument("name")
+@click.option("-y", "--yes", "assume_yes", is_flag=True, default=False,
+              help="Skip the new entity types approval prompt")
+def expert_update_command(name: str, assume_yes: bool) -> None:
+    """Update an installed expert to the latest version available."""
+    current = store.get_enabled_expert(name)
+    if not current:
+        click.echo(f"No enabled expert named '{name}'.")
+        raise SystemExit(1)
+
+    install_method = current["install_method"]
+    package_name = current["package_name"]
+
+    # Step 1: fetch the latest. For non-local: pip install --upgrade.
+    if install_method != "local":
+        click.echo(f"Upgrading {package_name} via pip...")
+        proc = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", package_name],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            click.echo(click.style(
+                f"pip upgrade failed: {proc.stderr.strip()}", fg="red"
+            ))
+            raise SystemExit(1)
+
+    # Step 2: read the (now possibly new) version from the manifest
+    new_version, package_dir = _read_manifest_version(package_name)
+    if new_version is None:
+        click.echo(click.style(
+            f"Could not read manifest version for {package_name} after fetch.",
+            fg="red",
+        ))
+        raise SystemExit(1)
+
+    if new_version == current["version"]:
+        click.echo(f"{name} is already at version {new_version}. Nothing to do.")
+        return
+
+    click.echo(f"Detected new version: {current['version']} → {new_version}")
+
+    # Step 3: re-validate the new package using the install pipeline.
+    # We construct an InstallSource that mirrors the original install method
+    # so the validator's path detection works the same way.
+    if install_method == "local":
+        assert package_dir is not None
+        src = InstallSource(method="local", raw=str(package_dir),
+                            local_path=package_dir)
+    else:
+        src = InstallSource(method=install_method, raw=package_name,
+                            pip_arg=package_name)
+
+    ctx = run_validation(src)
+    if ctx.failures:
+        click.echo()
+        click.echo(click.style("Update failed validation. Old version remains active.", fg="red"))
+        raise SystemExit(1)
+
+    if not prompt_entity_type_approval(ctx, assume_yes):
+        click.echo(click.style(
+            "Update cancelled — entity types not approved. Old version remains active.",
+            fg="red",
+        ))
+        raise SystemExit(1)
+
+    # Step 4: write_full_registration handles "disable old enabled row, insert new"
+    # in a single transaction.
+    try:
+        write_registration(ctx)
+    except Exception as exc:
+        click.echo(click.style(
+            f"DB write failed: {exc}. Old version remains active.", fg="red"
+        ))
+        raise SystemExit(1)
+
+    _reset_runtime_registry()
+    click.echo()
+    click.echo(click.style(
+        f"✓ {name} updated: v{current['version']} → v{new_version}.",
+        fg="green",
+    ))
+    click.echo(f"  Old row preserved as historical record (enabled=false).")

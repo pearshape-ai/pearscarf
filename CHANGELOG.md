@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.11
+- Added the four expert lifecycle commands: `pearscarf expert disable <name>`, `pearscarf expert enable <name>`, `pearscarf expert uninstall <name>`, and `pearscarf update <name>`. Disable and enable are reversible toggles on the active row. Uninstall prompts by default (`--yes`/`-y` to skip), removes every row for the name, and runs `pip uninstall` for non-local installs. Graph data is never touched.
+- Update treats every install method the same way (local included): re-read the on-disk manifest, compare versions, and on a version change disable the currently enabled row and insert a new row with the same name and the new version. The historical row is preserved as an audit record.
+- The `experts` table schema changed to support multiple versions per name. Synthetic `id` PK + `UNIQUE (name, version)`; child tables (`entity_types`, `identifier_patterns`) reference `expert_id` instead of `expert_name`. Pre-prod project: no automated migration — wipe the expert tables (or run the erase script) and re-run `pearscarf install` for any previously installed experts.
+- All four lifecycle commands reset the in-process registry cache after the DB write so the next run sees fresh state.
+
 ## 1.17.10
 - Added `pearscarf install <source>` — the operator-facing way to add an expert. Detects whether the source is a local path, git URL, or PyPI name, runs an 8-stage validation pipeline (pip install, package locatable, manifest valid, knowledge contract, connector contract, conflict checks, identifier patterns, eval dataset), and writes DB rows on success. Local installs skip pip entirely (the package must already be importable, typically because it lives under `experts/`).
 - New entity types declared by an expert require operator approval before any DB writes happen. `--yes`/`-y` skips the prompt for non-interactive installs.

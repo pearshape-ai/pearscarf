@@ -148,16 +148,24 @@ def expert() -> None:
     """Expert agent utilities."""
 
 
-# Install / list / inspect commands live in interface/install.py — registered here.
+# Install + lifecycle commands live in interface/install.py — registered here.
 from pearscarf.interface.install import (
+    expert_disable_command,
+    expert_enable_command,
     expert_inspect_command,
     expert_list_command,
+    expert_uninstall_command,
+    expert_update_command,
     install_command,
 )
 
 cli.add_command(install_command)
+cli.add_command(expert_update_command)
 expert.add_command(expert_list_command)
 expert.add_command(expert_inspect_command)
+expert.add_command(expert_disable_command)
+expert.add_command(expert_enable_command)
+expert.add_command(expert_uninstall_command)
 
 
 @expert.command()
