@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.8
+- Expert startup is now registry-driven. `psc run` and `psc discord` no longer import any expert by name; they iterate `registry.enabled_experts()` and call `expert.start(bus)` on each. Missing credentials are skipped with a warning instead of crashing the boot.
+- The per-source `--poll-email` and `--poll-linear` flags are replaced by a single `--poll` flag that brings up every enabled expert. Per-source filtering will return when enable/disable lands in the registry.
+- Removed the dead `EXPERTS` shim from `pearscarf/experts/__init__.py` — discovery now belongs entirely to the registry.
+
 ## 1.17.7
 - Introduced the expert registry. PearScarf now discovers installed experts by scanning `experts/` and parsing each `manifest.yaml` at startup, exposing them via lookups by source type, record type, and package name.
 - Layer 1 and Layer 2 of the extraction prompt are now separately constructed and independently cached. Layer 2 has a hook for entity types declared by expert manifests (no-op today, ready for when an expert ships its own entity types).

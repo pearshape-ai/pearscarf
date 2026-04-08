@@ -26,51 +26,42 @@ def cli() -> None:
 
 
 @cli.command()
-@click.option("--poll-email", is_flag=True, default=False,
-              help="Enable email polling loop (requires Gmail OAuth credentials)")
-@click.option("--poll-linear", is_flag=True, default=False,
-              help="Enable Linear issue polling loop (requires LINEAR_API_KEY)")
-def run(poll_email: bool, poll_linear: bool) -> None:
+@click.option("--poll", is_flag=True, default=False,
+              help="Start all enabled expert connectors (each requires its own credentials)")
+def run(poll: bool) -> None:
     """Start the full system: worker + experts + REPL."""
     from pearscarf.agents.runner import AgentRunner
     from pearscarf.agents.worker import create_worker_agent
     from pearscarf.bus import MessageBus
-    from gmailscarf.connector.agent import start as start_gmail_connector
-    from linearscarf.connector.agent import start as start_linear_connector
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
+    from pearscarf.indexing.registry import get_registry
     from pearscarf.interface.repl import SessionRepl
 
     click.echo(f"PearScarf v{__version__}")
 
     bus = MessageBus()
 
-    # Start Gmail connector if requested. The LLM agent layer is not yet
-    # auto-loaded from knowledge/agent.md — that's the registry's job in
-    # a follow-up. For now psc run brings up only the connector daemon
-    # for Gmail; the LLM expert agent comes back online with the registry.
-    if poll_email:
-        thread = start_gmail_connector(bus)
-        if thread is None:
-            raise SystemExit(
-                "Email polling requires Gmail OAuth credentials.\n"
-                "Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN in .env.\n"
-                "Run 'pearscarf gmail --auth' to set up OAuth."
-            )
-        sys.stdout.write("Gmail connector started.\r\n")
-        sys.stdout.flush()
-
-    # Start Linear connector if requested. The LLM agent layer is offline
-    # until the registry can auto-load it from knowledge/agent.md.
-    if poll_linear:
-        thread = start_linear_connector(bus)
-        if thread is None:
-            raise SystemExit(
-                "Linear polling requires LINEAR_API_KEY.\n"
-                "Set LINEAR_API_KEY in .env."
-            )
-        sys.stdout.write("Linear connector started.\r\n")
-        sys.stdout.flush()
+    # Start every enabled expert's connector via the registry. Each
+    # expert.start(bus) returns its polling thread or None if its
+    # credentials are missing — missing creds log a warning and skip,
+    # so the system still boots without every expert configured.
+    if poll:
+        registry = get_registry()
+        for expert in registry.enabled_experts():
+            try:
+                thread = expert.start(bus)
+            except Exception as exc:
+                sys.stdout.write(f"{expert.name} failed to start: {exc}\r\n")
+                sys.stdout.flush()
+                continue
+            if thread is None:
+                sys.stdout.write(
+                    f"{expert.name} skipped (credentials missing).\r\n"
+                )
+            else:
+                sys.stdout.write(f"{expert.name} connector started.\r\n")
+            sys.stdout.flush()
 
     # Start Retriever expert runner
     retriever_factory = create_retriever_for_runner(bus=bus)
@@ -119,15 +110,13 @@ def run(poll_email: bool, poll_linear: bool) -> None:
 
 
 @cli.command()
-@click.option("--poll-email", is_flag=True, default=False,
-              help="Enable email polling loop (requires Gmail OAuth credentials)")
-@click.option("--poll-linear", is_flag=True, default=False,
-              help="Enable Linear issue polling loop (requires LINEAR_API_KEY)")
-def discord(poll_email: bool, poll_linear: bool) -> None:
+@click.option("--poll", is_flag=True, default=False,
+              help="Start all enabled expert connectors (each requires its own credentials)")
+def discord(poll: bool) -> None:
     """Run the full system with Discord as the frontend."""
     from pearscarf.interface.discord_bot import run_bot
 
-    run_bot(poll_email=poll_email, poll_linear=poll_linear)
+    run_bot(poll=poll)
 
 
 @cli.command()
