@@ -1,92 +1,31 @@
 # Changelog
 
+## 1.17.7
+- Introduced the expert registry. PearScarf now discovers installed experts by scanning `experts/` and parsing each `manifest.yaml` at startup, exposing them via lookups by source type, record type, and package name.
+- Layer 1 and Layer 2 of the extraction prompt are now separately constructed and independently cached. Layer 2 has a hook for entity types declared by expert manifests (no-op today, ready for when an expert ships its own entity types).
+- Extraction prompt composition moved entirely into the registry. The hardcoded `record_type → source` table in the indexer is gone — Layer 3 routing now comes from each expert's manifest via a new `record_types` field.
+- `KnowledgeStore` and `SaveKnowledgeTool` removed. They were a learning loop for the deprecated browser-based experts and have no role in the new architecture.
+
 ## 1.17.6
-- Linear expert encapsulation. `pearscarf/experts/linear.py` and `pearscarf/experts/linear_client.py` are **deleted**. The Linear agent is now defined entirely by `experts/linearscarf/knowledge/agent.md` (no Python). Connector code is split by responsibility under `experts/linearscarf/connector/`:
-  - `api_client.py` — `LinearClient` (GraphQL wrapper, list/get/search/create/update/comment, team/user/project/label resolution), `has_credentials()`, `create_client()`. Migrated from `pearscarf/experts/linear_client.py`.
-  - `poller.py` — `class LinearPoller`. Owns the polling loop. First cycle does a bulk load and posts a single batch-triage session; subsequent cycles incrementally fetch updated issues, sync history changes, and post one session per genuinely new issue.
-  - `writer.py` — `class LinearWriter`. **Real** write-back operations (not stubs): `create_issue`, `update_status`, `add_comment`, plus `handle(action, **kwargs)` for bus dispatch. API errors are wrapped in `{ok: false, supported: true, reason}`. Unknown actions return `{ok: false, supported: false, reason}`.
-  - `agent.py` — wiring only. `start(bus)` reads `LINEAR_API_KEY`, builds the API client, instantiates Poller and Writer (sharing the client), starts the Poller daemon thread, and returns the thread. Returns `None` if credentials are missing.
-  - `tools.py` — `BaseTool` subclasses for the LLM agent: `LinearListIssuesTool`, `LinearGetIssueTool`, `LinearSearchIssuesTool`, `LinearCreateIssueTool`, `LinearUpdateIssueTool`, `LinearAddCommentTool`, `SaveIssueTool`. Plus `build_tools(client, writer)` factory. Read-only tools take the client; write tools take the writer (so all write-back goes through one place).
-- `experts/linearscarf/knowledge/agent.md`, `knowledge/extraction.md`, `knowledge/records/issue.md`, `knowledge/records/issue_change.md` populated with real content (system prompt, Layer 3 extraction guidance for issues + changes, record schemas, source-timing notes).
-- `__init__.py` files added to `linearscarf/` and `linearscarf/connector/` so the package is Python-importable.
-- **The Linear LLM agent layer is offline** until the registry can auto-load it from `knowledge/agent.md`. `psc run --poll-linear` brings up only the connector daemon for Linear. Polling, dedup, and indexing of new issues and changes work exactly as before. The standalone interactive `psc expert linear` mode prints a notice and exits.
-- Call sites updated:
-  - `pearscarf/interface/cli.py` — `from linearscarf.connector.agent import start as start_linear_connector`. AgentRunner setup for `linear_expert` removed.
-  - `pearscarf/interface/discord_bot.py` — same pattern.
-  - `pearscarf/experts/__init__.py` — `EXPERTS["linear"]` added, points to `linearscarf`.
+- Linear expert moved out of pearscarf into the `linearscarf` package. The Linear agent is now defined entirely by `knowledge/agent.md` — no Python factory. Connector code is split into focused files (api client, poller, writer, agent wiring, tools), and the writer ships **real** create/update/comment operations rather than stubs. The Linear LLM agent layer is offline until the registry can auto-load it.
 
 ## 1.17.5
-- Gmail expert encapsulation. `pearscarf/experts/gmail.py` is **deleted**. The Gmail agent is now defined entirely by `experts/gmailscarf/knowledge/agent.md` (no Python). Connector code is split by responsibility under `experts/gmailscarf/connector/`:
-  - `api_client.py` — `GmailAPIClient` (OAuth wrapper, list/read/search/mark_as_read), `has_credentials()`, `create_client()`, `run_oauth_flow()`. Owns auth and token refresh.
-  - `poller.py` — `class GmailPoller`. Owns the polling loop. Daemon-thread `run()` fetches new emails, dedups against the SOR, saves them, and posts a worker session per record. Retries via the loop's exception handler.
-  - `writer.py` — `class GmailWriter`. Handles write-back requests via `send_reply`, `create_draft`, `mark_as_read`, plus `handle(action, **kwargs)` for bus dispatch. Unsupported operations return `{ok: false, supported: false, reason: "..."}` — never raises on a missing capability.
-  - `agent.py` — wiring only. `start(bus)` reads OAuth credentials, builds the API client, instantiates Poller and Writer (sharing the client), starts the Poller daemon thread, and returns the thread. Returns `None` if credentials are missing so PearScarf can boot without Gmail configured.
-  - `tools.py` — `BaseTool` subclasses the LLM agent will use once the registry can wire them up: `GmailGetUnreadTool`, `GmailReadEmailTool`, `GmailSearchTool`, `GmailMarkAsReadTool`, `GmailSendReplyTool`, `SaveEmailTool`. Plus `build_tools(client, writer)` factory.
-- **Browser path deleted entirely.** `BrowserManager`, all `BrowserNavigateTool`/`BrowserClickTool`/etc., the browser-based Gmail tools (`GmailGetUnreadTool` browser variant), the `--login` flag on `psc expert gmail`, and `pearscarf/knowledge/gmail/browser.md` are all gone. `gmail_browser` removed from the prompt loader's `_KNOWLEDGE_MAP`.
-- `experts/gmailscarf/knowledge/agent.md`, `knowledge/extraction.md`, `knowledge/records/email.md` populated with real content (Gmail agent system prompt, Layer 3 extraction guidance, email record schema).
-- `pearscarf/__init__.py` adds `experts/` to `sys.path` at import time so `import gmailscarf` works without pip install. Temporary scaffolding until the registry is built.
-- **The Gmail LLM agent layer is offline** until the registry can auto-load it from `knowledge/agent.md`. `psc run --poll-email` brings up only the connector daemon for Gmail. Polling, dedup, and indexing of new emails work exactly as before. The standalone interactive `psc expert gmail` mode prints a notice and exits — `psc expert gmail --auth` (OAuth setup) still works.
-- Call sites updated:
-  - `pearscarf/interface/cli.py` — `from gmailscarf.connector.agent import start as start_gmail_connector`; `from gmailscarf.connector.api_client import run_oauth_flow`. AgentRunner setup for `gmail_expert` removed.
-  - `pearscarf/interface/discord_bot.py` — same pattern
-  - `pearscarf/experts/__init__.py` — `EXPERTS["gmail"]` now points to `gmailscarf` (will be replaced by registry-driven discovery)
+- Gmail expert moved out of pearscarf into the `gmailscarf` package. Same shape as the future Linear move: agent defined by `knowledge/agent.md`, connector split into focused files, writer present as a stub. The browser-based Gmail path (Playwright tools, BrowserManager, `psc expert gmail --login`) is **deleted entirely** — Gmail now requires OAuth credentials. The Gmail LLM agent layer is offline until the registry can auto-load it.
 
 ## 1.17.4
-- Added `compose_prompt(record)` in `pearscarf/knowledge/__init__.py`. Builds the extraction system prompt per record:
-  - **Layer 1** (`core/extraction.md` + `core/facts.md` + `core/output_format.md`) — universal extraction rules, edge labels, output schema. Cached after first use.
-  - **Layer 2** (`core/entities/*.md`) — base entity type descriptions. Cached alongside Layer 1.
-  - **Layer 3** (`{source}/extraction.md`) — source-specific guidance, selected by `record["type"]` via a hardwired mapping (`email → gmail`, `issue/issue_change → linear`).
-  - Ingest records skip the layered composition entirely and use `ingest/extraction.md` as their full prompt.
-- Moved Issue-specific and Change-specific guidance from `core/extraction.md` to a new `linear/extraction.md`. `core/extraction.md` is now truly source-agnostic.
-- Added `gmail/extraction.md` as a stub — no Gmail-specific extraction guidance exists yet.
-- `Indexer.__init__` no longer pre-loads `extraction` and `ingest_extraction` prompts. `Indexer._extract` now takes the full record and calls `compose_prompt(record)` per call.
-- `scripts/extract_test.py` updated to compose per-record prompts instead of loading one shared `extraction` prompt for all records.
-- Removed the temporary `_load_extraction()` shim from the previous iteration. `load("extraction")` no longer exists; use `compose_prompt(record)` instead.
+- Introduced `compose_prompt(record)` — the extraction system prompt is now built per-record from cached Layer 1+2 (universal rules + entity types) plus a Layer 3 selected by record type (Gmail, Linear, or none). Ingest records keep their own complete prompt. The indexer no longer holds pre-loaded prompts; it composes per call.
 
 ## 1.17.3
-- Migrated `pearscarf/prompts/` → `pearscarf/knowledge/`. The `prompts/` directory is deleted.
-- Split the monolithic extraction prompt into layered files under `knowledge/core/`:
-  - `core/extraction.md` — universal rules (name normalization, fact structure, what to ignore, source-specific guidance kept here temporarily)
-  - `core/facts.md` — edge labels and fact_types (AFFILIATED, ASSERTED, TRANSITIONED)
-  - `core/output_format.md` — JSON output schema and confidence values
-  - `core/entities/{person,company,project,event}.md` — one file per base entity type
-- Other prompts moved 1:1 into agent-scoped folders: `knowledge/{worker,retriever,ingest,entity_resolution,curator,gmail,linear}/`
-- Loader merged into `pearscarf/knowledge/__init__.py` alongside the existing runtime `KnowledgeStore`. `load(name)` resolves historical prompt names; `load("extraction")` stitches the layered files at load time.
-- Imports updated: `from pearscarf.prompts import load` → `from pearscarf.knowledge import load` (9 sites)
-- `gmail_browser.md` is preserved as `knowledge/gmail/browser.md` — it's still used as the fallback path in `experts/gmail.py` when no Gmail OAuth credentials are configured. The drop is deferred until the browser code path is removed.
-- This loader is a temporary shim. The next iteration replaces it with `compose_prompt(record)` that assembles per-record extraction prompts using both core layers and source-specific knowledge.
+- Migrated `pearscarf/prompts/` to `pearscarf/knowledge/` and split the monolithic extraction prompt into layered files under `knowledge/core/`. Other agent prompts (worker, retriever, ingest, curator, etc.) moved to agent-scoped subfolders. The prompt loader is a temporary shim that stitches the layered files together at load time, to be replaced by per-record composition.
 
 ## 1.17.2
-- Created top-level `experts/` directory at the repo root (sibling of `pearscarf/`, no `__init__.py` — folder only, not importable)
-- Added `experts/gmailscarf/` skeleton: `manifest.yaml`, `.env.example`, `connector/{agent,poller,writer}.py` stubs, `knowledge/{agent.md,extraction.md,entities/,records/}` stubs, `eval/`
-- Added `experts/linearscarf/` skeleton: same shape as gmailscarf, scoped to Linear
-- Skeletons are inert — no code moved, nothing imports from them yet
-- `pearscarf/experts/gmail.py` and `pearscarf/experts/linear.py` remain untouched (extraction happens in a follow-up)
+- Created the top-level `experts/` directory and added skeletons for `gmailscarf` and `linearscarf` packages — manifests, knowledge stubs, connector stubs, eval folders. Skeletons are inert; no code moved yet.
 
 ## 1.17.1
-- Restructured flat `pearscarf/` into grouped module folders:
-  - `storage/` — db, store, graph, neo4j_client, vectorstore
-  - `indexing/` — indexer
-  - `curation/` — curator, curator_judge
-  - `query/` — context_query
-  - `mcp/` — mcp_server
-  - `interface/` — cli, cli_memory, repl, terminal, discord_bot
-  - `eval/` — runner (was eval_runner), report (was eval_report), scoring
-  - `experts/` — added linear_client (peer of linear.py)
-- Root now contains only cross-cutting modules: `bus.py`, `config.py`, `log.py`, `status.py`, `tracing.py`, `__init__.py`
-- All internal imports updated; entry point `pearscarf.cli:cli` → `pearscarf.interface.cli:cli`
-- Behavior unchanged — file move only
-- Moved `pearscarf/extract_test.py` → `scripts/extract_test.py` (no longer importable as a package module)
-- Removed `pearscarf extract-test` CLI command (use `python scripts/extract_test.py [record_ids...]` instead)
-- Removed `scripts/test_extraction.py` (16-line wrapper, replaced by self-contained `scripts/extract_test.py`)
+- Restructured flat `pearscarf/` into grouped module folders by concern (`storage/`, `indexing/`, `curation/`, `query/`, `mcp/`, `interface/`, `eval/`). Root now contains only cross-cutting modules. All imports updated; behavior unchanged. Also moved the extraction-test script out of the package into `scripts/` and removed the corresponding CLI command.
 
 ## 1.17.0
-- Added integration test harness (`tests/test_harness.py`) covering 6 main pipeline branches: graph write, entity resolution, gmail extraction, linear extraction, ingest, curator
-- Added `psc test` CLI command — runs `pytest tests/test_harness.py`
-- Added `tests/conftest.py` with `clean_graph`, `clean_records`, `mock_anthropic` fixtures for isolated, deterministic tests
-- Added `tests/fixtures/` — seed.md, email.json, issue.json, llm_responses.py registry
-- Added `pytest` as a dev dependency
-- Full harness completes in ~6s; only the LLM is mocked, all other infrastructure (Postgres, Neo4j, Qdrant) is real
+- Added an integration test harness (`tests/test_harness.py`) covering the six main pipeline branches: graph write, entity resolution, Gmail extraction, Linear extraction, ingest, and curator. Available via `psc test`. The LLM is mocked; Postgres, Neo4j, and Qdrant are real. Full suite runs in ~6s.
 
 ## 1.16.1
 - `get_nodes_by_source_record` now returns `valid_until` from fact edges

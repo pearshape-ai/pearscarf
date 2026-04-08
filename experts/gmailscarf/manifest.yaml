@@ -4,6 +4,9 @@ source_type: gmail
 author: pearshape-ai
 description: Gmail expert for PearScarf — polls and writes back via the Gmail API
 
+record_types:
+  - email
+
 new_entity_types: []
 
 identifier_patterns: []
