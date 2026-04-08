@@ -349,15 +349,6 @@ def gmail_shortcut(auth: bool) -> None:
     click.echo("Usage: pearscarf gmail --auth")
 
 
-@cli.command("extract-test")
-@click.argument("record_ids", nargs=-1)
-def extract_test(record_ids: tuple[str, ...]) -> None:
-    """Run extraction prompt against emails (no writes). Pass record IDs or omit for all relevant."""
-    from pearscarf.extract_test import run_extraction
-
-    run_extraction(list(record_ids) if record_ids else None)
-
-
 @cli.command("test")
 def test_cmd() -> None:
     """Run the execution harness (pytest tests/test_harness.py)."""
