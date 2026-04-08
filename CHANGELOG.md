@@ -1,11 +1,24 @@
 # Changelog
 
+## 1.17.3
+- Migrated `pearscarf/prompts/` → `pearscarf/knowledge/`. The `prompts/` directory is deleted.
+- Split the monolithic extraction prompt into layered files under `knowledge/core/`:
+  - `core/extraction.md` — universal rules (name normalization, fact structure, what to ignore, source-specific guidance kept here temporarily)
+  - `core/facts.md` — edge labels and fact_types (AFFILIATED, ASSERTED, TRANSITIONED)
+  - `core/output_format.md` — JSON output schema and confidence values
+  - `core/entities/{person,company,project,event}.md` — one file per base entity type
+- Other prompts moved 1:1 into agent-scoped folders: `knowledge/{worker,retriever,ingest,entity_resolution,curator,gmail,linear}/`
+- Loader merged into `pearscarf/knowledge/__init__.py` alongside the existing runtime `KnowledgeStore`. `load(name)` resolves historical prompt names; `load("extraction")` stitches the layered files at load time.
+- Imports updated: `from pearscarf.prompts import load` → `from pearscarf.knowledge import load` (9 sites)
+- `gmail_browser.md` is preserved as `knowledge/gmail/browser.md` — it's still used as the fallback path in `experts/gmail.py` when no Gmail OAuth credentials are configured. The drop is deferred until the browser code path is removed.
+- This loader is a temporary shim. The next iteration replaces it with `compose_prompt(record)` that assembles per-record extraction prompts using both core layers and source-specific knowledge.
+
 ## 1.17.2
 - Created top-level `experts/` directory at the repo root (sibling of `pearscarf/`, no `__init__.py` — folder only, not importable)
 - Added `experts/gmailscarf/` skeleton: `manifest.yaml`, `.env.example`, `connector/{agent,poller,writer}.py` stubs, `knowledge/{agent.md,extraction.md,entities/,records/}` stubs, `eval/`
 - Added `experts/linearscarf/` skeleton: same shape as gmailscarf, scoped to Linear
 - Skeletons are inert — no code moved, nothing imports from them yet
-- `pearscarf/experts/gmail.py` and `pearscarf/experts/linear.py` remain untouched (extraction happens in PEA-57/PEA-58)
+- `pearscarf/experts/gmail.py` and `pearscarf/experts/linear.py` remain untouched (extraction happens in a follow-up)
 
 ## 1.17.1
 - Restructured flat `pearscarf/` into grouped module folders:

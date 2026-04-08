@@ -22,7 +22,7 @@ from pearscarf.config import (
     EXTRACTION_TEMPERATURE,
 )
 from pearscarf.storage.db import _get_conn, init_db
-from pearscarf.prompts import load as load_prompt
+from pearscarf.knowledge import load as load_prompt
 from pearscarf.tracing import trace_span
 
 

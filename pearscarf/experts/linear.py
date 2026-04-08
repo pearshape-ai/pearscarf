@@ -16,7 +16,7 @@ from pearscarf.agents.expert import ExpertAgent
 from pearscarf.bus import MessageBus
 from pearscarf.config import LINEAR_API_KEY, LINEAR_POLL_INTERVAL, LINEAR_TEAM_ID
 from pearscarf.experts.linear_client import LinearClient
-from pearscarf.prompts import load as load_prompt
+from pearscarf.knowledge import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
 

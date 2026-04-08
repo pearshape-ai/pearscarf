@@ -174,20 +174,34 @@ pearscarf/
 │   ├── runner.py           # Eval pipeline — ingest, index, query graph, score
 │   ├── report.py           # Eval terminal report formatter + JSON results writer
 │   └── scoring.py          # Eval scoring — entity/fact matching, F1, NRR, ERA, temporal accuracy
-├── prompts/                # System prompts as standalone markdown files
-│   ├── __init__.py         # load(name) — prompt loader
-│   ├── worker.md
-│   ├── gmail_browser.md
-│   ├── gmail_mcp.md
-│   ├── linear.md
-│   ├── retriever.md
-│   ├── ingest.md
-│   ├── extraction.md
-│   ├── ingest_extraction.md
-│   ├── entity_resolution.md
-│   ├── curator_affiliated.md
-│   └── curator_asserted.md
-├── knowledge/              # (reserved — will replace prompts/ in 1.17.3)
+├── knowledge/              # System prompts (read) + runtime knowledge stores (write)
+│   ├── __init__.py         # load(name) prompt loader + KnowledgeStore class
+│   ├── core/               # Layer 1/2 base extraction prompt, split by concern
+│   │   ├── extraction.md   # Universal extraction rules
+│   │   ├── facts.md        # Edge labels + fact_types (AFFILIATED/ASSERTED/TRANSITIONED)
+│   │   ├── output_format.md # JSON output schema + confidence values
+│   │   └── entities/       # One file per base entity type
+│   │       ├── person.md
+│   │       ├── company.md
+│   │       ├── project.md
+│   │       └── event.md
+│   ├── ingest/
+│   │   ├── agent.md        # Ingest expert system prompt
+│   │   └── extraction.md   # Seed file extraction template
+│   ├── entity_resolution/
+│   │   └── resolution.md   # Entity resolution LLM judge prompt
+│   ├── curator/
+│   │   ├── affiliated.md   # Curator AFFILIATED dedup judge
+│   │   └── asserted.md     # Curator ASSERTED dedup judge
+│   ├── retriever/
+│   │   └── agent.md        # Retriever expert system prompt
+│   ├── worker/
+│   │   └── agent.md        # Worker agent system prompt
+│   ├── gmail/
+│   │   ├── agent.md        # Gmail expert (MCP/API transport) prompt
+│   │   └── browser.md      # Gmail expert (browser fallback) prompt
+│   └── linear/
+│       └── agent.md        # Linear expert system prompt
 ├── bus.py                  # MessageBus — send/receive/poll over Postgres
 ├── config.py               # Environment-based configuration
 ├── log.py                  # Shared session logger — unified timeline

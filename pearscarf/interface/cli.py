@@ -230,7 +230,7 @@ def linear() -> None:
         raise SystemExit("LINEAR_API_KEY is not set in .env.")
 
     from pearscarf.experts.linear import _create_linear_client
-    from pearscarf.prompts import load as load_prompt
+    from pearscarf.knowledge import load as load_prompt
     from pearscarf.tools import ToolRegistry
     from pearscarf.agents.expert import ExpertAgent
 
