@@ -140,6 +140,33 @@ class GmailConnect:
         """Fetch unread emails. Used by the ingester."""
         return self._ensure_client().list_unread(max_results)
 
+    def ingest_record(self, data: dict) -> str | None:
+        """Save a record from a JSON fixture or API response.
+
+        Builds raw (true source), content (LLM-ready), and metadata
+        from the data dict. Returns record_id or None on duplicate.
+        """
+        raw = json.dumps(data)
+        content = (
+            f"From: {data.get('sender', '')}\n"
+            f"To: {data.get('recipients', data.get('recipient', ''))}\n"
+            f"Subject: {data.get('subject', '')}\n"
+            f"Date: {data.get('received_at', '')}\n\n"
+            f"{data.get('body', '')}"
+        )
+        metadata = {
+            "message_id": data.get("message_id", ""),
+            "thread_id": data.get("thread_id", ""),
+            "sender": data.get("sender", ""),
+            "recipients": data.get("recipients", data.get("recipient", "")),
+            "subject": data.get("subject", ""),
+            "received_at": data.get("received_at", ""),
+        }
+        return self._ctx.storage.save_record(
+            "email", raw, content=content, metadata=metadata,
+            dedup_key=data.get("message_id"),
+        )
+
     def get_tools(self) -> list[BaseTool]:
         """Return the list of BaseTool instances for the LLM agent."""
         return [

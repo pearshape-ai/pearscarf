@@ -18,24 +18,8 @@ from pearscarf.knowledge import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
 # ---------------------------------------------------------------------------
-# Record schema definitions
+# Record schema — no hardcoded fields; experts own their record shapes
 # ---------------------------------------------------------------------------
-
-REQUIRED_FIELDS: dict[str, list[str]] = {
-    "email": ["sender", "subject", "body"],
-    "issue": ["linear_id", "title"],
-    "issue_change": ["issue_record_id", "field", "changed_at"],
-}
-
-OPTIONAL_FIELDS: dict[str, list[str]] = {
-    "email": ["recipient", "message_id", "received_at"],
-    "issue": [
-        "identifier", "description", "status", "priority", "assignee",
-        "project", "labels", "comments", "url",
-        "linear_created_at", "linear_updated_at",
-    ],
-    "issue_change": ["from_value", "to_value", "linear_history_id", "changed_by"],
-}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -69,30 +53,6 @@ def _load_json_records(file_path: str) -> list[dict] | str:
         data = json.load(fh)
 
     return data if isinstance(data, list) else [data]
-
-
-def _validate_batch(records: list[dict], record_type: str) -> list[str]:
-    """Validate all records against the schema for record_type.
-
-    Returns list of error strings. Empty list means all valid.
-    """
-    required = REQUIRED_FIELDS[record_type]
-    allowed = set(required) | set(OPTIONAL_FIELDS[record_type])
-    errors: list[str] = []
-
-    for i, rec in enumerate(records):
-        label = rec.get("id", rec.get("message_id", f"record[{i}]"))
-        if not isinstance(rec, dict):
-            errors.append(f"  {label}: not a JSON object")
-            continue
-        for field in required:
-            if field not in rec or rec[field] is None or rec[field] == "":
-                errors.append(f"  {label}: missing required field '{field}'")
-        unknown = set(rec.keys()) - allowed
-        if unknown:
-            errors.append(f"  {label}: unknown fields: {', '.join(sorted(unknown))}")
-
-    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -140,9 +100,8 @@ class ParseSeedTool(BaseTool):
 class ParseRecordFileTool(BaseTool):
     name = "parse_record_file"
     description = (
-        "Ingest typed JSON records via direct schema-validated insert. "
-        "Accepts a single file or a folder of .json files. "
-        "All records must pass validation before any are inserted."
+        "Ingest typed JSON records from a file or folder. "
+        "Delegates record processing to the expert that owns the record_type."
     )
     input_schema = {
         "type": "object",
@@ -153,15 +112,14 @@ class ParseRecordFileTool(BaseTool):
             },
             "record_type": {
                 "type": "string",
-                "enum": ["email", "issue", "issue_change"],
-                "description": "Type of records",
+                "description": "Type of records (e.g. 'email', 'issue')",
             },
         },
         "required": ["file_path", "record_type"],
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf.storage import store
+        from pearscarf.indexing.registry import get_registry
 
         file_path = kwargs["file_path"]
         record_type = kwargs["record_type"]
@@ -174,76 +132,26 @@ class ParseRecordFileTool(BaseTool):
         if not records:
             return "Error: no records found."
 
-        # --- Validate ---
-        errors = _validate_batch(records, record_type)
-        if errors:
-            header = f"Validation failed — {len(errors)} error(s), zero inserts:\n"
-            return header + "\n".join(errors)
+        # --- Route to the expert that owns this record type ---
+        connect = get_registry().get_connect(record_type)
+        if connect is None or not hasattr(connect, "ingest_record"):
+            return (
+                f"Error: no expert registered for record_type '{record_type}'. "
+                f"Make sure the expert is installed and psc run is active."
+            )
 
-        # --- Insert ---
         saved = 0
         skipped = 0
         record_ids: list[str] = []
 
         for rec in records:
-            if record_type == "email":
-                result = store.save_email(
-                    source="ingest_expert",
-                    sender=rec["sender"],
-                    subject=rec["subject"],
-                    body=rec["body"],
-                    message_id=rec.get("message_id"),
-                    recipient=rec.get("recipient", ""),
-                    received_at=rec.get("received_at", ""),
-                    raw=json.dumps(rec),
-                )
-                if result is None:
-                    skipped += 1
-                else:
-                    store.classify_record(result, "relevant", reason="ingested via file")
-                    record_ids.append(result)
-                    saved += 1
+            rid = connect.ingest_record(rec)
 
-            elif record_type == "issue":
-                record_id, is_new = store.save_issue(
-                    source="ingest_expert",
-                    linear_id=rec["linear_id"],
-                    identifier=rec.get("identifier", ""),
-                    title=rec["title"],
-                    description=rec.get("description", ""),
-                    status=rec.get("status", ""),
-                    priority=rec.get("priority", ""),
-                    assignee=rec.get("assignee", ""),
-                    project=rec.get("project", ""),
-                    labels=rec.get("labels"),
-                    comments=rec.get("comments"),
-                    url=rec.get("url", ""),
-                    linear_created_at=rec.get("linear_created_at", ""),
-                    linear_updated_at=rec.get("linear_updated_at", ""),
-                    raw=json.dumps(rec),
-                )
-                if is_new:
-                    store.classify_record(record_id, "relevant", reason="ingested via file")
-                    record_ids.append(record_id)
-                    saved += 1
-                else:
-                    skipped += 1
-
-            elif record_type == "issue_change":
-                result = store.save_issue_change(
-                    issue_record_id=rec["issue_record_id"],
-                    field=rec["field"],
-                    from_value=rec.get("from_value", ""),
-                    to_value=rec.get("to_value", ""),
-                    linear_history_id=rec.get("linear_history_id"),
-                    changed_by=rec.get("changed_by", ""),
-                    changed_at=rec["changed_at"],
-                )
-                if result is None:
-                    skipped += 1
-                else:
-                    record_ids.append(result)
-                    saved += 1
+            if rid is None:
+                skipped += 1
+            else:
+                record_ids.append(rid)
+                saved += 1
 
         parts = [f"Saved {saved} {record_type} record(s)."]
         if skipped:
