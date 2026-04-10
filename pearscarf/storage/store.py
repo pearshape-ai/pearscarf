@@ -9,6 +9,95 @@ from __future__ import annotations
 from pearscarf.storage.db import _get_conn, _now, init_db
 
 
+# --- Generic record API (used by ExpertContext) ---
+
+
+def _next_record_id(record_type: str) -> str:
+    with _get_conn() as conn:
+        result = conn.execute(
+            "SELECT COUNT(*) AS c FROM records WHERE type = %s",
+            (record_type,),
+        ).fetchone()
+        row = dict(result) if result else {}
+        num = row.get("c", 0) + 1
+        return f"{record_type}_{num:03d}"
+
+
+def save_record(
+    record_type: str,
+    raw: str,
+    metadata: dict | None = None,
+    dedup_key: str | None = None,
+    source: str = "",
+    expert_name: str = "",
+    expert_version: str = "",
+) -> str | None:
+    """Save a generic record. Returns record_id on success, None on duplicate.
+
+    This is the single write path experts use via ExpertContext.storage.
+    Dedup is based on dedup_key — if a record with the same key already
+    exists, None is returned and nothing is written.
+    """
+    from psycopg.types.json import Jsonb
+
+    init_db()
+    with _get_conn() as conn:
+        if dedup_key:
+            existing = conn.execute(
+                "SELECT id FROM records WHERE dedup_key = %s",
+                (dedup_key,),
+            ).fetchone()
+            if existing:
+                return None
+
+        record_id = _next_record_id(record_type)
+        conn.execute(
+            "INSERT INTO records "
+            "(id, type, source, created_at, raw, metadata, dedup_key, "
+            "expert_name, expert_version) "
+            "VALUES (%s, %s, %s, now(), %s, %s, %s, %s, %s)",
+            (
+                record_id,
+                record_type,
+                source or expert_name,
+                raw,
+                Jsonb(metadata or {}),
+                dedup_key,
+                expert_name,
+                expert_version,
+            ),
+        )
+        conn.commit()
+        return record_id
+
+
+def get_record(record_id: str) -> dict | None:
+    """Look up a record by id. Returns the row as a dict, or None."""
+    init_db()
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, type, source, created_at, raw, metadata, "
+            "indexed, classification, dedup_key, expert_name, expert_version "
+            "FROM records WHERE id = %s",
+            (record_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def mark_relevant(record_id: str) -> None:
+    """Mark a record as relevant (sets classification = 'relevant')."""
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "UPDATE records SET classification = 'relevant' WHERE id = %s",
+            (record_id,),
+        )
+        conn.commit()
+
+
+# --- Per-type record helpers (legacy, used by existing experts) ---
+
+
 def _next_email_id() -> str:
     with _get_conn() as conn:
         row = conn.execute("SELECT COUNT(*) as c FROM records WHERE type = 'email'").fetchone()
