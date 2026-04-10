@@ -30,6 +30,8 @@ def cli() -> None:
               help="Start all enabled expert connectors (each requires its own credentials)")
 def run(poll: bool) -> None:
     """Start the full system: worker + experts + REPL."""
+    import importlib
+
     from pearscarf.agents.runner import AgentRunner
     from pearscarf.agents.worker import create_worker_agent
     from pearscarf.bus import MessageBus
@@ -48,13 +50,27 @@ def run(poll: bool) -> None:
     enforce_credentials_or_exit()
 
     bus = MessageBus()
+    registry = get_registry()
 
-    # Start every enabled expert's connector via the registry. Each
-    # expert.start(bus) returns its polling thread or None if its
-    # credentials are missing — missing creds log a warning and skip,
-    # so the system still boots without every expert configured.
+    # Load and cache connect instances for each enabled expert.
+    # The ingest tool uses these to delegate record processing.
+    for expert in registry.enabled_experts():
+        if not expert.tools_module:
+            continue
+        try:
+            tools_mod = importlib.import_module(expert.tools_module)
+            expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
+            connect = tools_mod.get_tools(expert_ctx)
+            for rt in expert.record_types:
+                registry.register_connect(rt, connect)
+            sys.stdout.write(f"{expert.name} tools loaded.\r\n")
+            sys.stdout.flush()
+        except Exception as exc:
+            sys.stdout.write(f"{expert.name} tools failed: {exc}\r\n")
+            sys.stdout.flush()
+
+    # Start every enabled expert's ingester via the registry.
     if poll:
-        registry = get_registry()
         for expert in registry.enabled_experts():
             try:
                 thread = expert.start(bus)

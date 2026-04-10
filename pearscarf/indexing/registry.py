@@ -42,6 +42,7 @@ class Expert:
     extraction_path: Path | None
     connector_path: Path | None
     connector_module: str
+    tools_module: str = ""
     new_entity_types: list[dict] = field(default_factory=list)
     record_types: list[str] = field(default_factory=list)
     enabled: bool = True
@@ -69,6 +70,7 @@ class Registry:
         self._by_source: dict[str, Expert] = {}
         self._by_name: dict[str, Expert] = {}
         self._by_record_type: dict[str, Expert] = {}
+        self._connects: dict[str, Any] = {}
         self._core_cache: str | None = None
         self._schema_cache: str | None = None
         self._load()
@@ -168,6 +170,13 @@ class Registry:
                 f"{name}." + entry_no_ext.as_posix().replace("/", ".")
             )
 
+        # Resolve the tools entry point (optional)
+        tools_rel = data.get("tools")
+        tools_module = ""
+        if tools_rel:
+            tools_no_ext = Path(tools_rel).with_suffix("")
+            tools_module = f"{name}." + tools_no_ext.as_posix().replace("/", ".")
+
         return Expert(
             name=str(name),
             version=str(data.get("version", "0.0.0")),
@@ -178,6 +187,7 @@ class Registry:
             extraction_path=extraction_md if extraction_md.is_file() else None,
             connector_path=connector_path,
             connector_module=connector_module,
+            tools_module=tools_module,
             new_entity_types=list(data.get("new_entity_types") or []),
             record_types=[str(rt) for rt in (data.get("record_types") or [])],
         )
@@ -214,6 +224,21 @@ class Registry:
         the experts table.
         """
         return [e for e in self.all() if e.enabled]
+
+    # --- Connect cache ---
+
+    def register_connect(self, record_type: str, connect: Any) -> None:
+        """Cache a connect instance by record_type.
+
+        Called at startup after loading each expert's tools module.
+        The ingest tool looks up connects by record_type to delegate
+        record processing to the right expert.
+        """
+        self._connects[record_type] = connect
+
+    def get_connect(self, record_type: str) -> Any | None:
+        """Look up the cached connect instance for a record_type."""
+        return self._connects.get(record_type)
 
     # --- Layer 1 / Layer 2 prompt assembly ---
 
