@@ -197,14 +197,19 @@ def run_bot(poll: bool = False) -> None:
                 print(f"{expert.name} connector started.")
 
     # Start Retriever expert runner
-    retriever_factory = create_retriever_for_runner(bus=bus)
+    from pearscarf.expert_context import build_context
+
+    retriever_ctx = build_context("retriever", bus)
+    retriever_factory = create_retriever_for_runner(ctx=retriever_ctx)
     retriever_runner = AgentRunner("retriever", retriever_factory, bus)
     retriever_runner.start()
     print("Retriever started.")
 
     # Start Worker runner
+    worker_ctx = build_context("worker", bus)
+
     def worker_factory(session_id: str):
-        return create_worker_agent(bus=bus, session_id=session_id)
+        return create_worker_agent(ctx=worker_ctx, session_id=session_id)
 
     worker_runner = AgentRunner("worker", worker_factory, bus)
     worker_runner.start()
