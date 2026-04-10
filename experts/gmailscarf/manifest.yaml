@@ -1,5 +1,5 @@
 name: gmailscarf
-version: 0.1.2
+version: 0.1.3
 source_type: gmail
 author: pearshape-ai
 description: Gmail expert for PearScarf — polls and writes back via the Gmail API
