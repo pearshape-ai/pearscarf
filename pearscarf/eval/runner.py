@@ -243,11 +243,17 @@ def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
     tool = ParseRecordFileTool()
     data_dir = os.path.join(dataset_path, "data")
 
-    type_map = {
-        "emails": "email",
-        "issues": "issue",
-        "issue_changes": "issue_change",
-    }
+    data_map_path = os.path.join(dataset_path, "data_map.yaml")
+    if os.path.isfile(data_map_path):
+        import yaml
+        type_map = yaml.safe_load(open(data_map_path).read()) or {}
+    else:
+        type_map = {}
+        # Auto-detect: folder name = record_type
+        if os.path.isdir(data_dir):
+            for name in sorted(os.listdir(data_dir)):
+                if os.path.isdir(os.path.join(data_dir, name)):
+                    type_map[name] = name
 
     for folder_name, record_type in type_map.items():
         folder_path = os.path.join(data_dir, folder_name)
@@ -255,7 +261,7 @@ def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
             continue
         result = tool.execute(file_path=folder_path, record_type=record_type)
         print(f"  {folder_name}: {result}")
-        if result.startswith("Validation failed"):
+        if result.startswith("Error"):
             raise SystemExit(f"Record ingestion failed for {folder_name} — aborting eval.")
 
     print()
