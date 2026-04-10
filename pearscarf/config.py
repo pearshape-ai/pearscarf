@@ -40,6 +40,13 @@ NEO4J_URL = os.getenv("NEO4J_URL", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 
+# Experts
+from pathlib import Path as _Path
+EXPERTS_DIR = os.getenv(
+    "EXPERTS_DIR",
+    str(_Path(__file__).resolve().parent.parent / "experts"),
+)
+
 # Curator
 CURATOR_POLL_INTERVAL = int(os.getenv("CURATOR_POLL_INTERVAL", "30"))
 CURATOR_CLAIM_TIMEOUT = int(os.getenv("CURATOR_CLAIM_TIMEOUT", "600"))
