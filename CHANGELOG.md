@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.13
+- Added `pearscarf/expert_context.py` — the single object pearscarf hands to every expert at startup. Defines three protocols (`StorageProtocol`, `BusProtocol`, `LogProtocol`) and their concrete implementations wrapping existing pearscarf internals. Experts import only from this module — no reaching into pearscarf's storage, bus, or log packages directly. Same context for default expert agents and internal agents.
+- `records` table gains `metadata JSONB`, `dedup_key TEXT`, `expert_name TEXT`, and `expert_version TEXT` columns. `save_record()` on the storage protocol writes to the generic records table with metadata as JSONB and dedup on `dedup_key`. Experts no longer need per-type tables or per-type save helpers — the generic path handles everything.
+
 ## 1.17.12
 - `pearscarf run` and `pearscarf discord` now run a credential pre-flight check before starting any expert. For each enabled expert, the check reads the package's `.env.example` to learn which env vars are required (vars with empty values in the example are required; vars with non-empty defaults are optional and skipped) and verifies the operator's `env/.<name>.env` has a non-empty value for each one. On any miss, prints the expert name, the missing var, and the path to the env file to edit, then exits without starting anything. The check runs unconditionally — even without `--poll` — because the LLM agent layer can still call expert tools that need credentials.
 

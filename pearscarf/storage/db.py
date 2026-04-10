@@ -102,6 +102,12 @@ CREATE INDEX IF NOT EXISTS idx_records_indexed ON records(indexed);
 
 ALTER TABLE records ADD COLUMN IF NOT EXISTS resolution_pending JSONB;
 ALTER TABLE records ADD COLUMN IF NOT EXISTS resolution_status TEXT;
+ALTER TABLE records ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE records ADD COLUMN IF NOT EXISTS dedup_key TEXT;
+ALTER TABLE records ADD COLUMN IF NOT EXISTS expert_name TEXT;
+ALTER TABLE records ADD COLUMN IF NOT EXISTS expert_version TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_records_dedup ON records(dedup_key) WHERE dedup_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS emails (
     record_id TEXT PRIMARY KEY REFERENCES records(id),
