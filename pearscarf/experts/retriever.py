@@ -6,11 +6,12 @@ graph traversal query Neo4j. Vector search queries Qdrant.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from pearscarf.query import context_query
 from pearscarf.agents.expert import ExpertAgent
-from pearscarf.bus import MessageBus
+from pearscarf.expert_context import ExpertContext
 from pearscarf.knowledge import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
@@ -265,8 +266,8 @@ class VectorSearchTool(BaseTool):
 
 
 def create_retriever_for_runner(
-    bus: MessageBus,
-) -> callable:
+    ctx: ExpertContext,
+) -> Callable:
     """Create a factory function for the AgentRunner.
 
     Returns agent_factory: Callable[[session_id], ExpertAgent].
@@ -281,11 +282,9 @@ def create_retriever_for_runner(
         registry.register(VectorSearchTool())
 
         return ExpertAgent(
-            domain="retriever",
+            ctx=ctx,
             domain_prompt=load_prompt("retriever"),
             tool_registry=registry,
-            bus=bus,
-            agent_name="retriever",
         )
 
     return factory

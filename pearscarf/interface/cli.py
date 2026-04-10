@@ -33,6 +33,7 @@ def run(poll: bool) -> None:
     from pearscarf.agents.runner import AgentRunner
     from pearscarf.agents.worker import create_worker_agent
     from pearscarf.bus import MessageBus
+    from pearscarf.expert_context import build_context
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.indexing.indexer import Indexer
     from pearscarf.indexing.registry import get_registry
@@ -70,15 +71,18 @@ def run(poll: bool) -> None:
             sys.stdout.flush()
 
     # Start Retriever expert runner
-    retriever_factory = create_retriever_for_runner(bus=bus)
+    retriever_ctx = build_context("retriever", bus)
+    retriever_factory = create_retriever_for_runner(ctx=retriever_ctx)
     retriever_runner = AgentRunner("retriever", retriever_factory, bus)
     retriever_runner.start()
     sys.stdout.write("Retriever started.\r\n")
     sys.stdout.flush()
 
     # Start Worker runner
+    worker_ctx = build_context("worker", bus)
+
     def worker_factory(session_id: str):
-        return create_worker_agent(bus=bus, session_id=session_id)
+        return create_worker_agent(ctx=worker_ctx, session_id=session_id)
 
     worker_runner = AgentRunner("worker", worker_factory, bus)
     worker_runner.start()
@@ -208,6 +212,8 @@ def linear() -> None:
 @click.option("--type", "record_type", type=click.Choice(["email", "issue", "issue_change"]), default=None, help="Record type (required with --record)")
 def ingest(seed: str | None, record: str | None, record_type: str | None) -> None:
     """Ingest expert — file-based data entry. Standalone interactive mode without flags."""
+    from pearscarf.bus import MessageBus
+    from pearscarf.expert_context import build_context
     from pearscarf.experts.ingest import create_ingest_expert
 
     def on_tool_call(name, args):
@@ -220,7 +226,10 @@ def ingest(seed: str | None, record: str | None, record_type: str | None) -> Non
         preview = result[:200] + "..." if len(result) > 200 else result
         click.echo(click.style(f"  [result] {name}", fg="green") + f": {preview}")
 
+    bus = MessageBus()
+    ctx = build_context("ingest_expert", bus)
     agent = create_ingest_expert(
+        ctx=ctx,
         on_tool_call=on_tool_call,
         on_text=on_text,
         on_tool_result=on_tool_result,

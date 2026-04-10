@@ -4,9 +4,8 @@ from collections.abc import Callable
 from typing import Any
 
 from pearscarf.storage import graph
-from pearscarf import log
 from pearscarf.agents.base import BaseAgent
-from pearscarf.bus import MessageBus
+from pearscarf.expert_context import ExpertContext
 from pearscarf.knowledge import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
@@ -35,8 +34,8 @@ class SendMessageTool(BaseTool):
         "required": ["to", "content"],
     }
 
-    def __init__(self, bus: MessageBus) -> None:
-        self._bus = bus
+    def __init__(self, ctx: ExpertContext) -> None:
+        self._ctx = ctx
         self._session_id: str | None = None
 
     def execute(self, **kwargs: Any) -> str:
@@ -44,56 +43,17 @@ class SendMessageTool(BaseTool):
         content = kwargs["content"]
         if not self._session_id:
             return "Error: no active session set."
-        self._bus.send(
+        self._ctx.bus.send(
             session_id=self._session_id,
-            from_agent="worker",
             to_agent=to,
             content=content,
-            reasoning=f"Worker message to {to}",
         )
-        log.write(
-            "worker",
-            self._session_id,
+        self._ctx.log.write(
+            self._ctx.expert_name,
             "message_sent",
             f"to={to}: {content[:200]}",
         )
         return f"Message sent to {to}."
-
-
-class LookupEmailTool(BaseTool):
-    """Worker uses this to look up previously stored emails."""
-
-    name = "lookup_email"
-    description = (
-        "Look up a previously stored email by its record ID. "
-        "Returns the full email details (sender, subject, body, date)."
-    )
-    input_schema = {
-        "type": "object",
-        "properties": {
-            "record_id": {
-                "type": "string",
-                "description": "The email record ID, e.g. 'email_001'",
-            },
-        },
-        "required": ["record_id"],
-    }
-
-    def execute(self, **kwargs: Any) -> str:
-        from pearscarf.storage import store
-
-        record_id = kwargs["record_id"]
-        email = store.get_email(record_id)
-        if not email:
-            return f"No email found with record_id '{record_id}'."
-        parts = [
-            f"Record: {email['record_id']}",
-            f"From: {email['sender']}",
-            f"Subject: {email['subject']}",
-            f"Date: {email['received_at']}",
-            f"\nBody:\n{email['body']}",
-        ]
-        return "\n".join(parts)
 
 
 class ClassifyRecordTool(BaseTool):
@@ -142,55 +102,6 @@ class ClassifyRecordTool(BaseTool):
         return f"Record {kwargs['record_id']} classified as {kwargs['classification']}."
 
 
-class LookupIssueTool(BaseTool):
-    """Worker uses this to look up previously stored issues."""
-
-    name = "lookup_issue"
-    description = (
-        "Look up a previously stored Linear issue by its record ID. "
-        "Returns the full issue details (title, status, priority, assignee)."
-    )
-    input_schema = {
-        "type": "object",
-        "properties": {
-            "record_id": {
-                "type": "string",
-                "description": "The issue record ID, e.g. 'issue_001'",
-            },
-        },
-        "required": ["record_id"],
-    }
-
-    def execute(self, **kwargs: Any) -> str:
-        from pearscarf.storage import store
-
-        record_id = kwargs["record_id"]
-        issue = store.get_issue(record_id)
-        if not issue:
-            return f"No issue found with record_id '{record_id}'."
-        parts = [
-            f"Record: {issue['record_id']}",
-            f"Identifier: {issue['identifier']}",
-            f"Title: {issue['title']}",
-            f"Status: {issue['status']}",
-            f"Priority: {issue['priority']}",
-        ]
-        if issue.get("assignee"):
-            parts.append(f"Assignee: {issue['assignee']}")
-        if issue.get("project"):
-            parts.append(f"Project: {issue['project']}")
-        if issue.get("url"):
-            parts.append(f"URL: {issue['url']}")
-        if issue.get("description"):
-            parts.append(f"\nDescription:\n{issue['description'][:1000]}")
-        comments = issue.get("comments") or []
-        if comments:
-            parts.append(f"\nComments ({len(comments)}):")
-            for c in comments[:10]:
-                parts.append(f"  [{c.get('author', '')}] {c.get('body', '')[:200]}")
-        return "\n".join(parts)
-
-
 class SearchEntitiesTool(BaseTool):
     """Worker uses this to search the knowledge graph for known entities."""
 
@@ -232,7 +143,7 @@ class SearchEntitiesTool(BaseTool):
 
 
 def create_worker_agent(
-    bus: MessageBus,
+    ctx: ExpertContext,
     session_id: str,
     on_tool_call: Callable[[str, dict[str, Any]], None] | None = None,
     on_text: Callable[[str], None] | None = None,
@@ -241,11 +152,9 @@ def create_worker_agent(
     """Create a WorkerAgent configured for a specific session."""
     registry = ToolRegistry()
     registry.discover()
-    send_tool = SendMessageTool(bus)
+    send_tool = SendMessageTool(ctx)
     send_tool._session_id = session_id
     registry.register(send_tool)
-    registry.register(LookupEmailTool())
-    registry.register(LookupIssueTool())
     registry.register(ClassifyRecordTool())
     registry.register(SearchEntitiesTool())
 

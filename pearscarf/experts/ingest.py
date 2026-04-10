@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from typing import Any
 
 from pearscarf.agents.expert import ExpertAgent
+from pearscarf.expert_context import ExpertContext
 from pearscarf.knowledge import load as load_prompt
 from pearscarf.tools import BaseTool, ToolRegistry
 
@@ -257,17 +259,18 @@ class ParseRecordFileTool(BaseTool):
 
 
 def create_ingest_expert(
+    ctx: "ExpertContext",
     on_tool_call=None,
     on_text=None,
     on_tool_result=None,
 ) -> ExpertAgent:
-    """Create an IngestExpert agent for standalone use."""
+    """Create an IngestExpert agent."""
     registry = ToolRegistry()
     registry.register(ParseSeedTool())
     registry.register(ParseRecordFileTool())
 
     return ExpertAgent(
-        domain="ingest",
+        ctx=ctx,
         domain_prompt=load_prompt("ingest"),
         tool_registry=registry,
         on_tool_call=on_tool_call,
@@ -277,8 +280,8 @@ def create_ingest_expert(
 
 
 def create_ingest_expert_for_runner(
-    bus=None,
-) -> callable:
+    ctx: "ExpertContext",
+) -> Callable:
     """Create a factory function for the AgentRunner.
 
     Returns agent_factory: Callable[[session_id], ExpertAgent].
@@ -290,11 +293,9 @@ def create_ingest_expert_for_runner(
         registry.register(ParseRecordFileTool())
 
         return ExpertAgent(
-            domain="ingest",
+            ctx=ctx,
             domain_prompt=load_prompt("ingest"),
             tool_registry=registry,
-            bus=bus,
-            agent_name="ingest_expert",
         )
 
     return factory

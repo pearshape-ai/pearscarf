@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.14
+- Internal agents (worker, retriever, ingest) now receive `ExpertContext` instead of importing pearscarf internals directly. `SendMessageTool` and `ReplyTool` use `ctx.bus.send` and `ctx.log.write`. `ExpertAgent` constructor accepts `ctx` instead of raw `MessageBus`. `AgentRunner` stays on raw `MessageBus` (infrastructure, not an agent).
+- `LookupEmailTool` and `LookupIssueTool` removed from the worker. These were per-record-type tools that bypassed the generic storage protocol. They'll return as generic record tools when the indexer refactor makes all records queryable through `ctx.storage`.
+- `cli.py` and `discord_bot.py` now call `build_context(name, bus)` for each internal agent before constructing the agent factory.
+
 ## 1.17.13
 - Added `pearscarf/expert_context.py` — the single object pearscarf hands to every expert at startup. Defines three protocols (`StorageProtocol`, `BusProtocol`, `LogProtocol`) and their concrete implementations wrapping existing pearscarf internals. Experts import only from this module — no reaching into pearscarf's storage, bus, or log packages directly. Same context for default expert agents and internal agents.
 - `records` table gains `metadata JSONB`, `dedup_key TEXT`, `expert_name TEXT`, and `expert_version TEXT` columns. `save_record()` on the storage protocol writes to the generic records table with metadata as JSONB and dedup on `dedup_key`. Experts no longer need per-type tables or per-type save helpers — the generic path handles everything.
