@@ -183,7 +183,7 @@ expert.add_command(expert_uninstall_command)
 def gmail(auth: bool) -> None:
     """Gmail expert — OAuth setup."""
     if auth:
-        from gmailscarf.connector.api_client import run_oauth_flow
+        from gmailscarf.gmail_connect import run_oauth_flow
 
         run_oauth_flow()
         return
@@ -270,7 +270,7 @@ def ingest(seed: str | None, record: str | None, record_type: str | None) -> Non
 def gmail_shortcut(auth: bool) -> None:
     """Gmail utilities (shortcut for 'expert gmail')."""
     if auth:
-        from gmailscarf.connector.api_client import run_oauth_flow
+        from gmailscarf.gmail_connect import run_oauth_flow
 
         run_oauth_flow()
         return

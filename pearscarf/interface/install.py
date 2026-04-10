@@ -123,7 +123,7 @@ def stage_manifest(ctx: ValidationContext) -> StageResult:
     except yaml.YAMLError as exc:
         return _fail(f"manifest.yaml not valid YAML: {exc}")
 
-    required = ["name", "version", "source_type", "record_types", "connector"]
+    required = ["name", "version", "source_type", "record_types"]
     missing = [f for f in required if not data.get(f)]
     if missing:
         return _fail(f"manifest missing required field(s): {', '.join(missing)}")
@@ -187,28 +187,45 @@ def stage_knowledge(ctx: ValidationContext) -> StageResult:
 
 
 def stage_connector(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 4 — connector contract")
+    _stage("Stage 4 — entry points")
     assert ctx.package_dir is not None
 
-    connector_rel = ctx.manifest.get("connector", "connector/agent.py")
-    connector_path = ctx.package_dir / connector_rel
-    if not connector_path.is_file():
-        return _fail(f"connector file missing at {connector_path}")
+    # Check ingester entry point (new manifests use "ingester", legacy use "connector")
+    ingester_rel = ctx.manifest.get("ingester") or ctx.manifest.get("connector")
+    if ingester_rel:
+        ingester_path = ctx.package_dir / ingester_rel
+        if not ingester_path.is_file():
+            return _fail(f"ingester file missing at {ingester_path}")
+        module_no_ext = Path(ingester_rel).with_suffix("")
+        module_name = f"{ctx.package_name}." + module_no_ext.as_posix().replace("/", ".")
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as exc:  # noqa: BLE001
+            return _fail(f"ingester import failed: {exc}")
+        start_fn = getattr(module, "start", None)
+        if start_fn is None or not callable(start_fn):
+            return _fail(f"{module_name} has no callable start function")
 
-    # Derive module name from package + connector relative path
-    module_no_ext = Path(connector_rel).with_suffix("")
-    module_name = f"{ctx.package_name}." + module_no_ext.as_posix().replace("/", ".")
+    # Check tools entry point (optional)
+    tools_rel = ctx.manifest.get("tools")
+    if tools_rel:
+        tools_path = ctx.package_dir / tools_rel
+        if not tools_path.is_file():
+            return _fail(f"tools file missing at {tools_path}")
+        module_no_ext = Path(tools_rel).with_suffix("")
+        module_name = f"{ctx.package_name}." + module_no_ext.as_posix().replace("/", ".")
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as exc:  # noqa: BLE001
+            return _fail(f"tools import failed: {exc}")
+        get_tools_fn = getattr(module, "get_tools", None)
+        if get_tools_fn is None or not callable(get_tools_fn):
+            return _fail(f"{module_name} has no callable get_tools function")
 
-    try:
-        module = importlib.import_module(module_name)
-    except Exception as exc:  # noqa: BLE001
-        return _fail(f"connector import failed: {exc}")
+    if not ingester_rel and not tools_rel:
+        return _fail("manifest declares neither 'ingester' nor 'tools' — at least one is required")
 
-    start_fn = getattr(module, "start", None)
-    if start_fn is None or not callable(start_fn):
-        return _fail(f"{module_name} has no callable start function")
-
-    return _ok(f"{module_name}.start is callable")
+    return _ok("entry points valid")
 
 
 def stage_conflicts(ctx: ValidationContext) -> StageResult:

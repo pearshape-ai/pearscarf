@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.17.16
+- Restructured gmailscarf to the new expert layout. `connector/` folder deleted. Replaced by `gmail_connect.py` (API client + tools stub) and `gmail_ingest.py` (ingestion loop stub). Manifest updated to v0.1.1 with `tools:` and `ingester:` fields replacing `connector:`. Registry and install validator accept both legacy and new manifest fields.
+
 ## 1.17.15
 - Install command simplified to local-path only for MVP. Git URL and PyPI installs print a clear "not supported in this version" message. Pip install stage, pip rollback logic, and pip uninstall on lifecycle commands all removed. The validation pipeline is now 7 stages (was 8).
 - `experts_dir` is configurable via `EXPERTS_DIR` env var in `config.py`, defaulting to `<repo>/experts/`. The registry reads from this config instead of hardcoding the path.
