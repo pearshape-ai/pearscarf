@@ -23,10 +23,15 @@ class StorageProtocol(Protocol):
         self,
         record_type: str,
         raw: str,
-        metadata: dict,
+        content: str = "",
+        metadata: dict | None = None,
         dedup_key: str | None = None,
     ) -> str | None:
-        """Save a record. Returns record_id on success, None on duplicate."""
+        """Save a record. Returns record_id on success, None on duplicate.
+
+        raw: true source data (JSON, markdown, whatever came from the API).
+        content: LLM-ready formatted string the indexer uses for extraction.
+        """
         ...
 
     def get_record(self, record_id: str) -> dict | None:
@@ -96,6 +101,7 @@ class PearscarfStorage:
         self,
         record_type: str,
         raw: str,
+        content: str = "",
         metadata: dict | None = None,
         dedup_key: str | None = None,
     ) -> str | None:
@@ -104,6 +110,7 @@ class PearscarfStorage:
         return store.save_record(
             record_type=record_type,
             raw=raw,
+            content=content,
             metadata=metadata,
             dedup_key=dedup_key,
             source=self._expert_name,

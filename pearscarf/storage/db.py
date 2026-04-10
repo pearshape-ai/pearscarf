@@ -106,6 +106,7 @@ ALTER TABLE records ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE records ADD COLUMN IF NOT EXISTS dedup_key TEXT;
 ALTER TABLE records ADD COLUMN IF NOT EXISTS expert_name TEXT;
 ALTER TABLE records ADD COLUMN IF NOT EXISTS expert_version TEXT;
+ALTER TABLE records ADD COLUMN IF NOT EXISTS content TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_records_dedup ON records(dedup_key) WHERE dedup_key IS NOT NULL;
 
