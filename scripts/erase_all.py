@@ -39,10 +39,8 @@ def main() -> None:
 
     # Postgres
     with _get_conn() as conn:
-        records_count = conn.execute("SELECT count(*) AS c FROM records").fetchone()["c"]
-        emails_count = conn.execute("SELECT count(*) AS c FROM emails").fetchone()["c"]
-        issues_count = conn.execute("SELECT count(*) AS c FROM issues").fetchone()["c"]
-        changes_count = conn.execute("SELECT count(*) AS c FROM issue_changes").fetchone()["c"]
+        row = conn.execute("SELECT count(*) AS c FROM records").fetchone()
+        records_count = dict(row).get("c", 0) if row else 0
 
     total = node_count + vector_count + records_count
     if total == 0:
@@ -52,7 +50,7 @@ def main() -> None:
         return
 
     print("This will DELETE:")
-    print(f"  Postgres:  {records_count} records, {emails_count} emails, {issues_count} issues, {changes_count} issue_changes")
+    print(f"  Postgres:  {records_count} records")
     print(f"  Neo4j:     {node_count} nodes, {rel_count} relationships")
     print(f"  Qdrant:    {vector_count} vectors")
     print()
@@ -86,11 +84,14 @@ def main() -> None:
     except Exception as exc:
         print(f"Warning: Qdrant clear failed: {exc}")
 
-    # --- Wipe Postgres records tables (dependency order) ---
+    # --- Wipe Postgres records + curator queue ---
+    # TODO: when manifest-driven versioned tables land (e.g. gmailscarf_emails_v1),
+    # discover and truncate those here too. Query the expert_record_schemas table
+    # (or the registry) for active table names and include them in the truncate.
     with _get_conn() as conn:
-        conn.execute("TRUNCATE curator_queue, issue_changes, issues, emails, records CASCADE")
+        conn.execute("TRUNCATE curator_queue, records CASCADE")
         conn.commit()
-    print(f"Deleted {records_count} records, {emails_count} emails, {issues_count} issues, {changes_count} issue_changes from Postgres.")
+    print(f"Deleted {records_count} records from Postgres.")
 
     print("\nDone. All system state erased.")
 

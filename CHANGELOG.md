@@ -2,6 +2,10 @@
 
 ## 1.17.16
 - Restructured gmailscarf to the new expert layout. `connector/` folder deleted. Replaced by `gmail_connect.py` (API client + tools stub) and `gmail_ingest.py` (ingestion loop stub). Manifest updated to v0.1.1 with `tools:` and `ingester:` fields replacing `connector:`. Registry and install validator accept both legacy and new manifest fields.
+- Removed all expert-type switches from pearscarf core. The indexer's `_build_content`, `_build_source_context`, and `_embed_record` now read from the generic `records.content` and `records.metadata` columns instead of querying per-type tables. `records` table gains a `content TEXT` column (LLM-ready formatted string, written by the expert's ingester alongside `raw`).
+- Ingest tool delegates record processing to the expert via registry-cached connect instances. At startup, each expert's tools module is loaded and the connect instance is registered by record_type. No expert registered = clear error, no silent fallback.
+- Eval runner loads folder-to-type mapping from `data_map.yaml` in the dataset folder instead of a hardcoded dict.
+- Erase script simplified to truncate `records` + `curator_queue` only.
 
 ## 1.17.15
 - Install command simplified to local-path only for MVP. Git URL and PyPI installs print a clear "not supported in this version" message. Pip install stage, pip rollback logic, and pip uninstall on lifecycle commands all removed. The validation pipeline is now 7 stages (was 8).
