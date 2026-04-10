@@ -1,8 +1,9 @@
 """gmailscarf — Gmail expert agent for PearScarf.
 
-The Gmail expert agent owns two-way access to a Gmail inbox: a connector
-daemon that polls for new messages and pushes them onto the PearScarf
-bus, an LLM-driven agent that reads, searches, and acts on emails via
-Gmail tools, and the knowledge files the indexer uses when extracting
-facts from email records.
+Two runtime components:
+- gmail_connect.py — API client + tool definitions (LLM agent surface)
+- gmail_ingest.py — background ingestion loop (proactive, no LLM)
+
+Both receive ExpertContext at startup. knowledge/agent.md is the LLM
+system prompt.
 """

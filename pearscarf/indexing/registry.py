@@ -40,24 +40,24 @@ class Expert:
     path: Path
     knowledge_dir: Path
     extraction_path: Path | None
-    connector_path: Path
+    connector_path: Path | None
     connector_module: str
     new_entity_types: list[dict] = field(default_factory=list)
     record_types: list[str] = field(default_factory=list)
     enabled: bool = True
 
     def start(self, bus: Any) -> threading.Thread | None:
-        """Import the connector entry point and call its start(bus).
+        """Import the connector/ingester entry point and call its start(bus).
 
-        Returns whatever the connector returns — typically a polling
-        thread, or None if credentials are missing.
+        Returns whatever the module returns — typically a polling thread,
+        or None if credentials are missing or no ingester is declared.
         """
+        if not self.connector_module:
+            return None
         module = importlib.import_module(self.connector_module)
         start_fn = getattr(module, "start", None)
         if start_fn is None:
-            raise RuntimeError(
-                f"{self.name}: {self.connector_module} has no start(bus) function"
-            )
+            return None
         return start_fn(bus)
 
 
@@ -155,15 +155,18 @@ class Registry:
 
         knowledge_dir = package_dir / "knowledge"
         extraction_md = knowledge_dir / "extraction.md"
-        connector_rel = data.get("connector", "connector/agent.py")
-        connector_path = package_dir / connector_rel
-
-        # Derive the importable module name from the connector path,
-        # e.g. "connector/agent.py" → "<name>.connector.agent"
-        connector_relative_no_ext = Path(connector_rel).with_suffix("")
-        connector_module = (
-            f"{name}." + connector_relative_no_ext.as_posix().replace("/", ".")
-        )
+        # Resolve the ingester/connector entry point. New manifests use
+        # "ingester"; legacy manifests use "connector". Either resolves to
+        # a module with a start() function.
+        entry_rel = data.get("ingester") or data.get("connector")
+        connector_path: Path | None = None
+        connector_module = ""
+        if entry_rel:
+            connector_path = package_dir / entry_rel
+            entry_no_ext = Path(entry_rel).with_suffix("")
+            connector_module = (
+                f"{name}." + entry_no_ext.as_posix().replace("/", ".")
+            )
 
         return Expert(
             name=str(name),
