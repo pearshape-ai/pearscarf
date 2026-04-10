@@ -76,114 +76,13 @@ class Indexer:
         self._resolution_prompt = load_prompt("entity_resolution")
 
     def _build_content(self, record: dict) -> str:
-        """Build the record content string for extraction."""
-        record_type = record["type"]
+        """Return the record's content string for extraction.
 
-        if record_type == "email":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT sender, recipient, subject, body, received_at "
-                    "FROM emails WHERE record_id = %s",
-                    (record["id"],),
-                ).fetchone()
-            if row:
-                email = dict(row)
-                parts = []
-                if email["sender"]:
-                    parts.append(f"From: {email['sender']}")
-                if email["recipient"]:
-                    parts.append(f"To: {email['recipient']}")
-                if email["subject"]:
-                    parts.append(f"Subject: {email['subject']}")
-                if email["received_at"]:
-                    parts.append(f"Date: {email['received_at']}")
-                if email["body"]:
-                    body = email["body"][:3000]
-                    parts.append(f"\n{body}")
-                return "\n".join(parts)
-
-        elif record_type == "issue":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT identifier, title, description, status, priority, "
-                    "assignee, project, labels, comments, "
-                    "linear_created_at, linear_updated_at "
-                    "FROM issues WHERE record_id = %s",
-                    (record["id"],),
-                ).fetchone()
-            if row:
-                issue = dict(row)
-                parts = []
-                if issue["identifier"]:
-                    parts.append(f"Issue: {issue['identifier']}")
-                if issue["title"]:
-                    parts.append(f"Title: {issue['title']}")
-                meta = []
-                if issue["status"]:
-                    meta.append(f"Status: {issue['status']}")
-                if issue["priority"]:
-                    meta.append(f"Priority: {issue['priority']}")
-                if issue["assignee"]:
-                    meta.append(f"Assignee: {issue['assignee']}")
-                if meta:
-                    parts.append(" | ".join(meta))
-                if issue["project"]:
-                    parts.append(f"Project: {issue['project']}")
-                labels = issue.get("labels") or []
-                if labels:
-                    parts.append(f"Labels: {', '.join(labels)}")
-                if issue["linear_created_at"]:
-                    parts.append(f"Created: {issue['linear_created_at']}")
-                if issue["linear_updated_at"]:
-                    parts.append(f"Updated: {issue['linear_updated_at']}")
-                if issue["description"]:
-                    desc = issue["description"][:3000]
-                    parts.append(f"\n{desc}")
-                comments = issue.get("comments") or []
-                if comments:
-                    parts.append(f"\nComments ({len(comments)}):")
-                    for c in comments:
-                        author = c.get("author", "Unknown")
-                        date = c.get("created_at", "")
-                        body = c.get("body", "")[:500]
-                        parts.append(f"[{author}, {date}] {body}")
-                return "\n".join(parts)
-
-        elif record_type == "issue_change":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT ic.field, ic.from_value, ic.to_value, "
-                    "ic.changed_by, ic.changed_at, "
-                    "i.identifier, i.title "
-                    "FROM issue_changes ic "
-                    "JOIN issues i ON ic.issue_record_id = i.record_id "
-                    "WHERE ic.record_id = %s",
-                    (record["id"],),
-                ).fetchone()
-            if row:
-                change = dict(row)
-                parts = []
-                ident = change.get("identifier") or ""
-                title = change.get("title") or ""
-                if ident or title:
-                    parts.append(f"Issue: {ident} — {title}")
-                parts.append(f"Change: {change['field']}")
-                if change["from_value"]:
-                    parts.append(f"From: {change['from_value']}")
-                if change["to_value"]:
-                    parts.append(f"To: {change['to_value']}")
-                if change["changed_by"]:
-                    parts.append(f"Changed by: {change['changed_by']}")
-                if change["changed_at"]:
-                    parts.append(f"At: {change['changed_at']}")
-                return "\n".join(parts)
-
-        elif record_type == "ingest":
-            # Seed files store raw content directly in records.raw
-            return record.get("raw") or "(no content)"
-
-        # Fallback: use raw content from records table
-        return record.get("raw") or "(no content)"
+        The content column is the LLM-ready formatted string, written by
+        the expert's ingester at save time. For ingest (seed) records,
+        the raw markdown is used directly.
+        """
+        return record.get("content") or record.get("raw") or "(no content)"
 
     def _build_source_context(self, record: dict, entity_name: str = "") -> str:
         """Build a context string from the record for the resolution judge.
@@ -809,7 +708,8 @@ class Indexer:
             try:
                 with _get_conn() as conn:
                     rows = conn.execute(
-                        "SELECT id, type, source, created_at, raw, human_context "
+                        "SELECT id, type, source, created_at, raw, content, "
+                        "metadata, human_context "
                         "FROM records "
                         "WHERE indexed = FALSE AND classification = 'relevant' "
                         "AND (resolution_status IS NULL OR resolution_status != 'pending') "
