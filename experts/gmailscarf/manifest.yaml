@@ -1,11 +1,16 @@
 name: gmailscarf
-version: 0.1.1
+version: 0.1.2
 source_type: gmail
 author: pearshape-ai
 description: Gmail expert for PearScarf — polls and writes back via the Gmail API
 
 record_types:
   - email
+
+schemas:
+  email: schemas/email.json
+
+dedup_key: message_id
 
 tools: gmail_connect.py
 ingester: gmail_ingest.py
