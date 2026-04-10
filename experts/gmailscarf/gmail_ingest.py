@@ -6,6 +6,7 @@ ctx.storage.save_record(), and notifies the worker via the bus.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -38,7 +39,11 @@ def _poll_once(connect, ctx: ExpertContext) -> None:
     """Fetch unread emails, save new ones, notify the worker."""
     emails = connect.fetch_new()
     for email in emails:
-        raw = (
+        # raw = true source data from the Gmail API
+        raw = email.get("raw", json.dumps(email))
+
+        # content = LLM-ready formatted string for extraction
+        content = (
             f"From: {email['sender']}\n"
             f"To: {email.get('recipients', '')}\n"
             f"Subject: {email['subject']}\n"
@@ -54,7 +59,8 @@ def _poll_once(connect, ctx: ExpertContext) -> None:
             "received_at": email.get("received_at", ""),
         }
         rid = ctx.storage.save_record(
-            "email", raw, metadata, dedup_key=email["message_id"],
+            "email", raw, content=content, metadata=metadata,
+            dedup_key=email["message_id"],
         )
         if not rid:
             continue

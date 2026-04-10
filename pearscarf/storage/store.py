@@ -26,6 +26,7 @@ def _next_record_id(record_type: str) -> str:
 def save_record(
     record_type: str,
     raw: str,
+    content: str = "",
     metadata: dict | None = None,
     dedup_key: str | None = None,
     source: str = "",
@@ -35,6 +36,8 @@ def save_record(
     """Save a generic record. Returns record_id on success, None on duplicate.
 
     This is the single write path experts use via ExpertContext.storage.
+    `raw` is the true source data (JSON, markdown, whatever came from the API).
+    `content` is the LLM-ready formatted string the indexer uses for extraction.
     Dedup is based on dedup_key — if a record with the same key already
     exists, None is returned and nothing is written.
     """
@@ -53,14 +56,15 @@ def save_record(
         record_id = _next_record_id(record_type)
         conn.execute(
             "INSERT INTO records "
-            "(id, type, source, created_at, raw, metadata, dedup_key, "
+            "(id, type, source, created_at, raw, content, metadata, dedup_key, "
             "expert_name, expert_version) "
-            "VALUES (%s, %s, %s, now(), %s, %s, %s, %s, %s)",
+            "VALUES (%s, %s, %s, now(), %s, %s, %s, %s, %s, %s)",
             (
                 record_id,
                 record_type,
                 source or expert_name,
                 raw,
+                content,
                 Jsonb(metadata or {}),
                 dedup_key,
                 expert_name,
@@ -76,7 +80,7 @@ def get_record(record_id: str) -> dict | None:
     init_db()
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT id, type, source, created_at, raw, metadata, "
+            "SELECT id, type, source, created_at, raw, content, metadata, "
             "indexed, classification, dedup_key, expert_name, expert_version "
             "FROM records WHERE id = %s",
             (record_id,),
