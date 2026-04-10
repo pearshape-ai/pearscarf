@@ -87,78 +87,16 @@ class Indexer:
     def _build_source_context(self, record: dict, entity_name: str = "") -> str:
         """Build a context string from the record for the resolution judge.
 
-        If entity_name is provided, extracts a sentence window around each
-        mention instead of truncating from the start.
+        Uses the record's content (LLM-ready formatted string) and applies
+        a sentence window around the entity mention so the resolution judge
+        sees focused context rather than the full record.
         """
-        record_type = record.get("type", "")
-        record_id = record["id"]
-
-        if record_type == "email":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT sender, recipient, subject, body FROM emails WHERE record_id = %s",
-                    (record_id,),
-                ).fetchone()
-            if row:
-                parts = []
-                if row["sender"]:
-                    parts.append(f"From: {row['sender']}")
-                if row["recipient"]:
-                    parts.append(f"To: {row['recipient']}")
-                if row["subject"]:
-                    parts.append(f"Subject: {row['subject']}")
-                if row["body"]:
-                    parts.append(f"Body: {_sentence_window(row['body'], entity_name)}")
-                return "\n".join(parts)
-
-        elif record_type == "issue":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT identifier, title, assignee, project FROM issues WHERE record_id = %s",
-                    (record_id,),
-                ).fetchone()
-            if row:
-                parts = []
-                if row["identifier"]:
-                    parts.append(f"Issue: {row['identifier']}")
-                if row["title"]:
-                    parts.append(f"Title: {row['title']}")
-                if row["assignee"]:
-                    parts.append(f"Assignee: {row['assignee']}")
-                if row["project"]:
-                    parts.append(f"Project: {row['project']}")
-                return "\n".join(parts)
-
-        elif record_type == "issue_change":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT ic.field, ic.from_value, ic.to_value, ic.changed_by, "
-                    "i.identifier, i.title "
-                    "FROM issue_changes ic "
-                    "JOIN issues i ON ic.issue_record_id = i.record_id "
-                    "WHERE ic.record_id = %s",
-                    (record_id,),
-                ).fetchone()
-            if row:
-                parts = []
-                if row["identifier"]:
-                    parts.append(f"Issue: {row['identifier']} — {row['title'] or ''}")
-                parts.append(f"Field changed: {row['field']}")
-                if row["from_value"]:
-                    parts.append(f"From: {row['from_value']}")
-                if row["to_value"]:
-                    parts.append(f"To: {row['to_value']}")
-                if row["changed_by"]:
-                    parts.append(f"Changed by: {row['changed_by']}")
-                return "\n".join(parts)
-
-        elif record_type == "ingest":
-            raw = record.get("raw", "")
-            if not raw:
-                return "(seed file)"
-            return _sentence_window(raw, entity_name) if entity_name else raw[:500]
-
-        return "(no context)"
+        text = record.get("content") or record.get("raw") or ""
+        if not text:
+            return "(no context)"
+        if entity_name:
+            return _sentence_window(text, entity_name)
+        return text[:500]
 
     def _parse_json_response(self, text: str) -> dict | None:
         """Parse JSON from an LLM response, handling ```json fencing."""
@@ -438,44 +376,18 @@ class Indexer:
         )
 
     def _embed_record(self, record: dict, content: str) -> None:
-        """Embed record content into Qdrant."""
+        """Embed record content into Qdrant.
+
+        Metadata for the vector payload comes from the record's metadata
+        JSONB (written by the expert's ingester), plus type and source.
+        """
         record_id = record["id"]
+        record_metadata = record.get("metadata") or {}
         metadata = {
             "type": record.get("type", ""),
             "source": record.get("source", ""),
+            **{k: str(v) for k, v in record_metadata.items() if v},
         }
-        # Add type-specific metadata
-        if record.get("type") == "email":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT sender, subject FROM emails WHERE record_id = %s",
-                    (record_id,),
-                ).fetchone()
-            if row:
-                metadata["sender"] = row["sender"] or ""
-                metadata["subject"] = row["subject"] or ""
-        elif record.get("type") == "issue":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT identifier, title FROM issues WHERE record_id = %s",
-                    (record_id,),
-                ).fetchone()
-            if row:
-                metadata["identifier"] = row["identifier"] or ""
-                metadata["title"] = row["title"] or ""
-        elif record.get("type") == "issue_change":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT ic.field, ic.changed_by, i.identifier "
-                    "FROM issue_changes ic "
-                    "JOIN issues i ON ic.issue_record_id = i.record_id "
-                    "WHERE ic.record_id = %s",
-                    (record_id,),
-                ).fetchone()
-            if row:
-                metadata["field"] = row["field"] or ""
-                metadata["changed_by"] = row["changed_by"] or ""
-                metadata["identifier"] = row["identifier"] or ""
 
         try:
             vectorstore.add_record(record_id, content, metadata)
