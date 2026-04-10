@@ -1,30 +1,22 @@
 """Expert install command — discovery, validation, DB writes, scaffolding.
 
 Implements `pearscarf install <source>`, `pearscarf expert list`, and
-`pearscarf expert inspect <name>`. The install command runs an 8-stage
+`pearscarf expert inspect <name>`. The install command runs a 7-stage
 validation pipeline before writing any DB rows; if any blocking stage
 fails, nothing is registered.
 
-Source detection follows the rules from the architecture spec:
-
-    ./local-path        → local   (no pip — package must already be on sys.path)
-    git+https://...     → git     (pip install git+...)
-    https://github.com  → git     (pip install git+https://...)
-    bare-name           → pypi    (pip install bare-name)
+Local path only for MVP. Git URL and PyPI installs are post-MVP.
 """
 
 from __future__ import annotations
 
 import importlib
-import importlib.metadata
 import importlib.util
 import re
 import shutil
-import subprocess
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import click
 import yaml
@@ -38,34 +30,32 @@ from pearscarf.storage import store
 
 @dataclass
 class InstallSource:
-    method: str  # "local" | "git" | "pypi"
+    method: str  # "local" only for MVP
     raw: str
-    pip_arg: str | None = None  # what to pass to pip; None for local
-    local_path: Path | None = None  # set when method == "local"
+    local_path: Path | None = None
 
 
 def detect_source(source: str) -> InstallSource:
-    """Classify an install source string into local / git / pypi."""
+    """Classify an install source string. Only local paths are supported for MVP."""
     s = source.strip()
 
-    # Local path
-    if s.startswith("./") or s.startswith("../") or s.startswith("~/") or s.startswith("/"):
-        return InstallSource(
-            method="local",
-            raw=source,
-            local_path=Path(s).expanduser().resolve(),
+    # Reject non-local sources with a clear message
+    if s.startswith("git+") or "github.com" in s:
+        raise SystemExit(
+            f"Git URL installs are not supported in this version.\n"
+            f"Clone the repo into experts/ and use: pearscarf install ./experts/<name>"
+        )
+    if not (s.startswith("./") or s.startswith("../") or s.startswith("~/") or s.startswith("/")):
+        raise SystemExit(
+            f"PyPI installs are not supported in this version.\n"
+            f"Place the package in experts/ and use: pearscarf install ./experts/{s}"
         )
 
-    # Git URL with explicit prefix
-    if s.startswith("git+"):
-        return InstallSource(method="git", raw=source, pip_arg=s)
-
-    # GitHub URL without prefix
-    if "github.com" in s:
-        return InstallSource(method="git", raw=source, pip_arg=f"git+{s}")
-
-    # PyPI bare name
-    return InstallSource(method="pypi", raw=source, pip_arg=s)
+    return InstallSource(
+        method="local",
+        raw=source,
+        local_path=Path(s).expanduser().resolve(),
+    )
 
 
 # --- Validation pipeline ---
@@ -79,7 +69,6 @@ class ValidationContext:
     manifest: dict = field(default_factory=dict)
     failures: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-    pip_installed: bool = False  # True iff Stage 1 actually ran pip install successfully
 
 
 @dataclass
@@ -108,62 +97,21 @@ def _fail(detail: str, blocking: bool = True) -> StageResult:
     return StageResult(ok=False, message=detail, blocking=blocking)
 
 
-def stage_pip_install(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 1 — pip install")
-    if ctx.source.method == "local":
-        # Local installs don't go through pip — the package must already be on
-        # sys.path (typically because it lives under experts/, which pearscarf
-        # adds to sys.path on startup).
-        return _ok("local — pip skipped")
-
-    cmd = [sys.executable, "-m", "pip", "install", ctx.source.pip_arg]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        return _fail(f"pip install failed:\n{proc.stderr.strip()}")
-    ctx.pip_installed = True
-    return _ok("pip install succeeded")
-
-
 def stage_locate_package(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 2 — package locatable")
-
-    if ctx.source.method == "local":
-        # For local installs we trust the path. The package_name is taken from
-        # the manifest (in stage 3) — for now we just verify the directory
-        # exists and stash it on the context.
-        path = ctx.source.local_path
-        if path is None or not path.is_dir():
-            return _fail(f"local path is not a directory: {ctx.source.raw}")
-        ctx.package_dir = path
-        # Provisional name from directory; refined in stage 3 from the manifest.
-        ctx.package_name = path.name
-        return _ok(f"local path resolved → {path}")
-
-    # pip-installed: use importlib.metadata to find the package
-    name_guess = ctx.source.raw.split("/")[-1].split("@")[0]
-    if name_guess.startswith("git+"):
-        name_guess = name_guess.replace("git+", "")
-    try:
-        dist = importlib.metadata.distribution(name_guess)
-    except importlib.metadata.PackageNotFoundError:
-        return _fail(
-            f"package '{name_guess}' not found via importlib.metadata. "
-            f"Did pip install actually deliver this package?"
-        )
-
-    ctx.package_name = dist.metadata["Name"]
-    spec = importlib.util.find_spec(ctx.package_name)
-    if not spec or not spec.submodule_search_locations:
-        return _fail(f"package '{ctx.package_name}' has no importable directory")
-    ctx.package_dir = Path(next(iter(spec.submodule_search_locations)))
-    return _ok(f"package '{ctx.package_name}' at {ctx.package_dir}")
+    _stage("Stage 1 — package locatable")
+    path = ctx.source.local_path
+    if path is None or not path.is_dir():
+        return _fail(f"local path is not a directory: {ctx.source.raw}")
+    ctx.package_dir = path
+    ctx.package_name = path.name
+    return _ok(f"local path resolved → {path}")
 
 
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def stage_manifest(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 3 — manifest valid")
+    _stage("Stage 2 — manifest valid")
     assert ctx.package_dir is not None
 
     manifest_path = ctx.package_dir / "manifest.yaml"
@@ -211,7 +159,7 @@ def _check_file_nonempty(path: Path, label: str) -> str | None:
 
 
 def stage_knowledge(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 4 — knowledge contract")
+    _stage("Stage 3 — knowledge contract")
     assert ctx.package_dir is not None
     knowledge = ctx.package_dir / "knowledge"
 
@@ -239,7 +187,7 @@ def stage_knowledge(ctx: ValidationContext) -> StageResult:
 
 
 def stage_connector(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 5 — connector contract")
+    _stage("Stage 4 — connector contract")
     assert ctx.package_dir is not None
 
     connector_rel = ctx.manifest.get("connector", "connector/agent.py")
@@ -264,7 +212,7 @@ def stage_connector(ctx: ValidationContext) -> StageResult:
 
 
 def stage_conflicts(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 6 — conflict checks")
+    _stage("Stage 5 — conflict checks")
 
     source_type = ctx.manifest["source_type"]
     name = ctx.manifest["name"]
@@ -327,7 +275,7 @@ def stage_conflicts(ctx: ValidationContext) -> StageResult:
 
 
 def stage_identifier_patterns(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 7 — identifier patterns")
+    _stage("Stage 6 — identifier patterns")
 
     declared_types = {
         (entry.get("name") if isinstance(entry, dict) else entry).lower()
@@ -368,7 +316,7 @@ def stage_identifier_patterns(ctx: ValidationContext) -> StageResult:
 
 
 def stage_eval(ctx: ValidationContext) -> StageResult:
-    _stage("Stage 8 — eval dataset (non-blocking)")
+    _stage("Stage 7 — eval dataset (non-blocking)")
     assert ctx.package_dir is not None
     eval_dir = ctx.package_dir / "eval"
 
@@ -382,7 +330,6 @@ def stage_eval(ctx: ValidationContext) -> StageResult:
 
 
 _STAGES = [
-    stage_pip_install,
     stage_locate_package,
     stage_manifest,
     stage_knowledge,
@@ -394,11 +341,7 @@ _STAGES = [
 
 
 def run_validation(source: InstallSource) -> ValidationContext:
-    """Run all 8 stages. Always returns the context — check `ctx.failures`.
-
-    The context is returned even on failure so callers can inspect
-    `ctx.pip_installed` to decide whether to roll back the pip step.
-    """
+    """Run all 7 validation stages. Always returns the context — check `ctx.failures`."""
     ctx = ValidationContext(source=source)
     for stage in _STAGES:
         result = stage(ctx)
@@ -410,55 +353,7 @@ def run_validation(source: InstallSource) -> ValidationContext:
     return ctx
 
 
-def _guess_package_name(source: InstallSource) -> str:
-    """Best-effort name extraction for rollback when stage 2 didn't get to set it."""
-    if source.method == "local":
-        return ""
-    raw = source.raw
-    if raw.startswith("git+"):
-        raw = raw[4:]
-    return raw.split("/")[-1].split("@")[0].replace(".git", "")
-
-
-def rollback_pip_install(ctx: ValidationContext) -> None:
-    """Run `pip uninstall -y` if Stage 1 successfully installed the package.
-
-    No-op for local installs and for pip installs that never reached the
-    success branch of Stage 1. Print rollback status either way so the
-    operator knows what state the env is in.
-    """
-    if not ctx.pip_installed:
-        return
-
-    package = ctx.package_name or _guess_package_name(ctx.source)
-    if not package:
-        click.echo(click.style(
-            "  rollback skipped: could not determine package name to uninstall",
-            fg="yellow",
-        ))
-        return
-
-    click.echo()
-    click.echo(click.style(f"  rolling back: pip uninstall {package}", fg="yellow"))
-    proc = subprocess.run(
-        [sys.executable, "-m", "pip", "uninstall", "-y", package],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode == 0:
-        click.echo(click.style(f"  uninstalled {package}", fg="yellow"))
-    else:
-        click.echo(click.style(
-            f"  pip uninstall failed: {proc.stderr.strip()}",
-            fg="red",
-        ))
-
-
 # --- DB writes + scaffolding ---
-
-
-def _resolve_install_method(source: InstallSource) -> str:
-    return source.method  # "local" | "git" | "pypi"
 
 
 def write_registration(ctx: ValidationContext) -> None:
@@ -486,7 +381,7 @@ def write_registration(ctx: ValidationContext) -> None:
         version=ctx.manifest["version"],
         source_type=ctx.manifest["source_type"],
         package_name=ctx.package_name,
-        install_method=_resolve_install_method(ctx.source),
+        install_method="local",
         enabled=True,
         entity_types=entity_types,
         identifier_patterns=identifier_patterns,
@@ -691,29 +586,26 @@ def prompt_entity_type_approval(
 @click.option("-y", "--yes", "assume_yes", is_flag=True, default=False,
               help="Skip the new entity types approval prompt (for non-interactive installs)")
 def install_command(source: str, assume_yes: bool) -> None:
-    """Install an expert from a local path, git URL, or PyPI name."""
+    """Install an expert from a local folder path."""
     src = detect_source(source)
     click.echo(f"Installing from {click.style(src.method, fg='cyan')}: {src.raw}\n")
 
     ctx = run_validation(src)
 
     if ctx.failures:
-        rollback_pip_install(ctx)
         click.echo()
         click.echo(click.style("Install failed.", fg="red"))
         raise SystemExit(1)
 
     if not prompt_entity_type_approval(ctx, assume_yes):
-        rollback_pip_install(ctx)
         click.echo(click.style("Install cancelled — entity types not approved.", fg="red"))
         raise SystemExit(1)
 
     try:
         write_registration(ctx)
     except Exception as exc:
-        rollback_pip_install(ctx)
         click.echo()
-        click.echo(click.style(f"DB write failed, install rolled back: {exc}", fg="red"))
+        click.echo(click.style(f"DB write failed: {exc}", fg="red"))
         raise SystemExit(1)
 
     click.echo()
@@ -815,22 +707,6 @@ def _reset_runtime_registry() -> None:
     reset_registry()
 
 
-def _pip_uninstall(package_name: str) -> bool:
-    """Run `pip uninstall -y <package>`. Returns True on success."""
-    proc = subprocess.run(
-        [sys.executable, "-m", "pip", "uninstall", "-y", package_name],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode == 0:
-        click.echo(click.style(f"  uninstalled {package_name} via pip", fg="yellow"))
-        return True
-    click.echo(click.style(
-        f"  pip uninstall failed: {proc.stderr.strip()}", fg="red"
-    ))
-    return False
-
-
 @click.command("disable")
 @click.argument("name")
 def expert_disable_command(name: str) -> None:
@@ -873,7 +749,7 @@ def expert_enable_command(name: str) -> None:
 @click.option("-y", "--yes", "assume_yes", is_flag=True, default=False,
               help="Skip the confirmation prompt")
 def expert_uninstall_command(name: str, assume_yes: bool) -> None:
-    """Uninstall an expert. Removes all DB rows; pip uninstall for non-local installs."""
+    """Uninstall an expert. Removes all DB rows. Graph data is preserved."""
     rows = store.list_versions_of_expert(name)
     if not rows:
         click.echo(f"No expert named '{name}' registered.")
@@ -881,24 +757,15 @@ def expert_uninstall_command(name: str, assume_yes: bool) -> None:
 
     enabled = next((r for r in rows if r["enabled"]), None)
     summary_version = (enabled or rows[0])["version"]
-    package_name = (enabled or rows[0])["package_name"]
-    install_method = (enabled or rows[0])["install_method"]
 
     click.echo(f"This will uninstall '{name}' v{summary_version} "
                f"and remove {len(rows)} DB row(s).")
-    if install_method != "local":
-        click.echo(f"  pip uninstall {package_name} will also run.")
     click.echo("  Graph data (entities, fact edges) is preserved.")
 
     if not assume_yes and not click.confirm("Proceed?", default=False):
         click.echo("Cancelled.")
         return
 
-    # 1. pip uninstall (non-local only)
-    if install_method != "local":
-        _pip_uninstall(package_name)
-
-    # 2. Delete DB rows (cascades to entity_types and identifier_patterns)
     removed = store.delete_expert_cascade(name)
     _reset_runtime_registry()
 
@@ -912,8 +779,8 @@ def expert_uninstall_command(name: str, assume_yes: bool) -> None:
 def _read_manifest_version(package_name: str) -> tuple[str | None, Path | None]:
     """Read a package's manifest.yaml and return (version, package_dir).
 
-    Resolves the package via importlib so it works for both local
-    (sys.path-resident) and pip-installed packages.
+    Resolves the package via importlib so it works for local packages
+    on sys.path.
     """
     try:
         spec = importlib.util.find_spec(package_name)
@@ -937,33 +804,19 @@ def _read_manifest_version(package_name: str) -> tuple[str | None, Path | None]:
 @click.option("-y", "--yes", "assume_yes", is_flag=True, default=False,
               help="Skip the new entity types approval prompt")
 def expert_update_command(name: str, assume_yes: bool) -> None:
-    """Update an installed expert to the latest version available."""
+    """Update an installed expert to the latest on-disk version."""
     current = store.get_enabled_expert(name)
     if not current:
         click.echo(f"No enabled expert named '{name}'.")
         raise SystemExit(1)
 
-    install_method = current["install_method"]
     package_name = current["package_name"]
 
-    # Step 1: fetch the latest. For non-local: pip install --upgrade.
-    if install_method != "local":
-        click.echo(f"Upgrading {package_name} via pip...")
-        proc = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--upgrade", package_name],
-            capture_output=True, text=True,
-        )
-        if proc.returncode != 0:
-            click.echo(click.style(
-                f"pip upgrade failed: {proc.stderr.strip()}", fg="red"
-            ))
-            raise SystemExit(1)
-
-    # Step 2: read the (now possibly new) version from the manifest
+    # Read the on-disk manifest version
     new_version, package_dir = _read_manifest_version(package_name)
     if new_version is None:
         click.echo(click.style(
-            f"Could not read manifest version for {package_name} after fetch.",
+            f"Could not read manifest version for {package_name}.",
             fg="red",
         ))
         raise SystemExit(1)
@@ -974,17 +827,10 @@ def expert_update_command(name: str, assume_yes: bool) -> None:
 
     click.echo(f"Detected new version: {current['version']} → {new_version}")
 
-    # Step 3: re-validate the new package using the install pipeline.
-    # We construct an InstallSource that mirrors the original install method
-    # so the validator's path detection works the same way.
-    if install_method == "local":
-        assert package_dir is not None
-        src = InstallSource(method="local", raw=str(package_dir),
-                            local_path=package_dir)
-    else:
-        src = InstallSource(method=install_method, raw=package_name,
-                            pip_arg=package_name)
-
+    # Re-validate the package
+    assert package_dir is not None
+    src = InstallSource(method="local", raw=str(package_dir),
+                        local_path=package_dir)
     ctx = run_validation(src)
     if ctx.failures:
         click.echo()

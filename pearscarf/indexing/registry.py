@@ -302,16 +302,13 @@ class Registry:
 _registry: Registry | None = None
 
 
-def _default_experts_dir() -> Path:
-    """Resolve <repo>/experts/ from this module's location."""
-    return Path(__file__).resolve().parent.parent.parent / "experts"
-
-
 def get_registry() -> Registry:
     """Return the process-wide registry, building it on first call."""
     global _registry
     if _registry is None:
-        _registry = Registry(_default_experts_dir())
+        from pearscarf.config import EXPERTS_DIR
+
+        _registry = Registry(Path(EXPERTS_DIR))
     return _registry
 
 

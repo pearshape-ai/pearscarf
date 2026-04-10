@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.15
+- Install command simplified to local-path only for MVP. Git URL and PyPI installs print a clear "not supported in this version" message. Pip install stage, pip rollback logic, and pip uninstall on lifecycle commands all removed. The validation pipeline is now 7 stages (was 8).
+- `experts_dir` is configurable via `EXPERTS_DIR` env var in `config.py`, defaulting to `<repo>/experts/`. The registry reads from this config instead of hardcoding the path.
+
 ## 1.17.14
 - Internal agents (worker, retriever, ingest) now receive `ExpertContext` instead of importing pearscarf internals directly. `SendMessageTool` and `ReplyTool` use `ctx.bus.send` and `ctx.log.write`. `ExpertAgent` constructor accepts `ctx` instead of raw `MessageBus`. `AgentRunner` stays on raw `MessageBus` (infrastructure, not an agent).
 - `LookupEmailTool` and `LookupIssueTool` removed from the worker. These were per-record-type tools that bypassed the generic storage protocol. They'll return as generic record tools when the indexer refactor makes all records queryable through `ctx.storage`.
