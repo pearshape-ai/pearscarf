@@ -177,14 +177,57 @@ def run_bot(poll: bool = False) -> None:
     # has missing or unfilled required env vars.
     enforce_credentials_or_exit()
 
-    bus = MessageBus()
+    import importlib
+    from pathlib import Path
 
-    # Start every enabled expert's connector via the registry. Each
-    # expert.start(bus) returns its polling thread or None if its
-    # credentials are missing — missing creds log a warning and skip,
-    # so the bot still boots without every expert configured.
+    bus = MessageBus()
+    registry = get_registry()
+
+    # Load and cache connect instances for each enabled expert.
+    from pearscarf.expert_context import build_context
+
+    for expert in registry.enabled_experts():
+        if not expert.tools_module:
+            continue
+        try:
+            tools_mod = importlib.import_module(expert.tools_module)
+            expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
+            connect = tools_mod.get_tools(expert_ctx)
+            for rt in expert.record_types:
+                registry.register_connect(rt, connect)
+            print(f"{expert.name} tools loaded.")
+        except Exception as exc:
+            print(f"{expert.name} tools failed: {exc}")
+
+    # Start an LLM agent for each expert with tools + knowledge/agent.md.
+    for expert in registry.enabled_experts():
+        connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
+        if connect is None:
+            continue
+        prompt_path = expert.knowledge_dir / "agent.md"
+        if not prompt_path.is_file():
+            continue
+        prompt = prompt_path.read_text()
+        tools = connect.get_tools()
+        expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
+
+        def _make_factory(ctx, p, t):
+            def factory(session_id: str):
+                from pearscarf.agents.expert import ExpertAgent
+                from pearscarf.tools import ToolRegistry
+                reg = ToolRegistry()
+                for tool in t:
+                    reg.register(tool)
+                return ExpertAgent(ctx=ctx, domain_prompt=p, tool_registry=reg)
+            return factory
+
+        agent_factory = _make_factory(expert_ctx, prompt, tools)
+        runner = AgentRunner(expert.name, agent_factory, bus)
+        runner.start()
+        print(f"{expert.name} agent started.")
+
+    # Start every enabled expert's ingester.
     if poll:
-        registry = get_registry()
         for expert in registry.enabled_experts():
             try:
                 thread = expert.start(bus)
@@ -197,7 +240,6 @@ def run_bot(poll: bool = False) -> None:
                 print(f"{expert.name} connector started.")
 
     # Start Retriever expert runner
-    from pearscarf.expert_context import build_context
 
     retriever_ctx = build_context("retriever", bus)
     retriever_factory = create_retriever_for_runner(ctx=retriever_ctx)
