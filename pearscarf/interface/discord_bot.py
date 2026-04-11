@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 
 import discord
 
 from pearscarf import log
 from pearscarf.storage import db
-from pearscarf.agents.runner import AgentRunner
-from pearscarf.agents.worker import create_worker_agent
 from pearscarf.bus import MessageBus
 from pearscarf.config import DISCORD_BOT_TOKEN
 
@@ -163,122 +160,17 @@ class PearscarfBot(discord.Client):
 
 def run_bot(poll: bool = False) -> None:
     from pearscarf import __version__
+    from pearscarf.interface.startup import start_system, stop_system
+
     print(f"PearScarf v{__version__}")
 
     if not DISCORD_BOT_TOKEN:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 
-    from pearscarf.experts.retriever import create_retriever_for_runner
-    from pearscarf.indexing.indexer import Indexer
-    from pearscarf.indexing.registry import get_registry
-    from pearscarf.interface.install import enforce_credentials_or_exit
+    components = start_system(poll=poll)
 
-    # Pre-startup credential check — refuses to boot if any enabled expert
-    # has missing or unfilled required env vars.
-    enforce_credentials_or_exit()
-
-    import importlib
-    from pathlib import Path
-
-    bus = MessageBus()
-    registry = get_registry()
-
-    # Load and cache connect instances for each enabled expert.
-    from pearscarf.expert_context import build_context
-
-    for expert in registry.enabled_experts():
-        if not expert.tools_module:
-            continue
-        try:
-            tools_mod = importlib.import_module(expert.tools_module)
-            expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
-            connect = tools_mod.get_tools(expert_ctx)
-            for rt in expert.record_types:
-                registry.register_connect(rt, connect)
-            print(f"{expert.name} tools loaded.")
-        except Exception as exc:
-            print(f"{expert.name} tools failed: {exc}")
-
-    # Start an LLM agent for each expert with tools + knowledge/agent.md.
-    for expert in registry.enabled_experts():
-        connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
-        if connect is None:
-            continue
-        prompt_path = expert.knowledge_dir / "agent.md"
-        if not prompt_path.is_file():
-            continue
-        prompt = prompt_path.read_text()
-        tools = connect.get_tools()
-        expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
-
-        def _make_factory(ctx, p, t):
-            def factory(session_id: str):
-                from pearscarf.agents.expert import ExpertAgent
-                from pearscarf.tools import ToolRegistry
-                reg = ToolRegistry()
-                for tool in t:
-                    reg.register(tool)
-                return ExpertAgent(ctx=ctx, domain_prompt=p, tool_registry=reg)
-            return factory
-
-        agent_factory = _make_factory(expert_ctx, prompt, tools)
-        runner = AgentRunner(expert.name, agent_factory, bus)
-        runner.start()
-        print(f"{expert.name} agent started.")
-
-    # Start every enabled expert's ingester.
-    if poll:
-        for expert in registry.enabled_experts():
-            try:
-                thread = expert.start(bus)
-            except Exception as exc:
-                print(f"{expert.name} failed to start: {exc}")
-                continue
-            if thread is None:
-                print(f"{expert.name} skipped (credentials missing).")
-            else:
-                print(f"{expert.name} connector started.")
-
-    # Start Retriever expert runner
-
-    retriever_ctx = build_context("retriever", bus)
-    retriever_factory = create_retriever_for_runner(ctx=retriever_ctx)
-    retriever_runner = AgentRunner("retriever", retriever_factory, bus)
-    retriever_runner.start()
-    print("Retriever started.")
-
-    # Start Worker runner
-    worker_ctx = build_context("worker", bus)
-
-    def worker_factory(session_id: str):
-        return create_worker_agent(ctx=worker_ctx, session_id=session_id)
-
-    worker_runner = AgentRunner("worker", worker_factory, bus)
-    worker_runner.start()
-    print("Worker agent started.")
-
-    # Start Indexer
-    indexer = Indexer()
-    indexer.start()
-    print("Indexer started.")
-
-    # Start MCP server
-    from pearscarf.mcp.mcp_server import MCPServer
-    mcp_srv = MCPServer()
-    mcp_srv.start()
-    print("MCP server started.")
-
-    # Run Discord bot
-    bot = PearscarfBot(bus)
+    bot = PearscarfBot(components.bus)
     try:
         bot.run(DISCORD_BOT_TOKEN)
     finally:
-        mcp_srv.stop()
-        indexer.stop()
-        retriever_runner.stop()
-        worker_runner.stop()
-        if linear_runner:
-            linear_runner.stop()
-        gmail_runner.stop()
-        if gmail_manager:
-            gmail_manager.close()
+        stop_system(components)
