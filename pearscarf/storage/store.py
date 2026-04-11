@@ -71,6 +71,9 @@ def save_record(
                 expert_version,
             ),
         )
+        # Dual-write to the expert's typed table if one exists
+        if metadata:
+            _dual_write(conn, record_id, record_type, metadata)
         conn.commit()
         return record_id
 
@@ -786,3 +789,168 @@ def write_full_registration(
             )
         conn.commit()
         return expert_id
+
+
+
+# --- Expert record schemas (typed tables) ---
+
+
+import hashlib as _hashlib
+
+
+_JSON_TO_PG: dict[str, str] = {
+    "string": "TEXT",
+    "integer": "INTEGER",
+    "number": "NUMERIC",
+    "boolean": "BOOLEAN",
+}
+
+# Cache: record_type -> (table_name, column_names). Populated lazily.
+_active_tables: dict[str, tuple[str, list[str]]] | None = None
+
+
+def _schema_hash(schema: dict) -> str:
+    """Deterministic hash of a JSON Schema for change detection."""
+    import json
+    raw = json.dumps(schema, sort_keys=True)
+    return _hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _version_to_suffix(version: str) -> str:
+    """Convert semver to a Postgres-safe suffix: 0.1.2 -> 0_1_2."""
+    return version.replace(".", "_")
+
+
+def create_typed_table(
+    expert_name: str,
+    record_type: str,
+    version: str,
+    schema: dict,
+) -> str:
+    """Create a versioned typed table from a JSON Schema. Returns the table name.
+
+    Table: {expert}_{type}_{version} with record_id FK to records(id)
+    plus one column per schema property. Registers in expert_record_schemas.
+    Idempotent — skips if the table already exists with the same schema hash.
+    """
+    init_db()
+    table_name = f"{expert_name}_{record_type}_{_version_to_suffix(version)}"
+    new_hash = _schema_hash(schema)
+
+    with _get_conn() as conn:
+        # Check if this exact version + schema already exists
+        row = conn.execute(
+            "SELECT schema_hash FROM expert_record_schemas "
+            "WHERE expert_name = %s AND record_type = %s AND version = %s",
+            (expert_name, record_type, version),
+        ).fetchone()
+        if row:
+            existing = dict(row) if row else {}
+            if existing.get("schema_hash") == new_hash:
+                return table_name  # already created, same schema
+
+        # Build CREATE TABLE from JSON Schema properties
+        props = schema.get("properties", {})
+        columns = ["record_id TEXT PRIMARY KEY REFERENCES records(id) ON DELETE CASCADE"]
+        for col_name, col_def in props.items():
+            pg_type = _JSON_TO_PG.get(col_def.get("type", "string"), "TEXT")
+            columns.append(f"{col_name} {pg_type}")
+
+        create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(columns)})"
+        conn.execute(create_sql)
+
+        # Register (upsert)
+        conn.execute(
+            "INSERT INTO expert_record_schemas "
+            "(expert_name, record_type, version, table_name, schema_hash) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (expert_name, record_type, version) DO UPDATE SET "
+            "table_name = EXCLUDED.table_name, schema_hash = EXCLUDED.schema_hash",
+            (expert_name, record_type, version, table_name, new_hash),
+        )
+        conn.commit()
+
+    # Invalidate cache so next save picks up the new table
+    global _active_tables
+    _active_tables = None
+
+    return table_name
+
+
+def _load_active_tables() -> dict[str, tuple[str, list[str]]]:
+    """Load the latest active typed table for each record_type.
+
+    Returns {record_type: (table_name, [column_names])}.
+    Picks the most recently created entry per (expert_name, record_type).
+    """
+    init_db()
+    result: dict[str, tuple[str, list[str]]] = {}
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT ON (expert_name, record_type) "
+            "expert_name, record_type, table_name "
+            "FROM expert_record_schemas "
+            "ORDER BY expert_name, record_type, created_at DESC"
+        ).fetchall()
+        for row in rows:
+            r = dict(row)
+            table_name = r["table_name"]
+            # Get column names from information_schema
+            cols = conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = %s AND column_name != 'record_id' "
+                "ORDER BY ordinal_position",
+                (table_name,),
+            ).fetchall()
+            col_names = [dict(c)["column_name"] for c in cols]
+            result[r["record_type"]] = (table_name, col_names)
+    return result
+
+
+def get_active_table(record_type: str) -> tuple[str, list[str]] | None:
+    """Get the active typed table for a record_type. Cached after first call."""
+    global _active_tables
+    if _active_tables is None:
+        _active_tables = _load_active_tables()
+    return _active_tables.get(record_type)
+
+
+def _dual_write(conn, record_id: str, record_type: str, metadata: dict) -> None:
+    """Write metadata fields to the expert's typed table if one exists."""
+    info = get_active_table(record_type)
+    if info is None:
+        return
+    table_name, col_names = info
+    if not col_names:
+        return
+
+    # Only write columns that exist in both metadata and the typed table
+    write_cols = [c for c in col_names if c in metadata]
+    if not write_cols:
+        return
+
+    cols_sql = ", ".join(["record_id"] + write_cols)
+    placeholders = ", ".join(["%s"] * (1 + len(write_cols)))
+    values = [record_id] + [str(metadata.get(c, "")) for c in write_cols]
+
+    conn.execute(
+        f"INSERT INTO {table_name} ({cols_sql}) VALUES ({placeholders}) "
+        f"ON CONFLICT (record_id) DO NOTHING",
+        values,
+    )
+
+
+def list_typed_tables() -> list[str]:
+    """Return all typed table names from expert_record_schemas. Used by erase_all."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT table_name FROM expert_record_schemas"
+        ).fetchall()
+        return [dict(r)["table_name"] for r in rows]
+
+
+def reset_active_table_cache() -> None:
+    """Drop the cached active tables. Called after install/update."""
+    global _active_tables
+    _active_tables = None

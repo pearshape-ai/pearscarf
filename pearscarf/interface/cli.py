@@ -548,15 +548,20 @@ def queue(ctx) -> None:
     from pearscarf.storage.db import _get_conn, init_db
     init_db()
     with _get_conn() as conn:
-        unclaimed = conn.execute(
+        row = conn.execute(
             "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NULL"
-        ).fetchone()["c"]
-        claimed = conn.execute(
+        ).fetchone()
+        unclaimed = dict(row).get("c", 0) if row else 0
+
+        row = conn.execute(
             "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NOT NULL"
-        ).fetchone()["c"]
-        oldest = conn.execute(
+        ).fetchone()
+        claimed = dict(row).get("c", 0) if row else 0
+
+        row = conn.execute(
             "SELECT MIN(queued_at) AS oldest FROM curator_queue WHERE claimed_at IS NULL"
-        ).fetchone()["oldest"]
+        ).fetchone()
+        oldest = dict(row).get("oldest") if row else None
     click.echo(f"  Unclaimed: {unclaimed}")
     click.echo(f"  Claimed:   {claimed}")
     if oldest:
@@ -735,17 +740,15 @@ def erase_all() -> None:
         vector_count = 0
 
     with _get_conn() as conn:
-        records_count = conn.execute("SELECT count(*) AS c FROM records").fetchone()["c"]
-        emails_count = conn.execute("SELECT count(*) AS c FROM emails").fetchone()["c"]
-        issues_count = conn.execute("SELECT count(*) AS c FROM issues").fetchone()["c"]
-        changes_count = conn.execute("SELECT count(*) AS c FROM issue_changes").fetchone()["c"]
+        row = conn.execute("SELECT count(*) AS c FROM records").fetchone()
+        records_count = dict(row).get("c", 0) if row else 0
 
     if node_count + vector_count + records_count == 0:
         click.echo("Nothing to do — all stores are empty.")
         return
 
     click.echo("This will DELETE:")
-    click.echo(f"  Postgres:  {records_count} records, {emails_count} emails, {issues_count} issues, {changes_count} issue_changes")
+    click.echo(f"  Postgres:  {records_count} records")
     click.echo(f"  Neo4j:     {node_count} nodes, {rel_count} relationships")
     click.echo(f"  Qdrant:    {vector_count} vectors")
     click.echo()
@@ -774,10 +777,18 @@ def erase_all() -> None:
         click.echo(f"Warning: Qdrant clear failed: {exc}")
 
     # Wipe Postgres
+    from pearscarf.storage.store import list_typed_tables
+    typed_tables = list_typed_tables()
+    import re
     with _get_conn() as conn:
-        conn.execute("TRUNCATE curator_queue, issue_changes, issues, emails, records CASCADE")
+        for t in typed_tables:
+            if re.match(r"^[a-z0-9_]+$", t):
+                conn.execute(f"TRUNCATE {t} CASCADE")
+        conn.execute("TRUNCATE curator_queue, records CASCADE")
         conn.commit()
     click.echo(f"Deleted {records_count} records from Postgres.")
+    if typed_tables:
+        click.echo(f"  Truncated {len(typed_tables)} typed table(s): {', '.join(typed_tables)}")
 
     click.echo("\nDone. All system state erased.")
     close_pool()
