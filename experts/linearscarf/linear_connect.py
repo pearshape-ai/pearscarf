@@ -447,7 +447,7 @@ class LinearConnect:
             "linear_updated_at": data.get("updated_at", ""),
         }
         return self._ctx.storage.save_record(
-            "issue", raw, content=content, metadata=metadata,
+            "linear_issue", raw, content=content, metadata=metadata,
             dedup_key=data.get("id"),
         )
 
@@ -469,7 +469,7 @@ class LinearConnect:
             "linear_history_id": change.get("id", ""),
         }
         return self._ctx.storage.save_record(
-            "issue_change", raw, content=content, metadata=metadata,
+            "linear_issue_change", raw, content=content, metadata=metadata,
             dedup_key=change.get("id"),
         )
 
