@@ -2,6 +2,7 @@
 
 ## 1.17.18
 - Generic ingester startup via manifest. `Expert.start()` now takes `ExpertContext` instead of raw `MessageBus` — the ingester module's `start(ctx)` receives the full expert contract (storage, bus, log, config). Renamed `connector_module`/`connector_path` to `ingester_module`/`ingester_path` on the Expert dataclass.
+- Env loading split by owner. Pearscarf core config loads from `env/.env` (Gmail/Linear vars removed from config.py). Expert credentials load from `env/.<name>.env` via `build_context()`, which populates both `ctx.config` and `os.environ`.
 
 ## 1.17.17
 - Centralized startup sequence into `pearscarf/interface/startup.py`. Both `psc run` (REPL) and `psc discord` now call `start_system()` / `stop_system()` instead of duplicating ~100 lines of boot logic each. Fixes stale shutdown references left over from the pre-encapsulation era.

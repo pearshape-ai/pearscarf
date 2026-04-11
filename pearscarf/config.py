@@ -1,8 +1,11 @@
 import os
+from pathlib import Path as _Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load pearscarf core env from env/.env
+_ENV_DIR = _Path(__file__).resolve().parent.parent / "env"
+load_dotenv(_ENV_DIR / ".env")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MODEL = os.getenv("MODEL", "claude-sonnet-4-5-20250929")
@@ -24,24 +27,12 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "pearscarf")
 # Qdrant vector store
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 
-# Gmail OAuth (API-based transport)
-GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "")
-GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
-GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
-GMAIL_POLL_INTERVAL = int(os.getenv("GMAIL_POLL_INTERVAL", "300"))
-
-# Linear
-LINEAR_API_KEY = os.getenv("LINEAR_API_KEY", "")
-LINEAR_POLL_INTERVAL = int(os.getenv("LINEAR_POLL_INTERVAL", "300"))
-LINEAR_TEAM_ID = os.getenv("LINEAR_TEAM_ID", "")
-
 # Neo4j (knowledge graph)
 NEO4J_URL = os.getenv("NEO4J_URL", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 
 # Experts
-from pathlib import Path as _Path
 EXPERTS_DIR = os.getenv(
     "EXPERTS_DIR",
     str(_Path(__file__).resolve().parent.parent / "experts"),
