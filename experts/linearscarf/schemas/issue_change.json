@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "issue_record_id": {"type": "string"},
+    "field": {"type": "string"},
+    "from_value": {"type": "string"},
+    "to_value": {"type": "string"},
+    "linear_history_id": {"type": "string"},
+    "changed_by": {"type": "string"},
+    "changed_at": {"type": "string"}
+  },
+  "required": ["issue_record_id", "field", "changed_at"]
+}
