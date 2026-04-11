@@ -30,139 +30,22 @@ def cli() -> None:
               help="Start all enabled expert connectors (each requires its own credentials)")
 def run(poll: bool) -> None:
     """Start the full system: worker + experts + REPL."""
-    import importlib
-
-    from pearscarf.agents.runner import AgentRunner
-    from pearscarf.agents.worker import create_worker_agent
-    from pearscarf.bus import MessageBus
-    from pearscarf.expert_context import build_context
-    from pearscarf.experts.retriever import create_retriever_for_runner
-    from pearscarf.indexing.indexer import Indexer
-    from pearscarf.indexing.registry import get_registry
-    from pearscarf.interface.install import enforce_credentials_or_exit
     from pearscarf.interface.repl import SessionRepl
+    from pearscarf.interface.startup import start_system, stop_system
 
     click.echo(f"PearScarf v{__version__}")
 
-    # Pre-startup credential check — refuses to boot if any enabled expert
-    # has missing or unfilled required env vars. Runs regardless of --poll
-    # because the LLM agent layer can still call expert tools.
-    enforce_credentials_or_exit()
-
-    bus = MessageBus()
-    registry = get_registry()
-
-    # Load and cache connect instances for each enabled expert.
-    # The ingest tool uses these to delegate record processing.
-    for expert in registry.enabled_experts():
-        if not expert.tools_module:
-            continue
-        try:
-            tools_mod = importlib.import_module(expert.tools_module)
-            expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
-            connect = tools_mod.get_tools(expert_ctx)
-            for rt in expert.record_types:
-                registry.register_connect(rt, connect)
-            sys.stdout.write(f"{expert.name} tools loaded.\r\n")
-            sys.stdout.flush()
-        except Exception as exc:
-            sys.stdout.write(f"{expert.name} tools failed: {exc}\r\n")
-            sys.stdout.flush()
-
-    # Start an LLM agent (ExpertAgent + AgentRunner) for each expert that
-    # has tools and a knowledge/agent.md prompt. The agent is reactive —
-    # it wakes on bus messages and uses the expert's tools to act.
-    for expert in registry.enabled_experts():
-        connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
-        if connect is None:
-            continue
-        prompt_path = expert.knowledge_dir / "agent.md"
-        if not prompt_path.is_file():
-            continue
-        prompt = prompt_path.read_text()
-        tools = connect.get_tools()
-        expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
-
-        def _make_factory(ctx, p, t):
-            def factory(session_id: str):
-                from pearscarf.agents.expert import ExpertAgent
-                from pearscarf.tools import ToolRegistry
-                reg = ToolRegistry()
-                for tool in t:
-                    reg.register(tool)
-                return ExpertAgent(ctx=ctx, domain_prompt=p, tool_registry=reg)
-            return factory
-
-        agent_factory = _make_factory(expert_ctx, prompt, tools)
-        runner = AgentRunner(expert.name, agent_factory, bus)
-        runner.start()
-        sys.stdout.write(f"{expert.name} agent started.\r\n")
+    def log_fn(msg: str) -> None:
+        sys.stdout.write(msg + "\r\n")
         sys.stdout.flush()
 
-    # Start every enabled expert's ingester via the registry.
-    if poll:
-        for expert in registry.enabled_experts():
-            try:
-                thread = expert.start(bus)
-            except Exception as exc:
-                sys.stdout.write(f"{expert.name} failed to start: {exc}\r\n")
-                sys.stdout.flush()
-                continue
-            if thread is None:
-                sys.stdout.write(
-                    f"{expert.name} skipped (credentials missing).\r\n"
-                )
-            else:
-                sys.stdout.write(f"{expert.name} connector started.\r\n")
-            sys.stdout.flush()
+    components = start_system(poll=poll, log_fn=log_fn)
 
-    # Start Retriever expert runner
-    retriever_ctx = build_context("retriever", bus)
-    retriever_factory = create_retriever_for_runner(ctx=retriever_ctx)
-    retriever_runner = AgentRunner("retriever", retriever_factory, bus)
-    retriever_runner.start()
-    sys.stdout.write("Retriever started.\r\n")
-    sys.stdout.flush()
-
-    # Start Worker runner
-    worker_ctx = build_context("worker", bus)
-
-    def worker_factory(session_id: str):
-        return create_worker_agent(ctx=worker_ctx, session_id=session_id)
-
-    worker_runner = AgentRunner("worker", worker_factory, bus)
-    worker_runner.start()
-    sys.stdout.write("Worker agent started.\r\n")
-    sys.stdout.flush()
-
-    # Start Indexer
-    indexer = Indexer()
-    indexer.start()
-    sys.stdout.write("Indexer started.\r\n")
-    sys.stdout.flush()
-
-    # Start MCP server
-    from pearscarf.mcp.mcp_server import MCPServer
-    from pearscarf.config import MCP_PORT
-    mcp_srv = MCPServer()
-    mcp_srv.start()
-    sys.stdout.write(f"MCP server started on port {MCP_PORT}.\r\n")
-    sys.stdout.flush()
-
-    # Run REPL in main thread
-    repl = SessionRepl(bus)
+    repl = SessionRepl(components.bus)
     try:
         repl.run()
     finally:
-        mcp_srv.stop()
-        indexer.stop()
-        retriever_runner.stop()
-        worker_runner.stop()
-        if linear_runner:
-            linear_runner.stop()
-        gmail_runner.stop()
-        if gmail_manager:
-            gmail_manager.close()
+        stop_system(components)
 
 
 @cli.command()
