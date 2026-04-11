@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -18,22 +19,30 @@ from pearscarf.config import (
 )
 
 _pool: ConnectionPool | None = None
+_pool_lock = threading.Lock()
 
 
 def _get_pool() -> ConnectionPool:
     global _pool
-    if _pool is None:
+    if _pool is not None:
+        return _pool
+    with _pool_lock:
+        if _pool is not None:
+            return _pool
         conninfo = (
             f"host={POSTGRES_HOST} port={POSTGRES_PORT} "
-            f"dbname={POSTGRES_DB} user={POSTGRES_USER} password={POSTGRES_PASSWORD}"
+            f"dbname={POSTGRES_DB} user={POSTGRES_USER} password={POSTGRES_PASSWORD} "
+            f"connect_timeout=5"
         )
         _pool = ConnectionPool(
             conninfo,
-            min_size=2,
+            min_size=1,
             max_size=10,
+            timeout=10.0,
             kwargs={"row_factory": dict_row, "autocommit": False},
-            open=True,
+            open=False,
         )
+        _pool.open(wait=False)
         atexit.register(close_pool)
     return _pool
 
@@ -46,7 +55,7 @@ def _get_conn():
 
 
 def close_pool() -> None:
-    """Explicitly close the connection pool. Prevents PythonFinalizationError on exit."""
+    """Explicitly close the connection pool."""
     global _pool
     if _pool is not None:
         _pool.close()
@@ -91,23 +100,21 @@ CREATE TABLE IF NOT EXISTS records (
     source TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     raw TEXT,
+    content TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    dedup_key TEXT,
+    expert_name TEXT,
+    expert_version TEXT,
     indexed BOOLEAN NOT NULL DEFAULT FALSE,
     classification TEXT,
     classification_reason TEXT,
-    human_context TEXT
+    human_context TEXT,
+    resolution_pending JSONB,
+    resolution_status TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_type ON records(type);
 CREATE INDEX IF NOT EXISTS idx_records_indexed ON records(indexed);
-
-ALTER TABLE records ADD COLUMN IF NOT EXISTS resolution_pending JSONB;
-ALTER TABLE records ADD COLUMN IF NOT EXISTS resolution_status TEXT;
-ALTER TABLE records ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE records ADD COLUMN IF NOT EXISTS dedup_key TEXT;
-ALTER TABLE records ADD COLUMN IF NOT EXISTS expert_name TEXT;
-ALTER TABLE records ADD COLUMN IF NOT EXISTS expert_version TEXT;
-ALTER TABLE records ADD COLUMN IF NOT EXISTS content TEXT;
-
 CREATE INDEX IF NOT EXISTS idx_records_dedup ON records(dedup_key) WHERE dedup_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS emails (
@@ -138,10 +145,6 @@ CREATE TABLE IF NOT EXISTS issues (
     linear_created_at TIMESTAMPTZ,
     linear_updated_at TIMESTAMPTZ
 );
-
--- Migration: add description and comments to existing issues tables
-ALTER TABLE issues ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE issues ADD COLUMN IF NOT EXISTS comments JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_issues_linear_id ON issues(linear_id);
 CREATE INDEX IF NOT EXISTS idx_issues_identifier ON issues(identifier);
@@ -175,13 +178,7 @@ CREATE TABLE IF NOT EXISTS mcp_keys (
     revoked BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- Expert registration. Populated by `pearscarf install` and friends.
--- The registry reads from here (filtered to enabled rows) and falls back
--- to scanning experts/ when no rows are present.
---
--- One row per (name, version). Multiple versions of the same expert may
--- coexist; at most one of them is enabled at a time. The enabled row is
--- the "active" version of that expert.
+-- Expert registration
 CREATE TABLE IF NOT EXISTS experts (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -197,7 +194,6 @@ CREATE TABLE IF NOT EXISTS experts (
 CREATE INDEX IF NOT EXISTS idx_experts_name ON experts(name);
 CREATE INDEX IF NOT EXISTS idx_experts_source_type ON experts(source_type);
 
--- Entity types declared by an expert at install time. Cascades on uninstall.
 CREATE TABLE IF NOT EXISTS entity_types (
     expert_id INTEGER NOT NULL REFERENCES experts(id) ON DELETE CASCADE,
     type_name TEXT NOT NULL,
@@ -205,7 +201,6 @@ CREATE TABLE IF NOT EXISTS entity_types (
     PRIMARY KEY (expert_id, type_name)
 );
 
--- Identifier patterns declared by an expert at install time. Cascades on uninstall.
 CREATE TABLE IF NOT EXISTS identifier_patterns (
     id SERIAL PRIMARY KEY,
     expert_id INTEGER NOT NULL REFERENCES experts(id) ON DELETE CASCADE,
@@ -216,9 +211,6 @@ CREATE TABLE IF NOT EXISTS identifier_patterns (
 
 CREATE INDEX IF NOT EXISTS idx_identifier_patterns_scope ON identifier_patterns(scope);
 
--- Tracks versioned typed tables created from expert schemas.
--- One row per (expert_name, record_type, version). The table_name is the
--- actual Postgres table that holds structured records for that version.
 CREATE TABLE IF NOT EXISTS expert_record_schemas (
     expert_name TEXT NOT NULL,
     record_type TEXT NOT NULL,
@@ -231,10 +223,21 @@ CREATE TABLE IF NOT EXISTS expert_record_schemas (
 """
 
 
+_db_initialized = False
+_db_init_lock = threading.Lock()
+
+
 def init_db() -> None:
-    with _get_conn() as conn:
-        conn.execute(_SCHEMA)
-        conn.commit()
+    global _db_initialized
+    if _db_initialized:
+        return
+    with _db_init_lock:
+        if _db_initialized:
+            return
+        with _get_conn() as conn:
+            conn.execute(_SCHEMA)
+            conn.commit()
+        _db_initialized = True
 
 
 def _now() -> str:
