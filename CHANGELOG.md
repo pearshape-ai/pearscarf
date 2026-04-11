@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.18.0
+- Expert Encapsulation complete. Three experts (gmailscarf, linearscarf, githubscarf) running against the new contract — manifest-driven install, ExpertContext, typed tables, layered prompt composition. Zero expert-specific code in pearscarf core.
+- Built githubscarf from scratch as the first greenfield expert. Introduces the `repository` entity type, `github_pr` and `github_issue` record types, GitHub REST API tools and polling ingester.
+- Linearscarf record types prefixed: `issue` → `linear_issue`, `issue_change` → `linear_issue_change`. Avoids collision across experts.
+- Record IDs now use `{type}_{uuid4_short}` (e.g. `email_3f2a1b4c`) instead of sequential counters. Globally unique, no DB query per save.
+- Removed hardcoded email/issue/issue_change tables from db.py — experts own their schemas via typed tables created at install time.
+
 ## 1.17.19
 - Fixed connection pool deadlock: `init_db()` was called on every DB operation, grabbing a separate connection for DDL while another held row locks. Now runs once at startup. Pool configured with non-blocking open and connect timeout to fail fast instead of hanging.
 - Cleaned up DB schema — all `ALTER TABLE` migration statements folded into clean `CREATE TABLE` definitions.

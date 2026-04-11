@@ -69,7 +69,7 @@ class ClassifyRecordTool(BaseTool):
         "properties": {
             "record_id": {
                 "type": "string",
-                "description": "The record ID to classify, e.g. 'email_001'",
+                "description": "The record ID to classify, e.g. 'email_3f2a1b4c'",
             },
             "classification": {
                 "type": "string",

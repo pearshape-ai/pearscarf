@@ -13,14 +13,9 @@ from pearscarf.storage.db import _get_conn, _now, init_db
 
 
 def _next_record_id(record_type: str) -> str:
-    with _get_conn() as conn:
-        result = conn.execute(
-            "SELECT COUNT(*) AS c FROM records WHERE type = %s",
-            (record_type,),
-        ).fetchone()
-        row = dict(result) if result else {}
-        num = row.get("c", 0) + 1
-        return f"{record_type}_{num:03d}"
+    import uuid
+
+    return f"{record_type}_{uuid.uuid4().hex[:8]}"
 
 
 def save_record(
