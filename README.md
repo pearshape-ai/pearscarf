@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/architecture.md">Architecture</a> · <a href="docs/data-model.md">Data Model</a> · <a href="docs/query-surface.md">Query Surface</a> · <a href="docs/eval-metrics.md">Eval Metrics</a> · <a href="CHANGELOG.md">Changelog</a>
+  <a href="docs/getting-started.md">Getting Started</a> · <a href="docs/architecture.md">Architecture</a> · <a href="docs/expert_guide.md">Building an Expert</a> · <a href="docs/usage.md">Usage</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 ---
@@ -97,9 +97,12 @@ psc discord --poll             # Discord frontend + ingesters
 
 ## Docs
 
+- [Getting Started](docs/getting-started.md) — installation, credentials, first run
 - [Architecture](docs/architecture.md) — system design, expert contract, startup flow, prompt composition
-- [Data Model](docs/data-model.md) — entities, fact types, full schema, confidence values, bi-temporal model
-- [Query Surface](docs/query-surface.md) — all MCP tools, inputs, outputs
+- [Building an Expert](docs/expert_guide.md) — step-by-step guide to creating a new expert
+- [Usage](docs/usage.md) — full command reference
+- [Data Model](docs/data-model.md) — entities, fact types, full schema, bi-temporal model
+- [Query Surface](docs/query-surface.md) — MCP tools reference
 - [Eval Metrics](docs/eval-metrics.md) — extraction precision, recall, entity resolution accuracy
 - [Changelog](CHANGELOG.md)
 

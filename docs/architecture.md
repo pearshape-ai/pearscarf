@@ -60,7 +60,7 @@ experts/gmailscarf/
 │   └── email.json         # JSON Schema (draft-07) for the email record type
 ├── knowledge/
 │   ├── agent.md           # LLM agent system prompt
-│   ├── extraction.md      # Layer 3 extraction guidance
+│   ├── extraction.md      # source-specific extraction guidance
 │   ├── entities/          # new entity type definitions (if any)
 │   └── records/
 │       └── email.md       # record type documentation
@@ -100,27 +100,17 @@ Both `psc run` (REPL) and `psc discord` call `start_system()` then run their fro
 
 ### Registry
 
-The registry discovers installed experts from the `experts` DB table and builds runtime indexes:
+The registry discovers installed experts from the `experts` DB table and builds runtime indexes. It resolves which expert owns a given source type or record type, caches connect instances for tool routing, and assembles extraction prompts.
 
-- `get(source_type)` → expert
-- `get_by_record_type(record_type)` → expert
-- `get_connect(record_type)` → cached connect instance
-- `core_prompt()` → Layer 1 extraction rules (cached)
-- `schema_fragment()` → Layer 2 entity types including expert-declared types (cached)
-- `compose_prompt(record)` → Layer 1 + Layer 2 + Layer 3
+### Extraction prompts
 
-### Prompt composition
+When the indexer processes a record, the extraction prompt is composed from three sources:
 
-```
-Layer 1: core/extraction.md + core/facts.md + core/output_format.md
-         → universal rules, never changes
+- **Universal rules** — how to extract entities and facts, edge labels, output format. Shared across all record types. Lives in `pearscarf/knowledge/core/`.
+- **Entity types** — what kinds of things to look for (person, company, project, event, plus any types declared by experts like repository). Automatically includes new types when an expert is installed.
+- **Source-specific guidance** — what to extract from *this* source's records. Each expert ships an `extraction.md` that tells the LLM what matters in emails vs issues vs PRs, and what to ignore.
 
-Layer 2: core/entities/*.md + expert-declared entity files
-         → entity type definitions (person, company, project, event, repository, ...)
-
-Layer 3: {expert}/knowledge/extraction.md
-         → source-specific guidance (what to extract from emails vs issues vs PRs)
-```
+This means installing a new expert automatically extends what the system can extract — no manual prompt editing.
 
 ### Install and lifecycle
 
@@ -174,7 +164,7 @@ pearscarf/
 │   ├── terminal.py          # Raw terminal I/O
 │   └── discord_bot.py       # Discord bot with thread-per-session
 ├── knowledge/               # Layered prompts for extraction, agents, curation
-│   ├── core/                # Layer 1 + Layer 2 base entity types
+│   ├── core/                # universal extraction rules + base entity types
 │   ├── ingest/              # Ingest expert prompts
 │   ├── entity_resolution/   # Resolution LLM judge prompt
 │   ├── curator/             # Curator judge prompts
@@ -283,7 +273,7 @@ The indexer processes records into a knowledge graph. All graph data lives in Ne
 Background daemon polling `records WHERE indexed = FALSE AND classification = 'relevant'`. For each record:
 
 1. Build content from `records.content` column
-2. Load extraction prompt via `compose_prompt(record)` — Layer 1 + 2 + 3
+2. Load extraction prompt via `compose_prompt(record)` — universal rules + entity types + source guidance
 3. LLM extraction → entities + facts
 4. Entity resolution (exact → metadata → alias → LLM judge)
 5. Write fact-edges to Neo4j
@@ -317,3 +307,11 @@ Read-only query surface via FastMCP over HTTP/SSE. 10 tools: 5 primitive + 5 con
 - **`psc run --poll` / `psc discord --poll`** — also starts expert ingesters
 - **`psc expert ingest`** — standalone file-based ingestion
 - **`psc chat`** — direct agent chat without the session bus
+
+## See also
+
+- [Getting Started](getting-started.md) — installation, credentials, first run
+- [Building an Expert](expert_guide.md) — step-by-step guide to creating a new expert
+- [Context Query](context_query.md) — read-only data access layer reference
+- [Data Model](data-model.md) — entities, facts, graph schema
+- [Usage](usage.md) — full command reference
