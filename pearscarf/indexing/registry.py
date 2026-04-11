@@ -40,26 +40,26 @@ class Expert:
     path: Path
     knowledge_dir: Path
     extraction_path: Path | None
-    connector_path: Path | None
-    connector_module: str
+    ingester_path: Path | None
+    ingester_module: str
     tools_module: str = ""
     new_entity_types: list[dict] = field(default_factory=list)
     record_types: list[str] = field(default_factory=list)
     enabled: bool = True
 
-    def start(self, bus: Any) -> threading.Thread | None:
-        """Import the connector/ingester entry point and call its start(bus).
+    def start(self, ctx: Any) -> threading.Thread | None:
+        """Import the ingester entry point and call its start(ctx).
 
         Returns whatever the module returns — typically a polling thread,
-        or None if credentials are missing or no ingester is declared.
+        or None if no ingester is declared.
         """
-        if not self.connector_module:
+        if not self.ingester_module:
             return None
-        module = importlib.import_module(self.connector_module)
+        module = importlib.import_module(self.ingester_module)
         start_fn = getattr(module, "start", None)
         if start_fn is None:
             return None
-        return start_fn(bus)
+        return start_fn(ctx)
 
 
 class Registry:
@@ -157,16 +157,14 @@ class Registry:
 
         knowledge_dir = package_dir / "knowledge"
         extraction_md = knowledge_dir / "extraction.md"
-        # Resolve the ingester/connector entry point. New manifests use
-        # "ingester"; legacy manifests use "connector". Either resolves to
-        # a module with a start() function.
-        entry_rel = data.get("ingester") or data.get("connector")
-        connector_path: Path | None = None
-        connector_module = ""
+        # Resolve the ingester entry point — a module with a start(ctx) function.
+        entry_rel = data.get("ingester")
+        ingester_path: Path | None = None
+        ingester_module = ""
         if entry_rel:
-            connector_path = package_dir / entry_rel
+            ingester_path = package_dir / entry_rel
             entry_no_ext = Path(entry_rel).with_suffix("")
-            connector_module = (
+            ingester_module = (
                 f"{name}." + entry_no_ext.as_posix().replace("/", ".")
             )
 
@@ -185,8 +183,8 @@ class Registry:
             path=package_dir,
             knowledge_dir=knowledge_dir,
             extraction_path=extraction_md if extraction_md.is_file() else None,
-            connector_path=connector_path,
-            connector_module=connector_module,
+            ingester_path=ingester_path,
+            ingester_module=ingester_module,
             tools_module=tools_module,
             new_entity_types=list(data.get("new_entity_types") or []),
             record_types=[str(rt) for rt in (data.get("record_types") or [])],

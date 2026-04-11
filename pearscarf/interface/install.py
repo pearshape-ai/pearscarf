@@ -190,8 +190,7 @@ def stage_connector(ctx: ValidationContext) -> StageResult:
     _stage("Stage 4 — entry points")
     assert ctx.package_dir is not None
 
-    # Check ingester entry point (new manifests use "ingester", legacy use "connector")
-    ingester_rel = ctx.manifest.get("ingester") or ctx.manifest.get("connector")
+    ingester_rel = ctx.manifest.get("ingester")
     if ingester_rel:
         ingester_path = ctx.package_dir / ingester_rel
         if not ingester_path.is_file():
