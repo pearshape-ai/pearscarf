@@ -318,8 +318,16 @@ class SaveEmailTool(BaseTool):
             "subject": kwargs["subject"],
             "received_at": kwargs.get("received_at", ""),
         }
+        content = (
+            f"From: {kwargs['sender']}\n"
+            f"To: {kwargs.get('recipients', '')}\n"
+            f"Subject: {kwargs['subject']}\n"
+            f"Date: {kwargs.get('received_at', '')}\n\n"
+            f"{kwargs['body']}"
+        )
         rid = self._connect._ctx.storage.save_record(
-            "email", raw, metadata, dedup_key=kwargs.get("message_id"),
+            "email", raw, content=content, metadata=metadata,
+            dedup_key=kwargs.get("message_id"),
         )
         if rid is None:
             return "Duplicate email — already stored."
