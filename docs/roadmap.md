@@ -1,75 +1,73 @@
-# Roadmap
+# PearScarf Roadmap
 
-PearScarf is a self-improving, reality-aligned context engine for teams of agents. Together, these agents become the operational backbone for companies.
+> For the engineering-oriented version of this roadmap, see [roadmap-eng.md](roadmap-eng.md). For the previous version of this roadmap, see [roadmap-v1.md](roadmap-v1.md).
 
-## Temporal Entity Graph
+## What it is
 
-The graph is the connective tissue of the system. Every piece of data — emails, issues, knowledge — gets decomposed into entities and facts that evolve over time. Entities are nodes. Facts are labeled, directed edges between them, carrying temporal metadata and full source provenance.
+The people in a company hold the connections in their heads. Their agents don't.
 
-- ~~**Facts as edges** — entities and Day nodes are the only node types. Facts are categorized edges with temporal metadata and source references~~ (done — v1.8.x)
-- **Entity extraction** — runs on every incoming record, extracts entities and categorized facts with confidence scores, driven by an editable prompt. Three edge labels cover the operational world: organizational attachments, claims and assertions, and observed state transitions. Every fact carries event time, transaction time, confidence, and a direct link back to the source record.
-- **Entity resolution** — the hardest problem. Matching different surface forms of the same real-world entity to one node. Alias accumulation, confidence scoring, human-in-the-loop confirmation when uncertain. Entities get richer over time as more records reference them.
-- **Verification & Augmentation Agent** — a separate async agent that runs outside the write path. Resolves ambiguous facts where two conflicting claims exist with equal recency. Moves inferred facts toward verified by seeking corroborating sources. Enriches entity records with missing data from external sources. Flags irresolvable cases for human review. This is the self-improvement loop — the write path is fast and non-blocking, reality-alignment deepens over time.
-- **Ontology agent** — handles uncertain entity types and fact categories via human-in-the-loop, updates the extraction prompt from human feedback, runs evals to verify improvements don't regress quality. The system learns what matters in your world and gets better at extracting it.
-- **Safety controls** — staging before graph commits, human-in-the-loop early on, nightly backups.
+PearScarf is a context engine for agent teams. It watches your operational data sources — email, issues, pull requests — extracts the entities and facts that matter, and maintains a shared knowledge graph that any agent can query. One call returns everything known about a person, deal, or project: what was said, who said it, when, and where. Two hundred tokens instead of ten thousand.
 
-## Structured Data Store
+The endgame: a shared memory layer that improves itself. It starts by observing. Then it verifies. Then it learns what to look for. Humans stay in control throughout.
 
-The graph captures relationships and narrative. The structured store captures the current state of things that need to be precise and queryable — numbers, statuses, pipeline stages, financial transactions. Both are fed from the same extraction step, so they stay in sync without separate pipelines.
+---
 
-- **Current-state tables** — maintain precise, queryable business data alongside the temporal graph. Same extraction feeds both.
-- **Domain tables** — company metrics, pipeline, customer profiles, contacts — human-defined schemas, agent-populated.
-- **Event sourcing** — EXPLORE appending state changes as events so structured data also has temporal history.
+## What's done
 
-## Extraction Quality & Eval
+**Knowledge graph** — PearScarf builds a structured record of your business world as it observes your tools. People, companies, projects, deals — and the facts connecting them: who works where, who committed to what, what changed, what was said. Every fact traces back to the source record it came from. Nothing is ever deleted; the full history of what the system knew and when is always preserved.
 
-Everything depends on extraction quality. The extraction prompt, fact categories, entity normalization, and automated record handling all need to be proven against real data with structured evaluation — not eyeballing. See [Eval Metrics](eval-metrics.md) for the metric definitions, tiers, and ground truth schema.
+**Correct timelines** — PearScarf tracks both when something happened and when it learned about it. These can diverge — an email forwarded today about a January decision lands in January in the graph, not today. Records can arrive out of order and the timeline stays correct.
 
-- **Synthetic test corpus** — generated emails and issues covering edge cases: multi-party threads, entity name variations, contradicting facts, cross-source references, automated notifications. Separate repo with generation scripts.
-- **Ground truth annotations** — expected entities and facts for each test record, manually verified.
-- ~~**Eval harness** — run extraction against the corpus, diff against expected output, score per entity type and per fact category. Precision, recall, entity resolution accuracy.~~ (done — v1.10.0)
-- **Regression testing** — every prompt change runs the full eval. No change ships if scores drop.
+**Entity resolution** — "Michael", "M. Chen", "michael@acme.com", and "the VP of Engineering at Acme" all refer to the same person. PearScarf matches surface forms to known entities as records arrive, accumulating aliases over time. When the system isn't confident, it defers to a human rather than merging the wrong things.
 
-## Linear Integration
+**Source integrations** — PearScarf connects to your tools through expert agents — self-contained integrations that each own their connection, know what their data means, and can act on it. Three ship out of the box: Gmail, Linear, and GitHub. Adding a new source doesn't require changes to PearScarf core.
 
-Second data source to prove the system works beyond email. Issues flow through the same extraction pipeline, producing entities that connect to email-derived entities through the graph.
+**Graph maintenance** — a background process keeps the graph semantically clean over time: equivalent facts that say the same thing get merged, commitments whose deadlines have passed get flagged, and facts gain confidence as more sources corroborate them. Structurally correct at write time; semantically clean as the curator runs.
 
-- ~~**Linear expert agent** — second data source via direct API, validates the architecture works across heterogeneous data~~ (done — v1.6.x)
-- ~~**Shared pipeline** — issues feed through the same extraction → graph + vector store~~ (done — v1.6.2)
-- **Cross-source entity resolution** — an email mentioning "Acme integration" connects to a Linear issue about "Acme API Integration" through the same graph entity. Depends on entity resolution work above.
+**Agent query surface** — any MCP-compatible agent can connect to PearScarf and ask questions: who is this person, what's the current state of this deal, what commitments are outstanding, what's blocking this project. Structured answers, not raw records.
 
-## Framework & Plugin Architecture
+**Eval pipeline** — extraction quality is measured automatically against ground truth datasets. Every change can be tested before it ships. The system knows when it's getting better or worse, and regressions are visible across versions.
 
-PearScarf becomes a framework where expert agents are self-contained plugins. Each plugin brings its own connection, schema, extraction semantics, polling logic, and tools. PearScarf core handles the graph, extraction pipeline, retriever, entity resolution, and Day nodes. Adding a new data source means writing a plugin, not forking the project.
+---
 
-- **Plugin interface** — define the contract an expert agent must implement: connection config, record schema, content builder, polling logic, tools.
-- **Expert agent packages** — Gmail and Linear become the reference implementations of the plugin interface.
-- **Plugin discovery and registration** — drop a plugin in, PearScarf picks it up, starts polling, feeds extraction.
-- **Agents generating agents** — an agent can create a new expert agent plugin from a data source description. The system expands its own capabilities.
+## In progress
 
-## Agentic Framework Integrations
+**Entity resolution quality** — the hardest problem in the system. The same real-world entity gets referred to in many ways across many sources, and getting those references to reliably collapse to one node requires significant tuning work. One missed merge creates divergent fact trails that compound. This is the highest-leverage work right now.
 
-PearScarf is the context layer underneath any agent framework. Agents from any framework query PearScarf for context instead of connecting to raw data sources individually.
+---
 
-- **MCP server** — PearScarf exposes a read-only query surface via MCP. Two layers: a primitive layer for direct, composable graph queries, and a convenience layer for the most common multi-call patterns collapsed into one. Any MCP-compatible agent can consume it.
-- **OpenClaw integration** — PearScarf as shared memory for OpenClaw agents. External systems are the shared bus — PearScarf observes, OpenClaw acts.
-- **LangGraph / other frameworks** — PearScarf as a tool provider. Same MCP interface, different consumers.
+## What's next
 
-## Trust & Human Control
+**Extraction quality** — the graph is only as good as what gets extracted. Iterating on prompts against a ground truth corpus, testing every change, tightening the feedback loop. Better extraction → better facts → better context → better agent decisions.
 
-This is not a separate phase of work — it's a design principle that runs through everything. Every feature is built with the assumption that humans need full visibility and control before they'll trust an autonomous system with their data.
+**Cross-source entity resolution** — the same entity gets named differently in email, issues, and pull requests. "Acme integration", "Acme API Integration", and "acme-api-client" should resolve to one node. Teaching the resolver to reason across sources, not just within them.
 
-**The goal: humans have 100% control, so they develop at least 80% trust.**
+**Conversation continuity** — agents talking to PearScarf currently start a fresh conversation every time. Sessions should persist across turns so the context of what was already discussed carries forward.
 
-Trust is earned through:
+**Real-time messaging** — the current internal message bus works but is too slow for production use. Replacing it is a prerequisite for reliable real-time behavior and for external agent connectivity.
 
-- **Provenance** — every fact traces back to its source record. You can always answer "where did this come from" and "why does the system believe this." Facts are extracted close to the source text — never summarised, never paraphrased — to keep hallucination surface small.
-- **Temporal transparency** — nothing is silently overwritten. Facts are staled and pointed to their replacement, not deleted. The full history of what the system believed and when is preserved and queryable.
-- **Confidence surfacing** — four confidence levels: inferred from context, explicitly stated in a record, verified by an authoritative source, retracted as incorrect. Consumers know what to trust and why.
-- **Observability** — every LLM call, every graph write, every query is traced. The system shows its work.
-- **Human-in-the-loop at every uncertain boundary** — triage (is this record relevant?), entity resolution (are these the same person?), graph correction (that fact is wrong), ontology updates (start tracking this new entity type). The system asks when it's not confident.
-- **Graph correction loop** — humans can tell the system "that's wrong" through natural language. The worker invalidates the edge, records the correction, and the verification agent learns from it.
-- **Audit log** — a queryable log of every graph mutation. What changed, when, triggered by what record, confirmed by human or auto-applied.
-- **Regression-tested extraction** — prompt changes are evaluated against a ground truth corpus before shipping. The system doesn't silently get worse.
+---
 
-If people can't understand why the system "believes" what it "believes", they won't use it or let their agents use it. If they can't correct it when it's wrong, they won't trust it. PearScarf is built from the ground up with the conviction that transparency and human control are not features — they're prerequisites.
+## Horizon
+
+**Verification and augmentation** — a separate agent that runs asynchronously and never blocks ingestion. It handles conflicts the write path can't resolve, seeks corroboration from external sources to upgrade uncertain facts toward confirmed, enriches entity records with missing data, and escalates genuinely irresolvable cases to a human. This is the self-improvement loop.
+
+**Graph correction** — humans say "that's wrong" and the system acts on it: the fact is invalidated, the correction is recorded with provenance, and the pattern feeds back into future extraction. The graph learns from being wrong.
+
+**Ontology learning** — today PearScarf extracts what matches its current understanding of the world. The ontology agent closes that loop: it learns what entity types and relationship categories matter for your specific deployment from human feedback, then updates extraction to match.
+
+**Multi-agent backbone** — the longer arc is PearScarf as pure memory infrastructure: expert agents running anywhere, in any language, connecting via a standard protocol to share a single context layer. Records pushed in, context queried out. The architecture points here; the timing is post-MVP.
+
+**Agents generating agents** — an agent that creates a new source integration from a description of the data source. The system expands its own coverage.
+
+---
+
+## Design principles
+
+**Provenance** — every fact traces back to its source record. You can always answer "where did this come from."
+
+**Temporal transparency** — nothing silently overwritten. The full history of what the system believed and when is always preserved and queryable.
+
+**Human control** — human-in-the-loop at every uncertain boundary. The system asks when it's not confident rather than guessing.
+
+**Observability** — every extraction and graph write is traced. The system shows its work.
