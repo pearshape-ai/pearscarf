@@ -155,7 +155,30 @@ def ingest(seed: str | None, record: str | None, record_type: str | None) -> Non
         preview = result[:200] + "..." if len(result) > 200 else result
         click.echo(click.style(f"  [result] {name}", fg="green") + f": {preview}")
 
+    import importlib
+
+    from pearscarf.indexing.registry import get_registry
+
     bus = MessageBus()
+    registry = get_registry()
+
+    # Standalone command — not connected to a running psc instance.
+    # Must load expert connects in-process so the ingest tool can
+    # delegate record processing. Duplicates the connect-loading from
+    # start_system(); ideally this command would talk to the running
+    # system's bus instead.
+    for expert in registry.enabled_experts():
+        if not expert.tools_module:
+            continue
+        try:
+            tools_mod = importlib.import_module(expert.tools_module)
+            expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
+            connect = tools_mod.get_tools(expert_ctx)
+            for rt in expert.record_types:
+                registry.register_connect(rt, connect)
+        except Exception as exc:
+            click.echo(f"  {expert.name} tools failed: {exc}")
+
     ctx = build_context("ingest_expert", bus)
     agent = create_ingest_expert(
         ctx=ctx,
