@@ -52,59 +52,55 @@ def start_system(poll: bool = False, log_fn=None) -> SystemComponents:
     registry = get_registry()
     components = SystemComponents(bus=bus)
 
-    # --- Load and cache connect instances ---
+    # --- Boot each expert: tools, LLM agent, ingester ---
     for expert in registry.enabled_experts():
-        if not expert.tools_module:
-            continue
-        try:
-            tools_mod = importlib.import_module(expert.tools_module)
-            expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
-            connect = tools_mod.get_tools(expert_ctx)
-            for rt in expert.record_types:
-                registry.register_connect(rt, connect)
-            log_fn(f"{expert.name} tools loaded.")
-        except Exception as exc:
-            log_fn(f"{expert.name} tools failed: {exc}")
-
-    # --- Start expert LLM agents ---
-    for expert in registry.enabled_experts():
-        connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
-        if connect is None:
-            continue
-        prompt_path = expert.knowledge_dir / "agent.md"
-        if not prompt_path.is_file():
-            continue
-        prompt = prompt_path.read_text()
-        tools = connect.get_tools()
         expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
 
-        def _make_factory(ctx, p, t):
-            def factory(session_id: str):
-                from pearscarf.agents.expert import ExpertAgent
-                from pearscarf.tools import ToolRegistry
-                reg = ToolRegistry()
-                for tool in t:
-                    reg.register(tool)
-                return ExpertAgent(ctx=ctx, domain_prompt=p, tool_registry=reg)
-            return factory
-
-        runner = AgentRunner(expert.name, _make_factory(expert_ctx, prompt, tools), bus)
-        runner.start()
-        components.runners.append(runner)
-        log_fn(f"{expert.name} agent started.")
-
-    # --- Start expert ingesters ---
-    if poll:
-        for expert in registry.enabled_experts():
+        # Load and cache connect instance
+        if expert.tools_module:
             try:
-                thread = expert.start(bus)
+                tools_mod = importlib.import_module(expert.tools_module)
+                connect = tools_mod.get_tools(expert_ctx)
+                for rt in expert.record_types:
+                    registry.register_connect(rt, connect)
+                log_fn(f"{expert.name} tools loaded.")
             except Exception as exc:
-                log_fn(f"{expert.name} failed to start: {exc}")
+                log_fn(f"{expert.name} tools failed: {exc}")
+
+        # Start LLM agent if tools + agent.md exist
+        connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
+        if connect is not None:
+            prompt_path = expert.knowledge_dir / "agent.md"
+            if prompt_path.is_file():
+                prompt = prompt_path.read_text()
+                tools = connect.get_tools()
+
+                def _make_factory(ctx, p, t):
+                    def factory(session_id: str):
+                        from pearscarf.agents.expert import ExpertAgent
+                        from pearscarf.tools import ToolRegistry
+                        reg = ToolRegistry()
+                        for tool in t:
+                            reg.register(tool)
+                        return ExpertAgent(ctx=ctx, domain_prompt=p, tool_registry=reg)
+                    return factory
+
+                runner = AgentRunner(expert.name, _make_factory(expert_ctx, prompt, tools), bus)
+                runner.start()
+                components.runners.append(runner)
+                log_fn(f"{expert.name} agent started.")
+
+        # Start ingester
+        if poll and expert.ingester_module:
+            try:
+                thread = expert.start(expert_ctx)
+            except Exception as exc:
+                log_fn(f"{expert.name} ingester failed to start: {exc}")
                 continue
             if thread is None:
-                log_fn(f"{expert.name} skipped (credentials missing).")
+                log_fn(f"{expert.name} skipped (no ingester or credentials missing).")
             else:
-                log_fn(f"{expert.name} connector started.")
+                log_fn(f"{expert.name} ingester started.")
 
     # --- Start internal agents ---
     retriever_ctx = build_context("retriever", bus)
