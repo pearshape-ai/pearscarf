@@ -1,6 +1,6 @@
 # Context Query — Data Access Layer
 
-`pearscarf/context_query.py` is the single read-only data access layer for all context queries. Both the internal retriever agent and the external MCP server call through it. No other module should call `graph.py` or `store.py` read functions directly for context-building purposes.
+`pearscarf/query/context_query.py` is the single read-only data access layer for all context queries. Both the internal retriever agent and the external MCP server call through it. No other module should call `graph.py` or `store.py` read functions directly for context-building purposes.
 
 ## Why it exists
 
@@ -24,13 +24,11 @@ Search for entities by name, email, or domain. Returns `[{id, name, type, metada
 
 ### `get_facts(entity_id, edge_label=None, fact_type=None, include_stale=False, since=None) -> list[dict]`
 
-Get fact-edges for an entity with optional filters. Post-filters in Python after fetching from graph.
+Get fact-edges for an entity with optional filters.
 
 - `edge_label`: AFFILIATED, ASSERTED, or TRANSITIONED
 - `fact_type`: any valid sub-type (employee, commitment, status_change, etc.)
 - `since`: ISO datetime, only facts where `source_at >= since`
-
-Returns canonical fact objects.
 
 **Storage:** Neo4j
 
@@ -70,9 +68,9 @@ Find AFFILIATED slots with multiple current (non-stale) edges. Optionally scoped
 
 ### `get_communications(entity_id, since=None) -> list[dict]`
 
-Get emails where the entity appears as sender or recipient. Resolves entity to name/email, then queries Postgres.
+Get records where the entity appears as sender or recipient. Resolves entity to name/email, then queries Postgres records table by metadata.
 
-**Storage:** Neo4j (entity resolution) + Postgres (emails table)
+**Storage:** Neo4j (entity resolution) + Postgres (records table metadata)
 
 ---
 

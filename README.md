@@ -9,96 +9,71 @@
 </p>
 
 <p align="center">
-  <a href="docs/data-model.md">Data Model</a> · <a href="docs/query-surface.md">Query Surface</a> · <a href="docs/eval-metrics.md">Eval Metrics</a> · <a href="docs/getting-started.md">Getting Started</a> · <a href="docs/roadmap.md">Roadmap</a> · <a href="CHANGELOG.md">Changelog</a>
+  <a href="docs/architecture.md">Architecture</a> · <a href="docs/data-model.md">Data Model</a> · <a href="docs/query-surface.md">Query Surface</a> · <a href="docs/eval-metrics.md">Eval Metrics</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 ---
 
 PearScarf is a self-improving, reality-aligned context engine for teams of agents, built on a bi-temporal knowledge graph.
 
-It watches your data sources — Gmail, Linear, Slack, and more — extracts what matters, and makes it queryable by any agent in your system. One structured call. Sourced, dated, current context. No raw record processing on every run.
+It watches your data sources — Gmail, Linear, GitHub, and more — extracts what matters, and makes it queryable by any agent in your system. One structured call. Sourced, dated, current context. No raw record processing on every run.
 
 ## Why current approaches fall short
 
-Teams of agents deal with heterogeneous data — emails, issues, calendar, CRM — all connected in your head but siloed for your agents. Vector storage-based RAG loses those connections and when things happened. Stuffing raw records into context grows with every new source, and still leaves every agent rebuilding the same connections on every run.
+Teams of agents deal with heterogeneous data — emails, issues, PRs, calendar, CRM — all connected in your head but siloed for your agents. Vector storage-based RAG loses those connections and when things happened. Stuffing raw records into context grows with every new source, and still leaves every agent rebuilding the same connections on every run.
 
 ## One call. Everything your agent needs to know.
 
 PearScarf sits between your data sources and your agents. It observes records as they arrive, extracts structured facts with full provenance, and maintains those facts over time — nothing silently overwritten, history always preserved. When an agent needs context, it asks PearScarf. One call returns everything known about an entity: current state, recent activity, open commitments, blockers.
 
-PearScarf is itself an agent — built and run as one. Its sole job is capturing and maintaining the state of the world so your other agents don't have to.
+PearScarf is itself an agent — built and run as one. Its captures and maintaines the state of the world so your other agents don't have to.
 
-> **For OpenClaw and MCP-compatible frameworks**
+> **For MCP-compatible frameworks**
 >
-> If your agents act but don't share memory, PearScarf is the missing piece. Connect once via MCP. Every agent in your system gets access to the same shared, up-to-date context — without you writing any retrieval logic.
+> Connect once via MCP. Every agent in your system gets access to the same shared, up-to-date context — without writing any retrieval logic.
 
-## How it works
+## Expert plugin architecture
+
+PearScarf uses a plugin system called **experts**. Each expert is a self-contained package that owns two-way access to a data source:
+
+- **gmailscarf** — Gmail via OAuth API
+- **linearscarf** — Linear via GraphQL API
+- **githubscarf** — GitHub via REST API
+
+Experts are installed, versioned, and managed independently. Building a new expert requires no changes to PearScarf core — just a manifest, a connect module, and knowledge files.
 
 ```
-Data sources (Gmail, Linear, ...)
-    ↓ polling
-PearScarf observes → extracts entities & facts → maintains structured context
-    ↓
-Any agent queries via MCP
-    ↓
-Structured answer with provenance, confidence, and history
+experts/gmailscarf/
+├── manifest.yaml          # declares record types, schemas, entry points
+├── gmail_connect.py       # API client + tools + record ingestion
+├── gmail_ingest.py        # background polling loop
+├── schemas/email.json     # JSON Schema for the email record type
+└── knowledge/
+    ├── agent.md           # LLM agent prompt
+    └── extraction.md      # source-specific extraction guidance
 ```
-
-**Example — agent asking about a deal:**
-
-```python
-pearscarf.get_entity_context("Meridian Deal")
-pearscarf.get_open_commitments(entity="Meridian Deal")
-pearscarf.get_open_blockers(entity="Meridian Deal")
-
-# Gets back
-{
-  "fact": "Marcus Webb to deliver contract markup by March 16",
-  "fact_type": "commitment",
-  "confidence": "stated",
-  "valid_until": "2026-03-16",
-  "source_url": "https://mail.google.com/..."
-}
-```
-
-## What gets extracted — and how
-
-PearScarf extracts two things from every record: entities and facts. Entities go into the graph as nodes. Facts connect them as edges.
-
-Entities are the real-world things — people, companies, projects, events. Facts are what's known about them: who said what, what changed, who committed to what, and when.
-
-Facts are extracted close to the source text — never summarised, never paraphrased. The original wording is preserved on every edge, with a direct link back to the source record. This keeps hallucination surface small: PearScarf connects and structures, it doesn't reinterpret.
-
-Three fact types cover the operational world:
-
-- **Affiliations** — who belongs to what (employee, founder, contributor, advisor, ...)
-- **Assertions** — what was said or committed to (commitment, decision, blocker, risk, goal, ...)
-- **Transitions** — what changed (status change, role change, completion, cancellation, ...)
-
-See the [Data Model](docs/data-model.md) for the full schema and [Query Surface](docs/query-surface.md) for all available MCP tools.
-
-## What's inside
-
-- **Expert agents** — Gmail (OAuth API), Linear (GraphQL), more to come. Each owns its polling, schema, and extraction prompt.
-- **Extraction pipeline** — LLM-powered entity and fact extraction from raw records, driven by editable prompts.
-- **Temporal fact store** — Graph db with bi-temporal fact edges and full provenance on every write. Postgres for structured records. Qdrant for semantic search.
-- **MCP server** — read-only query surface. Any MCP-compatible agent framework connects once and queries for context.
-- **Entity resolution** — alias accumulation, confidence scoring, human-in-the-loop for ambiguous cases.
-- **Observability** — every LLM call and fact write traced via LangSmith.
 
 ## Quick start
 
 ```bash
 uv sync
 source .venv/bin/activate
-playwright install chromium
 docker compose up -d           # Postgres, Qdrant, Neo4j
-cp .env.example .env           # add ANTHROPIC_API_KEY + POSTGRES_PASSWORD
 
-psc gmail --auth               # Gmail OAuth setup
-psc run                        # start the full system
-psc run --poll-email           # start with automatic email polling
-psc run --poll-linear          # start with automatic Linear polling
+# Install experts
+psc install ./experts/gmailscarf
+psc install ./experts/linearscarf
+psc install ./experts/githubscarf
+
+# Configure credentials
+psc expert gmail --auth        # Gmail OAuth setup
+# Edit env/.linearscarf.env    # add LINEAR_API_KEY
+# Edit env/.githubscarf.env    # add GITHUB_TOKEN + GITHUB_REPO
+
+# Run
+psc run                        # start system + REPL
+psc run --poll                 # also start expert ingesters
+psc discord --poll             # Discord frontend + ingesters
 ```
 
 ## Commands
@@ -106,24 +81,26 @@ psc run --poll-linear          # start with automatic Linear polling
 | Command | Description |
 |---|---|
 | `psc run` | Worker + experts + session REPL |
-| `psc run --poll-email` | Full system + email polling |
-| `psc run --poll-linear` | Full system + Linear polling |
+| `psc run --poll` | Full system + expert ingesters |
 | `psc discord` | Worker + experts + Discord bot |
-| `psc gmail --auth` | Gmail OAuth setup |
-| `psc expert gmail` | Standalone Gmail expert |
-| `psc expert linear` | Standalone Linear expert |
+| `psc discord --poll` | Discord + expert ingesters |
+| `psc install <path>` | Install an expert package |
+| `psc update <name>` | Update an installed expert |
+| `psc expert list` | List installed experts |
+| `psc expert inspect <name>` | Show expert details |
+| `psc expert gmail --auth` | Gmail OAuth setup |
 | `psc expert ingest --seed <file>` | Ingest a seed file |
+| `psc expert ingest --record <file> --type <type>` | Ingest JSON records |
 | `psc eval --dataset <path>` | Run eval against a dataset |
-| `psc memory entity "name"` | Look up entity + connections |
+| `psc mcp start` | Run MCP server standalone |
 | `psc erase-all` | Wipe all system state |
 
 ## Docs
 
+- [Architecture](docs/architecture.md) — system design, expert contract, startup flow, prompt composition
 - [Data Model](docs/data-model.md) — entities, fact types, full schema, confidence values, bi-temporal model
-- [Query Surface](docs/query-surface.md) — all MCP tools, inputs, outputs, output formats
-- [Getting Started](docs/getting-started.md) — installation, Gmail OAuth, Docker setup
+- [Query Surface](docs/query-surface.md) — all MCP tools, inputs, outputs
 - [Eval Metrics](docs/eval-metrics.md) — extraction precision, recall, entity resolution accuracy
-- [Roadmap](docs/roadmap.md) — verification agent, expert encapsulation, OpenClaw integration
 - [Changelog](CHANGELOG.md)
 
 ---
