@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.17
+- Centralized startup sequence into `pearscarf/interface/startup.py`. Both `psc run` (REPL) and `psc discord` now call `start_system()` / `stop_system()` instead of duplicating ~100 lines of boot logic each. Fixes stale shutdown references left over from the pre-encapsulation era.
+- Expert LLM agents now start automatically at boot for any expert with tools and a `knowledge/agent.md` prompt. Each gets an `ExpertAgent` wired to the expert's tool registry via a closure factory to avoid loop-variable capture.
+
 ## 1.17.16
 - Restructured gmailscarf to the new expert layout. `connector/` folder deleted. Replaced by `gmail_connect.py` (API client + tools stub) and `gmail_ingest.py` (ingestion loop stub). Manifest updated to v0.1.1 with `tools:` and `ingester:` fields replacing `connector:`. Registry and install validator accept both legacy and new manifest fields.
 - Removed all expert-type switches from pearscarf core. The indexer's `_build_content`, `_build_source_context`, and `_embed_record` now read from the generic `records.content` and `records.metadata` columns instead of querying per-type tables. `records` table gains a `content TEXT` column (LLM-ready formatted string, written by the expert's ingester alongside `raw`).
