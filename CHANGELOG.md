@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.19
+- Fixed connection pool deadlock: `init_db()` was called on every DB operation, grabbing a separate connection for DDL while another held row locks. Now runs once at startup. Pool configured with non-blocking open and connect timeout to fail fast instead of hanging.
+- Cleaned up DB schema — all `ALTER TABLE` migration statements folded into clean `CREATE TABLE` definitions.
+- `psc expert ingest --record` now loads expert connects in-process (standalone command, not connected to running system) and marks ingested records as `relevant` so the indexer picks them up.
+
 ## 1.17.18
 - Generic ingester startup via manifest. `Expert.start()` now takes `ExpertContext` instead of raw `MessageBus` — the ingester module's `start(ctx)` receives the full expert contract (storage, bus, log, config). Renamed `connector_module`/`connector_path` to `ingester_module`/`ingester_path` on the Expert dataclass.
 - Env loading split by owner. Pearscarf core config loads from `env/.env` (Gmail/Linear vars removed from config.py). Expert credentials load from `env/.<name>.env` via `build_context()`, which populates both `ctx.config` and `os.environ`.

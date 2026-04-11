@@ -144,12 +144,15 @@ class ParseRecordFileTool(BaseTool):
         skipped = 0
         record_ids: list[str] = []
 
+        from pearscarf.storage import store
+
         for rec in records:
             rid = connect.ingest_record(rec)
 
             if rid is None:
                 skipped += 1
             else:
+                store.mark_relevant(rid)
                 record_ids.append(rid)
                 saved += 1
 
