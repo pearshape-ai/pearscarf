@@ -117,52 +117,6 @@ CREATE INDEX IF NOT EXISTS idx_records_type ON records(type);
 CREATE INDEX IF NOT EXISTS idx_records_indexed ON records(indexed);
 CREATE INDEX IF NOT EXISTS idx_records_dedup ON records(dedup_key) WHERE dedup_key IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS emails (
-    record_id TEXT PRIMARY KEY REFERENCES records(id),
-    message_id TEXT UNIQUE,
-    sender TEXT,
-    recipient TEXT,
-    subject TEXT,
-    body TEXT,
-    received_at TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_emails_message_id ON emails(message_id);
-
-CREATE TABLE IF NOT EXISTS issues (
-    record_id TEXT PRIMARY KEY REFERENCES records(id),
-    linear_id TEXT UNIQUE NOT NULL,
-    identifier TEXT,
-    title TEXT NOT NULL,
-    description TEXT,
-    status TEXT,
-    priority TEXT,
-    assignee TEXT,
-    project TEXT,
-    labels JSONB,
-    comments JSONB,
-    url TEXT,
-    linear_created_at TIMESTAMPTZ,
-    linear_updated_at TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_issues_linear_id ON issues(linear_id);
-CREATE INDEX IF NOT EXISTS idx_issues_identifier ON issues(identifier);
-
-CREATE TABLE IF NOT EXISTS issue_changes (
-    record_id TEXT PRIMARY KEY REFERENCES records(id),
-    issue_record_id TEXT NOT NULL,
-    linear_history_id TEXT UNIQUE,
-    field TEXT NOT NULL,
-    from_value TEXT,
-    to_value TEXT,
-    changed_by TEXT,
-    changed_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_issue_changes_issue ON issue_changes(issue_record_id);
-CREATE INDEX IF NOT EXISTS idx_issue_changes_linear_id ON issue_changes(linear_history_id);
-
 CREATE TABLE IF NOT EXISTS curator_queue (
     record_id TEXT PRIMARY KEY,
     queued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
