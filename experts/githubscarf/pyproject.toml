@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "githubscarf"
+version = "0.1.0"
+description = "GitHub expert for PearScarf"
+requires-python = ">=3.11"
+dependencies = ["httpx"]

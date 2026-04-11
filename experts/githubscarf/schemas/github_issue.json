@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "github_id": {"type": "integer"},
+    "number": {"type": "integer"},
+    "title": {"type": "string"},
+    "body": {"type": "string"},
+    "state": {"type": "string"},
+    "author": {"type": "string"},
+    "assignees": {"type": "array", "items": {"type": "string"}},
+    "labels": {"type": "array", "items": {"type": "string"}},
+    "url": {"type": "string"},
+    "created_at": {"type": "string"},
+    "updated_at": {"type": "string"},
+    "closed_at": {"type": "string"}
+  },
+  "required": ["github_id", "number", "title"]
+}

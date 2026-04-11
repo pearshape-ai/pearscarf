@@ -1,0 +1,24 @@
+name: githubscarf
+version: 0.1.1
+source_type: github
+author: pearshape-ai
+description: GitHub expert for PearScarf — polls PRs and issues via the GitHub REST API
+
+record_types:
+  - github_pr
+  - github_issue
+
+schemas:
+  github_pr: schemas/github_pr.json
+  github_issue: schemas/github_issue.json
+
+dedup_key: github_id
+
+new_entity_types:
+  - name: repository
+
+identifier_patterns: []
+
+tools: github_connect.py
+ingester: github_ingest.py
+eval: eval/
