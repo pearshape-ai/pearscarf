@@ -1,5 +1,5 @@
 name: linearscarf
-version: 0.1.2
+version: 0.1.3
 source_type: linear
 author: pearshape-ai
 description: Linear expert for PearScarf — polls issues and changes via the Linear GraphQL API
