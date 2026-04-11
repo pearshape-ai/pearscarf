@@ -69,6 +69,36 @@ def run(poll: bool) -> None:
             sys.stdout.write(f"{expert.name} tools failed: {exc}\r\n")
             sys.stdout.flush()
 
+    # Start an LLM agent (ExpertAgent + AgentRunner) for each expert that
+    # has tools and a knowledge/agent.md prompt. The agent is reactive —
+    # it wakes on bus messages and uses the expert's tools to act.
+    for expert in registry.enabled_experts():
+        connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
+        if connect is None:
+            continue
+        prompt_path = expert.knowledge_dir / "agent.md"
+        if not prompt_path.is_file():
+            continue
+        prompt = prompt_path.read_text()
+        tools = connect.get_tools()
+        expert_ctx = build_context(expert.name, bus, expert_version=expert.version)
+
+        def _make_factory(ctx, p, t):
+            def factory(session_id: str):
+                from pearscarf.agents.expert import ExpertAgent
+                from pearscarf.tools import ToolRegistry
+                reg = ToolRegistry()
+                for tool in t:
+                    reg.register(tool)
+                return ExpertAgent(ctx=ctx, domain_prompt=p, tool_registry=reg)
+            return factory
+
+        agent_factory = _make_factory(expert_ctx, prompt, tools)
+        runner = AgentRunner(expert.name, agent_factory, bus)
+        runner.start()
+        sys.stdout.write(f"{expert.name} agent started.\r\n")
+        sys.stdout.flush()
+
     # Start every enabled expert's ingester via the registry.
     if poll:
         for expert in registry.enabled_experts():
