@@ -175,6 +175,35 @@ class PearscarfLog:
 # --- Factory ---
 
 
+def _load_expert_env(expert_name: str) -> dict[str, str]:
+    """Load env/.<expert_name>.env and inject into os.environ.
+
+    Returns the parsed key-value pairs as a dict. Values are also set
+    in os.environ so that code reading os.getenv() picks them up.
+    """
+    import os
+    from pathlib import Path
+
+    from pearscarf.config import EXPERTS_DIR
+
+    env_dir = Path(EXPERTS_DIR).parent / "env"
+    env_path = env_dir / f".{expert_name}.env"
+    if not env_path.is_file():
+        return {}
+
+    config: dict[str, str] = {}
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if key and value:
+            config[key] = value
+            os.environ.setdefault(key, value)
+    return config
+
+
 def build_context(
     expert_name: str,
     bus: Any,
@@ -184,14 +213,16 @@ def build_context(
     """Build a concrete ExpertContext for a given agent.
 
     Called by pearscarf at startup for each enabled expert (and for
-    internal agents). The bus is the running MessageBus instance. The
-    config dict is pre-loaded from env/.<expert_name>.env for experts,
-    or from pearscarf.config for internal agents.
+    internal agents). The bus is the running MessageBus instance.
+    For experts, the config is auto-loaded from env/.<expert_name>.env.
     """
+    if config is None:
+        config = _load_expert_env(expert_name)
+
     return ExpertContext(
         bus=PearscarfBus(bus, expert_name),
         storage=PearscarfStorage(expert_name, expert_version),
         log=PearscarfLog(),
-        config=config or {},
+        config=config,
         expert_name=expert_name,
     )
