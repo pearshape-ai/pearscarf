@@ -404,6 +404,38 @@ def write_registration(ctx: ValidationContext) -> None:
         identifier_patterns=identifier_patterns,
     )
 
+    # Create typed tables from schema declarations in the manifest
+    _create_schema_tables(ctx)
+
+
+def _create_schema_tables(ctx: ValidationContext) -> None:
+    """Read schema declarations from the manifest and create typed tables."""
+    assert ctx.package_dir is not None
+    schemas = ctx.manifest.get("schemas") or {}
+    version = ctx.manifest["version"]
+    expert_name = ctx.manifest["name"]
+
+    for record_type, schema_path in schemas.items():
+        full_path = ctx.package_dir / schema_path
+        if not full_path.is_file():
+            click.echo(click.style(
+                f"  warning: schema file missing for {record_type}: {schema_path}",
+                fg="yellow",
+            ))
+            continue
+        try:
+            import json as _json
+            schema = _json.loads(full_path.read_text())
+        except Exception as exc:
+            click.echo(click.style(
+                f"  warning: failed to read schema for {record_type}: {exc}",
+                fg="yellow",
+            ))
+            continue
+
+        table_name = store.create_typed_table(expert_name, record_type, version, schema)
+        click.echo(f"  table created: {table_name}")
+
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _ENV_DIR = _REPO_ROOT / "env"

@@ -215,6 +215,19 @@ CREATE TABLE IF NOT EXISTS identifier_patterns (
 );
 
 CREATE INDEX IF NOT EXISTS idx_identifier_patterns_scope ON identifier_patterns(scope);
+
+-- Tracks versioned typed tables created from expert schemas.
+-- One row per (expert_name, record_type, version). The table_name is the
+-- actual Postgres table that holds structured records for that version.
+CREATE TABLE IF NOT EXISTS expert_record_schemas (
+    expert_name TEXT NOT NULL,
+    record_type TEXT NOT NULL,
+    version TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    schema_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (expert_name, record_type, version)
+);
 """
 
 
@@ -286,7 +299,8 @@ def insert_message(
             ),
         )
         conn.commit()
-        return cur.fetchone()["id"]
+        row = cur.fetchone()
+        return dict(row)["id"] if row else 0
 
 
 def poll_unread(to_agent: str) -> list[dict]:

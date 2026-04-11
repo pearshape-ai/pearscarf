@@ -84,14 +84,20 @@ def main() -> None:
     except Exception as exc:
         print(f"Warning: Qdrant clear failed: {exc}")
 
-    # --- Wipe Postgres records + curator queue ---
-    # TODO: when manifest-driven versioned tables land (e.g. gmailscarf_emails_v1),
-    # discover and truncate those here too. Query the expert_record_schemas table
-    # (or the registry) for active table names and include them in the truncate.
+    # --- Wipe Postgres records + curator queue + expert typed tables ---
+    from pearscarf.storage.store import list_typed_tables
+
+    import re
+    typed_tables = list_typed_tables()
     with _get_conn() as conn:
+        for t in typed_tables:
+            if re.match(r"^[a-z0-9_]+$", t):
+                conn.execute(f"TRUNCATE {t} CASCADE")
         conn.execute("TRUNCATE curator_queue, records CASCADE")
         conn.commit()
     print(f"Deleted {records_count} records from Postgres.")
+    if typed_tables:
+        print(f"  Truncated {len(typed_tables)} typed table(s): {', '.join(typed_tables)}")
 
     print("\nDone. All system state erased.")
 
