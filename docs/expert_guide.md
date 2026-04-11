@@ -301,10 +301,12 @@ psc run --poll
 
 ## What happens at runtime
 
+<p align="center"><img src="assets/email-pipeline.svg" alt="Record Pipeline — Ingest to Graph" width="640"></p>
+
 1. **Startup** — `start_system()` calls `get_tools(ctx)` on your connect module. The returned connect instance is cached by record type. If `agent.md` exists, an `AgentRunner` starts for your expert.
 2. **Polling** — if `--poll`, `start(ctx)` is called on your ingester module. Your polling loop runs as a daemon thread.
 3. **Messages** — when the worker sends a message to your expert (by name), the `AgentRunner` dispatches it to your LLM agent with your tools.
-4. **Ingestion** — your `ingest_record()` writes to the generic `records` table + your typed table. The indexer picks up `relevant` records and extracts entities/facts using your `extraction.md`.
+4. **Ingestion** — your `ingest_record()` writes to the generic `records` table + your typed table. The worker triages the record (relevant/noise). The indexer picks up relevant records and extracts entities/facts using your `extraction.md`.
 
 ## See also
 

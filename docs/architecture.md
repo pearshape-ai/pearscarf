@@ -282,19 +282,9 @@ Background daemon polling `records WHERE indexed = FALSE AND classification = 'r
 
 ## Data Access
 
-```
-WRITE PATH                           READ PATH
-                                     
-Records (experts via ctx.storage)    Retriever (internal)
-    ↓                                    ↓
-Indexer → graph.py / vectorstore.py  context_query.py → graph.py
-    ↓                                    ↑              store.py
-curator_queue                        MCP Server        vectorstore.py
-    ↓                                (external)
-Curator → graph.py (stale, confidence)
-```
+<p align="center"><img src="assets/write-path.svg" alt="Write Path — Records to Graph" width="640"></p>
 
-`context_query.py` is the single read layer. Both the retriever and MCP server call through it.
+`context_query.py` is the single read layer. Both the retriever and MCP server call through it. The indexer and curator own all writes.
 
 ## MCP Server
 
