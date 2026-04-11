@@ -142,15 +142,15 @@ class LinearConnect:
         if tid:
             filter_parts["team"] = {"id": {"eq": tid}}
         if status:
-            filter_parts["state"] = {"name": {"eqCaseInsensitive": status}}
+            filter_parts["state"] = {"name": {"eq": status}}
         if assignee:
-            filter_parts["assignee"] = {"name": {"eqCaseInsensitive": assignee}}
+            filter_parts["assignee"] = {"name": {"eq": assignee}}
         if project:
-            filter_parts["project"] = {"name": {"eqCaseInsensitive": project}}
+            filter_parts["project"] = {"name": {"eq": project}}
         if priority is not None:
             filter_parts["priority"] = {"eq": priority}
         if label:
-            filter_parts["labels"] = {"name": {"eqCaseInsensitive": label}}
+            filter_parts["labels"] = {"name": {"eq": label}}
 
         query = """
             query($filter: IssueFilter, $first: Int, $after: String) {
@@ -163,13 +163,23 @@ class LinearConnect:
         return self._paginate_issues(query, variables={"filter": filter_parts or None}, page_size=first)
 
     def get_issue(self, identifier: str) -> dict | None:
+        """Get a specific issue by identifier (e.g. 'PEA-88').
+
+        Parses the identifier into team key + number for the filter.
+        """
+        # Parse "PEA-88" → key="PEA", number=88
+        parts = identifier.rsplit("-", 1)
+        if len(parts) != 2 or not parts[1].isdigit():
+            return None
+        team_key, number = parts[0], int(parts[1])
+
         data = self._query("""
             query($filter: IssueFilter) {
                 issues(filter: $filter, first: 1) {
                     nodes {""" + _ISSUE_FIELDS_WITH_COMMENTS + """}
                 }
             }
-        """, variables={"filter": {"identifier": {"eq": identifier}}})
+        """, variables={"filter": {"number": {"eq": number}, "team": {"key": {"eq": team_key}}}})
         nodes = data.get("issues", {}).get("nodes", [])
         if not nodes:
             return None
@@ -181,15 +191,15 @@ class LinearConnect:
         ]
         return issue
 
-    def search_issues(self, query: str, first: int = 20) -> list[dict]:
+    def search_issues(self, term: str, first: int = 20) -> list[dict]:
         data = self._query("""
-            query($query: String!, $first: Int) {
-                issueSearch(query: $query, first: $first) {
+            query($term: String!, $first: Int) {
+                searchIssues(term: $term, first: $first) {
                     nodes {""" + _ISSUE_FIELDS + """}
                 }
             }
-        """, variables={"query": query, "first": first})
-        return [self._format_issue(n) for n in data.get("issueSearch", {}).get("nodes", [])]
+        """, variables={"term": term, "first": first})
+        return [self._format_issue(n) for n in data.get("searchIssues", {}).get("nodes", [])]
 
     def list_updated_since(self, since: str, team_id: str | None = None, first: int = 50) -> list[dict]:
         filter_parts: dict = {"updatedAt": {"gt": since}}
@@ -591,7 +601,7 @@ class LinearSearchIssuesTool(BaseTool):
         self._connect = connect
 
     def execute(self, **kwargs: Any) -> str:
-        issues = self._connect.search_issues(kwargs["query"])
+        issues = self._connect.search_issues(kwargs["query"])  # "query" from LLM → "term" in API
         if not issues:
             return "No issues found."
         return _format_issue_list(issues)
