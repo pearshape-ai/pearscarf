@@ -1,5 +1,7 @@
 # Context Query — Data Access Layer
 
+<p align="center"><img src="assets/retriever-query-flow.svg" alt="Retriever Query Flow" width="640"></p>
+
 `pearscarf/query/context_query.py` is the single read-only data access layer for all context queries. Both the internal retriever agent and the external MCP server call through it. No other module should call `graph.py` or `store.py` read functions directly for context-building purposes.
 
 ## Why it exists
