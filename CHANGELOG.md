@@ -4,6 +4,8 @@
 - Fixed connection pool deadlock: `init_db()` was called on every DB operation, grabbing a separate connection for DDL while another held row locks. Now runs once at startup. Pool configured with non-blocking open and connect timeout to fail fast instead of hanging.
 - Cleaned up DB schema — all `ALTER TABLE` migration statements folded into clean `CREATE TABLE` definitions.
 - `psc expert ingest --record` now loads expert connects in-process (standalone command, not connected to running system) and marks ingested records as `relevant` so the indexer picks them up.
+- Fixed worker prompt routing — expert names updated from old `gmail_expert`/`linear_expert` to actual package names (`gmailscarf`/`linearscarf`).
+- Fixed `SaveEmailTool` passing metadata dict as positional `content` arg to `save_record`, causing a psycopg type error.
 
 ## 1.17.18
 - Generic ingester startup via manifest. `Expert.start()` now takes `ExpertContext` instead of raw `MessageBus` — the ingester module's `start(ctx)` receives the full expert contract (storage, bus, log, config). Renamed `connector_module`/`connector_path` to `ingester_module`/`ingester_path` on the Expert dataclass.

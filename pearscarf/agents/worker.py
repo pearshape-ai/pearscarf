@@ -24,7 +24,7 @@ class SendMessageTool(BaseTool):
         "properties": {
             "to": {
                 "type": "string",
-                "description": "Recipient: 'human', or an expert name like 'gmail_expert'",
+                "description": "Recipient: 'human', or an expert name like 'gmailscarf'",
             },
             "content": {
                 "type": "string",
