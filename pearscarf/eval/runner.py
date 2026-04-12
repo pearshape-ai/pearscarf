@@ -92,6 +92,15 @@ def _pending_record_count() -> int:
         return row["c"]
 
 
+def _resolve_dedup_key(dedup_key: str) -> str | None:
+    """Look up the actual record ID from a dedup_key."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM records WHERE dedup_key = %s", (dedup_key,)
+        ).fetchone()
+        return row["id"] if row else None
+
+
 def _build_extracted_from_graph(record_id: str) -> dict:
     """Query the graph for entities and facts sourced from a record.
 
@@ -285,17 +294,24 @@ def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
     extracted_entities_by_record: dict[str, list[dict]] = {}
     extracted_facts_by_record: dict[str, list[dict]] = {}
 
-    for record_id, expected in gt_records.items():
+    for gt_key, expected in gt_records.items():
+        # Resolve dedup_key → actual record ID for graph lookup
+        dedup_key = expected.get("dedup_key", gt_key)
+        record_id = _resolve_dedup_key(dedup_key)
+        if not record_id:
+            print(f"  {gt_key}: skipped — no record found for dedup_key '{dedup_key}'")
+            continue
+
         extracted = _build_extracted_from_graph(record_id)
 
-        extracted_entities_by_record[record_id] = extracted.get("entities", [])
-        extracted_facts_by_record[record_id] = extracted.get("facts", [])
+        extracted_entities_by_record[gt_key] = extracted.get("entities", [])
+        extracted_facts_by_record[gt_key] = extracted.get("facts", [])
 
         scores = scoring.score_record(extracted, expected)
-        per_record[record_id] = scores
+        per_record[gt_key] = scores
 
         if verbose:
-            _print_verbose_graph(record_id, extracted, expected)
+            _print_verbose_graph(gt_key, extracted, expected)
 
         # Confidence warnings
         for w in scores.get("confidence_warnings", []):
@@ -304,10 +320,10 @@ def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
         # Progress
         if scores["is_noise"]:
             status = "ok" if scores["noise_correctly_empty"] else "FAIL"
-            print(f"  {record_id}: noise — {status}")
+            print(f"  {gt_key}: noise — {status}")
         else:
             print(
-                f"  {record_id}: entities {scores['entity_matched']}/{scores['entity_expected']}"
+                f"  {gt_key}: entities {scores['entity_matched']}/{scores['entity_expected']}"
                 f"  facts {scores['fact_matched']}/{scores['fact_expected']}"
             )
 
