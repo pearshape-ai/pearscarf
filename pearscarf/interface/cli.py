@@ -138,7 +138,7 @@ def linear() -> None:
 @expert.command("ingest")
 @click.option("--seed", type=click.Path(exists=True), default=None, help="Ingest a seed file (.md)")
 @click.option("--record", type=click.Path(exists=True), default=None, help="Ingest a JSON record file")
-@click.option("--type", "record_type", type=click.Choice(["email", "issue", "issue_change"]), default=None, help="Record type (required with --record)")
+@click.option("--type", "record_type", type=str, default=None, help="Record type (e.g. 'email', 'linear_issue', 'github_pr')")
 def ingest(seed: str | None, record: str | None, record_type: str | None) -> None:
     """Ingest expert — file-based data entry. Standalone interactive mode without flags."""
     from pearscarf.bus import MessageBus

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.0
+- Eval runner resolves `dedup_key` from ground truth to actual record ID for graph scoring — compatible with uuid-based record IDs.
+- `psc expert ingest --type` accepts any string instead of a hardcoded list. Record types are dynamic — defined by installed experts.
+
 ## 1.18.0
 - Expert Encapsulation complete. Three experts (gmailscarf, linearscarf, githubscarf) running against the new contract — manifest-driven install, ExpertContext, typed tables, layered prompt composition. Zero expert-specific code in pearscarf core.
 - Built githubscarf from scratch as the first greenfield expert. Introduces the `repository` entity type, `github_pr` and `github_issue` record types, GitHub REST API tools and polling ingester.
