@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.19.6
+- Eval sequence is now self-contained — each entry specifies file path (relative to dataset) and record type. No more data_map in dataset.yaml. Seed records are just another sequence entry with `type: seed`. Dataset folder renamed `data/` → `records/`.
+
 ## 1.19.5
 - Extraction prompt decomposed into ordered components. Entity types and normalization now appear before facts and edge labels. Prompt assembly order: intro → entity types + normalization → fact structure → edge labels → what to ignore → output format → source-specific guidance.
 - Gmail extraction guidance updated: sender and recipient always extracted as entities (previously skipped if not mentioned in body).

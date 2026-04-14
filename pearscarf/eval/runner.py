@@ -6,12 +6,11 @@ Usage:
 
 Pipeline:
     1. Read dataset.yaml for config
-    2. Read sequence.yaml for record order (if present)
-    3. Ingest seed (if present)
-    4. Ingest records in sequence order
-    5. Wait for indexer to process all records
-    6. Score against ground truth
-    7. Print results
+    2. Read sequence.yaml — each entry has file path + record type
+    3. Ingest records in sequence order
+    4. Wait for indexer after each record
+    5. Score against ground truth
+    6. Print results
 """
 
 from __future__ import annotations
@@ -33,29 +32,30 @@ from pearscarf.storage.db import _get_conn, init_db
 
 
 def _load_dataset_config(dataset_path: str) -> dict:
-    """Load dataset.yaml. Falls back to minimal defaults if absent."""
+    """Load dataset.yaml."""
     cfg_path = os.path.join(dataset_path, "dataset.yaml")
-    if os.path.isfile(cfg_path):
-        with open(cfg_path) as fh:
-            return yaml.safe_load(fh) or {}
-
-    # Legacy fallback: derive data_map from folder names
-    data_dir = os.path.join(dataset_path, "data")
-    data_map = {}
-    if os.path.isdir(data_dir):
-        for name in sorted(os.listdir(data_dir)):
-            if os.path.isdir(os.path.join(data_dir, name)):
-                data_map[name] = name
-    return {"data_map": data_map}
+    if not os.path.isfile(cfg_path):
+        raise SystemExit(f"dataset.yaml not found in {dataset_path}")
+    with open(cfg_path) as fh:
+        return yaml.safe_load(fh) or {}
 
 
-def _load_sequence(dataset_path: str) -> list[str] | None:
-    """Load sequence.yaml if present. Returns ordered list of record keys."""
-    seq_path = os.path.join(dataset_path, "sequence.yaml")
-    if os.path.isfile(seq_path):
-        with open(seq_path) as fh:
-            return yaml.safe_load(fh) or []
-    return None
+def _load_sequence(dataset_path: str, config: dict) -> list[dict]:
+    """Load sequence from the file referenced in dataset.yaml.
+
+    Each entry: {"file": "records/seed.md", "type": "seed"}
+    """
+    seq_file = config.get("sequence")
+    if not seq_file:
+        raise SystemExit("No sequence file configured in dataset.yaml")
+    seq_path = os.path.join(dataset_path, seq_file)
+    if not os.path.isfile(seq_path):
+        raise SystemExit(f"Sequence file not found: {seq_path}")
+    with open(seq_path) as fh:
+        entries = yaml.safe_load(fh) or []
+    if not isinstance(entries, list):
+        raise SystemExit(f"Sequence file must be a list, got {type(entries).__name__}")
+    return entries
 
 
 # --- Ingestion helpers ---
@@ -82,11 +82,23 @@ def _ensure_expert_connects():
             print(f"  {expert.name} tools failed: {exc}")
 
 
-def _ingest_file(file_path: str, record_type: str) -> str | None:
-    """Ingest a single JSON file. Returns record_id or None."""
+def _ingest_record_file(dataset_path: str, file_rel: str, record_type: str) -> str | None:
+    """Ingest a single file from the dataset. Returns record_id or None."""
     from pearscarf.indexing.registry import get_registry
     from pearscarf.storage import store
 
+    file_path = os.path.join(dataset_path, file_rel)
+    if not os.path.isfile(file_path):
+        print(f"    Error: file not found: {file_rel}")
+        return None
+
+    # Seed records
+    if record_type == "seed":
+        with open(file_path) as fh:
+            content = fh.read()
+        return store.save_ingest(source="eval_runner", raw=content)
+
+    # Expert records
     with open(file_path) as fh:
         data = json.load(fh)
 
@@ -99,23 +111,6 @@ def _ingest_file(file_path: str, record_type: str) -> str | None:
     if rid:
         store.mark_relevant(rid)
     return rid
-
-
-def _resolve_record_file(
-    record_key: str, data_dir: str, data_map: dict
-) -> tuple[str, str] | None:
-    """Resolve a record key (e.g. 'email_001') to (file_path, record_type).
-
-    Walks data_map folders looking for {record_key}.json.
-    """
-    for folder_name, record_type in data_map.items():
-        folder_path = os.path.join(data_dir, folder_name)
-        if not os.path.isdir(folder_path):
-            continue
-        file_path = os.path.join(folder_path, f"{record_key}.json")
-        if os.path.isfile(file_path):
-            return file_path, record_type
-    return None
 
 
 def _pending_record_count() -> int:
@@ -146,6 +141,12 @@ def _wait_for_indexer():
         time.sleep(2)
 
 
+def _record_label(entry: dict) -> str:
+    """Derive a short label from a sequence entry for display."""
+    file_rel = entry.get("file", "")
+    return os.path.splitext(os.path.basename(file_rel))[0]
+
+
 # --- Graph queries for ER ---
 
 
@@ -165,7 +166,6 @@ def _get_all_graph_entities() -> list[dict]:
             for record in result:
                 name = record["name"]
                 eid = record["eid"]
-                # Get aliases via IDENTIFIED_AS
                 alias_result = session.run(
                     "MATCH (n)-[r:IDENTIFIED_AS]->(n) "
                     "WHERE elementId(n) = $eid AND r.surface_form IS NOT NULL "
@@ -185,23 +185,14 @@ def _get_all_graph_entities() -> list[dict]:
 
 
 def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
-    """Score ER against the global section of er_ground_truth.
-
-    Returns {node_count_expected, node_count_actual, node_count_accuracy,
-             merge_recall, merge_total, merge_correct,
-             false_merge_rate, false_merge_count, false_merge_total}.
-    """
+    """Score ER against the global section of er_ground_truth."""
     expected = er_ground_truth.get("global", [])
     if not expected:
         return {}
 
-    # --- Node count ---
     node_count_expected = len(expected)
     node_count_actual = len(graph_entities)
 
-    # --- Merge recall ---
-    # For each canonical entity, check if all its surface forms resolve
-    # to a single graph node (either as the node's name or as an alias).
     # Build graph lookup: lowered surface form → node name
     graph_lookup: dict[str, str] = {}
     for ent in graph_entities:
@@ -210,7 +201,7 @@ def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
         for alias in ent.get("aliases", []):
             graph_lookup[alias.lower()] = ent["name"]
 
-    # --- Merge recall (per surface form) ---
+    # Merge recall (per surface form)
     sf_total = 0
     sf_correct = 0
     for exp in expected:
@@ -223,7 +214,7 @@ def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
 
     merge_recall = sf_correct / sf_total if sf_total > 0 else 1.0
 
-    # --- Entity merge rate (all-or-nothing per entity) ---
+    # Entity merge rate (all-or-nothing per entity)
     entity_merge_total = 0
     entity_merge_correct = 0
     for exp in expected:
@@ -241,10 +232,7 @@ def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
 
     entity_merge_rate = entity_merge_correct / entity_merge_total if entity_merge_total > 0 else 1.0
 
-    # --- False merge rate ---
-    # For each graph node, check that all surface forms resolving to it
-    # belong to the same canonical entity.
-    # Build reverse: graph node name → set of canonical entities it should belong to
+    # False merge rate
     sf_to_canonical: dict[str, str] = {}
     for exp in expected:
         canonical = exp["canonical_name"].lower()
@@ -283,11 +271,8 @@ def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
     }
 
 
-def _score_er_timeslice(
-    timeslice: dict, graph_entities: list[dict]
-) -> dict:
-    """Score ER for a single timeslice using the same logic as global."""
-    # Reuse global scoring by wrapping the timeslice entities as a "global" list
+def _score_er_timeslice(timeslice: dict, graph_entities: list[dict]) -> dict:
+    """Score ER for a single timeslice."""
     pseudo_gt = {"global": timeslice.get("entities", [])}
     return _score_er_global(pseudo_gt, graph_entities)
 
@@ -297,7 +282,6 @@ def _score_er_timeslice(
 
 def _verbose_er_timeslice(timeslice: dict, graph_entities: list[dict]) -> None:
     """Print surface-form-level diagnostics for a timeslice."""
-    # Build graph lookup: lowered surface form → node name
     graph_lookup: dict[str, str] = {}
     for ent in graph_entities:
         canonical = ent["name"].lower()
@@ -359,12 +343,12 @@ def _print_er_report(global_scores: dict, timeslice_scores: list[tuple[str, dict
 def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | None = None) -> dict:
     """Run ER evaluation. Returns scores dict."""
     init_db()
-    from pearscarf.storage import store
 
     config = _load_dataset_config(dataset_path)
-    data_map = config.get("data_map", {})
     version = config.get("version", "unknown")
-    data_dir = os.path.join(dataset_path, "data")
+
+    # Load sequence
+    sequence = _load_sequence(dataset_path, config)
 
     # Load ER ground truth
     er_gt_file = config.get("ground_truth", {}).get("entity_resolution")
@@ -390,7 +374,7 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     # Load expert connects
     _ensure_expert_connects()
 
-    # Start indexer (with debug_dir if requested)
+    # Start indexer
     from pearscarf.indexing.indexer import Indexer
 
     if debug_dir:
@@ -405,30 +389,6 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     indexer = Indexer(debug_dir=debug_dir)
     indexer.start()
 
-    # Ingest seed
-    seed_path = os.path.join(dataset_path, "seed.md")
-    if os.path.isfile(seed_path):
-        with open(seed_path) as fh:
-            seed_content = fh.read()
-        rid = store.save_ingest(source="eval_runner", raw=seed_content)
-        print(f"Seed ingested as {rid}")
-
-    # Determine record order
-    sequence = _load_sequence(dataset_path)
-
-    if sequence is None:
-        # Fallback: walk all folders, sorted
-        sequence = []
-        for folder_name in sorted(data_map.keys()):
-            folder_path = os.path.join(data_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            for fname in sorted(os.listdir(folder_path)):
-                if fname.endswith(".json"):
-                    sequence.append(fname.rsplit(".", 1)[0])
-
-    print(f"Ingesting {len(sequence)} record(s)...")
-
     # Ingest in sequence order
     timeslices = er_ground_truth.get("timeslices", [])
     timeslice_by_record: dict[str, dict] = {
@@ -436,28 +396,29 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     }
     timeslice_scores: list[tuple[str, dict]] = []
 
-    for record_key in sequence:
-        resolved = _resolve_record_file(record_key, data_dir, data_map)
-        if not resolved:
-            print(f"  {record_key}: file not found — skipped")
-            continue
-        file_path, record_type = resolved
-        rid = _ingest_file(file_path, record_type)
+    print(f"Ingesting {len(sequence)} record(s)...")
+
+    for entry in sequence:
+        file_rel = entry.get("file", "")
+        record_type = entry.get("type", "")
+        label = _record_label(entry)
+
+        rid = _ingest_record_file(dataset_path, file_rel, record_type)
         if rid:
-            print(f"  {record_key}: ingested as {rid}")
+            print(f"  {label}: ingested as {rid}")
         else:
-            print(f"  {record_key}: skipped (duplicate or error)")
+            print(f"  {label}: skipped (duplicate or error)")
             continue
 
-        # Wait for this record to be indexed before scoring timeslice
+        # Wait for indexer
         _wait_for_indexer()
 
         # Score timeslice if ground truth exists for this record
-        if record_key in timeslice_by_record:
+        if label in timeslice_by_record:
             graph_entities = _get_all_graph_entities()
-            ts = timeslice_by_record[record_key]
+            ts = timeslice_by_record[label]
             ts_scores = _score_er_timeslice(ts, graph_entities)
-            timeslice_scores.append((record_key, ts_scores))
+            timeslice_scores.append((label, ts_scores))
             if verbose:
                 _verbose_er_timeslice(ts, graph_entities)
 
