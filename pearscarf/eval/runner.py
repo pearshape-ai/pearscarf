@@ -280,8 +280,8 @@ def _score_er_timeslice(timeslice: dict, graph_entities: list[dict]) -> dict:
 # --- Report ---
 
 
-def _verbose_er_timeslice(timeslice: dict, graph_entities: list[dict]) -> None:
-    """Print surface-form-level diagnostics for a timeslice."""
+def _format_verbose_er(timeslice: dict, graph_entities: list[dict]) -> str:
+    """Format surface-form-level diagnostics for a timeslice."""
     graph_lookup: dict[str, str] = {}
     for ent in graph_entities:
         canonical = ent["name"].lower()
@@ -289,52 +289,69 @@ def _verbose_er_timeslice(timeslice: dict, graph_entities: list[dict]) -> None:
         for alias in ent.get("aliases", []):
             graph_lookup[alias.lower()] = ent["name"]
 
+    lines: list[str] = []
     for exp in timeslice.get("entities", []):
         canonical = exp["canonical_name"]
         surface_forms = exp.get("surface_forms", [])
-        print(f"    {canonical}:")
+        lines.append(f"    {canonical}:")
         for sf in surface_forms:
             resolved_to = graph_lookup.get(sf.lower())
             if resolved_to is None:
-                print(f"      \u2717 \"{sf}\" \u2192 not found in graph")
+                lines.append(f"      \u2717 \"{sf}\" \u2192 not found in graph")
             elif resolved_to.lower() == canonical.lower():
-                print(f"      \u2713 \"{sf}\" \u2192 {resolved_to}")
+                lines.append(f"      \u2713 \"{sf}\" \u2192 {resolved_to}")
             else:
-                print(f"      \u2717 \"{sf}\" \u2192 {resolved_to} (expected {canonical})")
+                lines.append(f"      \u2717 \"{sf}\" \u2192 {resolved_to} (expected {canonical})")
+    return "\n".join(lines)
 
 
-def _print_er_report(global_scores: dict, timeslice_scores: list[tuple[str, dict]] | None = None):
-    """Print ER scoring results."""
-    print()
-    print("=" * 50)
-    print("Entity Resolution — Global")
-    print("=" * 50)
-    print(f"  Node count:       {global_scores['node_count_expected']} expected, "
-          f"{global_scores['node_count_actual']} actual "
-          f"({global_scores['node_count_accuracy']:.0%})")
-    print(f"  Merge recall:     {global_scores['merge_recall_correct']}/{global_scores['merge_recall_total']} "
-          f"({global_scores['merge_recall']:.0%})")
-    print(f"  Entity merge rate:{global_scores['entity_merge_correct']}/{global_scores['entity_merge_total']} "
-          f"({global_scores['entity_merge_rate']:.0%})")
-    print(f"  False merges:     {global_scores['false_merge_count']}/{global_scores['false_merge_total']} "
-          f"({global_scores['false_merge_rate']:.0%})")
+def _format_er_report(
+    global_scores: dict,
+    timeslice_scores: list[tuple[str, dict]] | None = None,
+    verbose_sections: list[tuple[str, str]] | None = None,
+    global_verbose: str | None = None,
+) -> str:
+    """Format the full ER report as a string."""
+    lines: list[str] = []
+    lines.append("")
+    lines.append("=" * 50)
+    lines.append("Entity Resolution — Global")
+    lines.append("=" * 50)
+    lines.append(f"  Node count:       {global_scores['node_count_expected']} expected, "
+                 f"{global_scores['node_count_actual']} actual "
+                 f"({global_scores['node_count_accuracy']:.0%})")
+    lines.append(f"  Merge recall:     {global_scores['merge_recall_correct']}/{global_scores['merge_recall_total']} "
+                 f"({global_scores['merge_recall']:.0%})")
+    lines.append(f"  Entity merge rate:{global_scores['entity_merge_correct']}/{global_scores['entity_merge_total']} "
+                 f"({global_scores['entity_merge_rate']:.0%})")
+    lines.append(f"  False merges:     {global_scores['false_merge_count']}/{global_scores['false_merge_total']} "
+                 f"({global_scores['false_merge_rate']:.0%})")
 
     if timeslice_scores:
-        print()
-        print("-" * 50)
-        print("Entity Resolution — Per Record")
-        print("-" * 50)
+        lines.append("")
+        lines.append("-" * 50)
+        lines.append("Entity Resolution — Per Record")
+        lines.append("-" * 50)
         for record_key, scores in timeslice_scores:
             if not scores:
                 continue
-            print(f"  {record_key}:")
-            print(f"    nodes: {scores['node_count_expected']} expected, {scores['node_count_actual']} actual")
-            print(f"    merge recall: {scores['merge_recall_correct']}/{scores['merge_recall_total']}")
+            lines.append(f"  {record_key}:")
+            lines.append(f"    nodes: {scores['node_count_expected']} expected, {scores['node_count_actual']} actual")
+            lines.append(f"    merge recall: {scores['merge_recall_correct']}/{scores['merge_recall_total']}")
             if scores["entity_merge_total"] > 0:
-                print(f"    entity merge rate: {scores['entity_merge_correct']}/{scores['entity_merge_total']}")
+                lines.append(f"    entity merge rate: {scores['entity_merge_correct']}/{scores['entity_merge_total']}")
             if scores["false_merge_count"] > 0:
-                print(f"    false merges: {scores['false_merge_count']}")
-    print()
+                lines.append(f"    false merges: {scores['false_merge_count']}")
+
+    if global_verbose:
+        lines.append("")
+        lines.append("-" * 50)
+        lines.append("Entity Resolution — Global Diagnostics")
+        lines.append("-" * 50)
+        lines.append(global_verbose)
+
+    lines.append("")
+    return "\n".join(lines)
 
 
 # --- Main pipeline ---
@@ -420,7 +437,7 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
             ts_scores = _score_er_timeslice(ts, graph_entities)
             timeslice_scores.append((label, ts_scores))
             if verbose:
-                _verbose_er_timeslice(ts, graph_entities)
+                print(_format_verbose_er(ts, graph_entities))
 
     print()
 
@@ -430,14 +447,34 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
 
     indexer.stop()
 
-    _print_er_report(global_scores, timeslice_scores if timeslice_scores else None)
-
+    # Build verbose diagnostics
+    global_verbose = None
     if verbose:
-        print("-" * 50)
-        print("Entity Resolution — Global Diagnostics")
-        print("-" * 50)
-        _verbose_er_timeslice({"entities": er_ground_truth.get("global", [])}, graph_entities)
-        print()
+        global_verbose = _format_verbose_er({"entities": er_ground_truth.get("global", [])}, graph_entities)
+
+    # Format and print report
+    report = _format_er_report(
+        global_scores,
+        timeslice_scores if timeslice_scores else None,
+        global_verbose=global_verbose,
+    )
+    print(report)
+
+    # Save to debug dir — always include full diagnostics in the file
+    if debug_dir:
+        full_verbose = _format_verbose_er({"entities": er_ground_truth.get("global", [])}, graph_entities)
+        full_report = _format_er_report(
+            global_scores,
+            timeslice_scores if timeslice_scores else None,
+            global_verbose=full_verbose,
+        )
+        results_path = os.path.join(debug_dir, "eval-results.md")
+        with open(results_path, "w") as fh:
+            fh.write(f"# ER Eval Results\n\n")
+            fh.write(f"PearScarf v{pearscarf_version} — dataset v{version}\n")
+            fh.write(f"Model: {EXTRACTION_MODEL}\n\n")
+            fh.write(full_report)
+        print(f"Results saved to {results_path}")
 
     return {
         "global": global_scores,
