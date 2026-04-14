@@ -434,7 +434,7 @@ class LinearConnect:
         if description:
             content += f"\n{description[:2000]}"
         metadata = {
-            "linear_id": data.get("id", ""),
+            "linear_id": data.get("id") or data.get("linear_id", ""),
             "identifier": data.get("identifier", ""),
             "title": data.get("title", ""),
             "status": data.get("status", ""),
@@ -448,7 +448,7 @@ class LinearConnect:
         }
         return self._ctx.storage.save_record(
             "linear_issue", raw, content=content, metadata=metadata,
-            dedup_key=data.get("id"),
+            dedup_key=data.get("id") or data.get("linear_id"),
         )
 
     def ingest_change(self, change: dict, issue_record_id: str) -> str | None:

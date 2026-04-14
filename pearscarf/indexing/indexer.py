@@ -69,11 +69,56 @@ def _sentence_window(text: str, mention: str, radius: int = 2) -> str:
 class Indexer:
     """Background agent that indexes records via LLM extraction."""
 
-    def __init__(self) -> None:
+    def __init__(self, debug_dir: str | None = None) -> None:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
         self._resolution_prompt = load_prompt("entity_resolution")
+        self._debug_dir = debug_dir
+
+    def _debug_folder_name(self, record_id: str) -> str:
+        """Resolve record_id to a human-readable folder name for debug output."""
+        with _get_conn() as conn:
+            row = conn.execute(
+                "SELECT dedup_key, type FROM records WHERE id = %s", (record_id,)
+            ).fetchone()
+            if row:
+                r = dict(row)
+                if r.get("dedup_key"):
+                    return r["dedup_key"]
+                if r.get("type") == "ingest":
+                    return "seed"
+        return record_id
+
+    def _debug_write(self, record_id: str, name: str, content: str) -> None:
+        """Write a single debug file."""
+        import os
+        folder = self._debug_folder_name(record_id)
+        record_dir = os.path.join(self._debug_dir, folder)
+        os.makedirs(record_dir, exist_ok=True)
+        with open(os.path.join(record_dir, name), "w") as fh:
+            fh.write(content)
+
+    def _debug_extraction(self, record_id: str, system: str, user: str, raw_response: str, parsed: dict | None) -> None:
+        """Dump extraction LLM call if debug is active."""
+        if not self._debug_dir:
+            return
+        self._debug_write(record_id, "extraction_system.md", system)
+        self._debug_write(record_id, "extraction_user.md", user)
+        self._debug_write(record_id, "extraction_response.txt", raw_response)
+        if parsed:
+            self._debug_write(record_id, "extraction_response.json", json.dumps(parsed, indent=2))
+
+    def _debug_resolution(self, record_id: str, entity_name: str, system: str, user: str, raw_response: str, parsed: dict | None) -> None:
+        """Dump resolution LLM call if debug is active."""
+        if not self._debug_dir:
+            return
+        safe = re.sub(r"[^a-zA-Z0-9_-]", "_", entity_name)
+        self._debug_write(record_id, f"resolution_{safe}_system.md", system)
+        self._debug_write(record_id, f"resolution_{safe}_user.md", user)
+        self._debug_write(record_id, f"resolution_{safe}_response.txt", raw_response)
+        if parsed:
+            self._debug_write(record_id, f"resolution_{safe}_response.json", json.dumps(parsed, indent=2))
 
     def _build_content(self, record: dict) -> str:
         """Return the record's content string for extraction.
@@ -144,6 +189,8 @@ class Indexer:
                 raw_text += block.text
 
         parsed = self._parse_json_response(raw_text)
+        self._debug_extraction(record_id, system_prompt, user_message, raw_text, parsed)
+
         if parsed is None:
             log.write("indexer", "--", "error", f"JSON parse failed for {record_id}: {raw_text[:200]}")
             return {}
@@ -334,11 +381,14 @@ class Indexer:
             if block.type == "text":
                 raw_text += block.text
 
+        entity_name = entity.get("name", "unknown")
         parsed = self._parse_json_response(raw_text)
+        self._debug_resolution(self._current_record_id, entity_name, self._resolution_prompt, user_message, raw_text, parsed)
+
         if parsed is None:
             log.write(
                 "indexer", "--", "error",
-                f"Resolution JSON parse failed for '{entity.get('name', '')}': {raw_text[:200]}",
+                f"Resolution JSON parse failed for '{entity_name}': {raw_text[:200]}",
             )
             return {"decision": "new", "reasoning": "JSON parse failure — defaulting to new"}
 
