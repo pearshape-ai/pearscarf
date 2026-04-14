@@ -256,14 +256,17 @@ def eval_cmd(ctx, dataset: str | None) -> None:
 @eval_cmd.command("er")
 @click.option("--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory")
 @click.option("--verbose", "-v", is_flag=True, help="Show per-entity surface form diagnostics")
+@click.option("--debug", "-d", is_flag=True, help="Dump LLM prompts/responses to data/debug/")
+@click.option("--debug-dir", type=click.Path(), default=None, help="Custom debug output folder")
 @click.pass_context
-def eval_er(ctx, dataset: str | None, verbose: bool) -> None:
+def eval_er(ctx, dataset: str | None, verbose: bool, debug: bool, debug_dir: str | None) -> None:
     """Run entity resolution eval only."""
     ds = dataset or ctx.obj.get("dataset")
     if not ds:
         raise click.UsageError("--dataset is required")
     from pearscarf.eval.runner import run_er_eval
-    run_er_eval(ds, verbose=verbose)
+    d = debug_dir or ("data/debug" if debug else None)
+    run_er_eval(ds, verbose=verbose, debug_dir=d)
 
 
 @cli.group(invoke_without_command=True)

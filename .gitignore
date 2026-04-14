@@ -18,4 +18,5 @@ uv.lock
 
 
 data/
+debug/
 pearscaff/knowledge/gmail/*.md

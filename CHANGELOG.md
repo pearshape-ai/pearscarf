@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.19.3
+- Debug mode for eval (`psc eval er --dataset <path> --debug`). Dumps full LLM prompts and responses to `{dataset}/debug/{timestamp}/` — extraction system/user prompts, extraction responses, resolution prompts and judge responses per entity. Eval now starts its own indexer instance.
+
 ## 1.19.2
 - Verbose mode for ER eval (`psc eval er --dataset <path> -v`). Shows per-entity surface form resolution status after each timeslice and globally — which forms resolved correctly, which created spurious nodes, which weren't found.
 

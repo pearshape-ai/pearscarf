@@ -337,7 +337,7 @@ def _print_er_report(global_scores: dict, timeslice_scores: list[tuple[str, dict
 # --- Main pipeline ---
 
 
-def run_er_eval(dataset_path: str, *, verbose: bool = False) -> dict:
+def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | None = None) -> dict:
     """Run ER evaluation. Returns scores dict."""
     init_db()
     from pearscarf.storage import store
@@ -370,6 +370,21 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False) -> dict:
 
     # Load expert connects
     _ensure_expert_connects()
+
+    # Start indexer (with debug_dir if requested)
+    from pearscarf.indexing.indexer import Indexer
+
+    if debug_dir:
+        from datetime import datetime, timezone
+        dataset_name = os.path.basename(os.path.normpath(dataset_path))
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        run_name = f"{dataset_name}_v{version}_{timestamp}"
+        debug_dir = os.path.join(debug_dir, run_name)
+        os.makedirs(debug_dir, exist_ok=True)
+        print(f"Debug output: {debug_dir}")
+
+    indexer = Indexer(debug_dir=debug_dir)
+    indexer.start()
 
     # Ingest seed
     seed_path = os.path.join(dataset_path, "seed.md")
@@ -432,6 +447,8 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False) -> dict:
     # Final global scoring
     graph_entities = _get_all_graph_entities()
     global_scores = _score_er_global(er_ground_truth, graph_entities)
+
+    indexer.stop()
 
     _print_er_report(global_scores, timeslice_scores if timeslice_scores else None)
 
