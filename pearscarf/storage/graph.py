@@ -276,11 +276,67 @@ def find_entity_candidates(
                     },
                 })
 
-    # 5. Substring name match via search_entities()
+    # 5. Initial-based matching for persons ("S. Chen" → Sarah Chen)
+    if entity_type == "person":
+        import re as _re
+        initial_match = _re.match(r"^([A-Z])\.?\s+(.+)$", name.strip())
+        if initial_match:
+            initial = initial_match.group(1).lower()
+            last_name = initial_match.group(2).strip().lower()
+            with get_session() as session:
+                result = session.run(
+                    f"MATCH (n:{label}) "
+                    "WHERE toLower(n.name) ENDS WITH $last "
+                    "AND toLower(n.name) STARTS WITH $initial "
+                    "RETURN n, elementId(n) AS eid "
+                    "LIMIT 5",
+                    last=last_name,
+                    initial=initial,
+                )
+                for record in result:
+                    node = record["n"]
+                    _add({
+                        "id": record["eid"],
+                        "type": entity_type,
+                        "name": node.get("name", ""),
+                        "metadata": {
+                            k: v for k, v in dict(node).items()
+                            if k not in ("name", "created_at")
+                        },
+                    })
+
+    # 6. Substring name match via search_entities()
     for entity in search_entities(name, entity_type=entity_type, limit=5):
         _add(entity)
 
-    # 6. IDENTIFIED_AS edge match
+    # 7. Token overlap — surface candidates that share 2+ significant words
+    _STOP_WORDS = {"the", "a", "an", "and", "or", "of", "for", "in", "on", "at", "to", "is", "it"}
+    name_tokens = {t.lower() for t in name.strip().split() if t.lower() not in _STOP_WORDS and len(t) > 1}
+    if len(name_tokens) >= 2:
+        with get_session() as session:
+            result = session.run(
+                f"MATCH (n:{label}) "
+                "WHERE n.name IS NOT NULL "
+                "RETURN n, elementId(n) AS eid "
+                "LIMIT 50",
+            )
+            for record in result:
+                node = record["n"]
+                existing_name = node.get("name", "")
+                existing_tokens = {t.lower() for t in existing_name.split() if t.lower() not in _STOP_WORDS and len(t) > 1}
+                overlap = name_tokens & existing_tokens
+                if len(overlap) >= 2:
+                    _add({
+                        "id": record["eid"],
+                        "type": entity_type,
+                        "name": existing_name,
+                        "metadata": {
+                            k: v for k, v in dict(node).items()
+                            if k not in ("name", "created_at")
+                        },
+                    })
+
+    # 8. IDENTIFIED_AS edge match
     for entity in find_by_identified_as(name):
         _add(entity)
 

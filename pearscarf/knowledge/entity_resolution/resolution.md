@@ -43,13 +43,15 @@ Use when two or more candidates are plausible and context signals do not disambi
 Return exactly one JSON object. No markdown fences, no preamble, no explanation outside the JSON.
 
 For match:
-{"decision": "match", "candidate_id": "<element ID of the matched candidate>", "reasoning": "one or two sentences"}
+{"decision": "match", "candidate_number": 1, "reasoning": "one or two sentences"}
+
+The candidate_number is the number from the candidate heading (Candidate 1, Candidate 2, etc.).
 
 For new:
 {"decision": "new", "reasoning": "one or two sentences"}
 
 For ambiguous:
-{"decision": "ambiguous", "candidate_ids": ["<id1>", "<id2>"], "reasoning": "one or two sentences"}
+{"decision": "ambiguous", "candidate_numbers": [1, 2], "reasoning": "one or two sentences"}
 
 ## Important
 
