@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.19.1
+- New eval runner built from scratch. Old runner preserved as `runner_legacy.py`. Reads `dataset.yaml` for config and `sequence.yaml` for deterministic record ordering. Ingests records one at a time, waits for indexer between each.
+- ER scoring: node count accuracy, merge recall, false merge rate — scored against `er_ground_truth.json`. Global metrics always, timeslice metrics when present.
+- `psc eval` is now a command group with subcommands. `psc eval er --dataset <path>` runs ER only. Bare `psc eval --dataset <path>` runs all available eval types.
+
 ## 1.19.0
 - Eval runner resolves `dedup_key` from ground truth to actual record ID for graph scoring — compatible with uuid-based record IDs.
 - `psc expert ingest --type` accepts any string instead of a hardcoded list. Record types are dynamic — defined by installed experts.
