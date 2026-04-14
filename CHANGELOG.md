@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.19.2
+- Verbose mode for ER eval (`psc eval er --dataset <path> -v`). Shows per-entity surface form resolution status after each timeslice and globally — which forms resolved correctly, which created spurious nodes, which weren't found.
+
 ## 1.19.1
 - New eval runner built from scratch. Old runner preserved as `runner_legacy.py`. Reads `dataset.yaml` for config and `sequence.yaml` for deterministic record ordering. Ingests records one at a time, waits for indexer between each.
 - ER scoring: node count accuracy, merge recall, false merge rate — scored against `er_ground_truth.json`. Global metrics always, timeslice metrics when present.

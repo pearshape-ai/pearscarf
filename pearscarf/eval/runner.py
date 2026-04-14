@@ -279,6 +279,30 @@ def _score_er_timeslice(
 # --- Report ---
 
 
+def _verbose_er_timeslice(timeslice: dict, graph_entities: list[dict]) -> None:
+    """Print surface-form-level diagnostics for a timeslice."""
+    # Build graph lookup: lowered surface form → node name
+    graph_lookup: dict[str, str] = {}
+    for ent in graph_entities:
+        canonical = ent["name"].lower()
+        graph_lookup[canonical] = ent["name"]
+        for alias in ent.get("aliases", []):
+            graph_lookup[alias.lower()] = ent["name"]
+
+    for exp in timeslice.get("entities", []):
+        canonical = exp["canonical_name"]
+        surface_forms = exp.get("surface_forms", [])
+        print(f"    {canonical}:")
+        for sf in surface_forms:
+            resolved_to = graph_lookup.get(sf.lower())
+            if resolved_to is None:
+                print(f"      \u2717 \"{sf}\" \u2192 not found in graph")
+            elif resolved_to.lower() == canonical.lower():
+                print(f"      \u2713 \"{sf}\" \u2192 {resolved_to}")
+            else:
+                print(f"      \u2717 \"{sf}\" \u2192 {resolved_to} (expected {canonical})")
+
+
 def _print_er_report(global_scores: dict, timeslice_scores: list[tuple[str, dict]] | None = None):
     """Print ER scoring results."""
     print()
@@ -313,7 +337,7 @@ def _print_er_report(global_scores: dict, timeslice_scores: list[tuple[str, dict
 # --- Main pipeline ---
 
 
-def run_er_eval(dataset_path: str) -> dict:
+def run_er_eval(dataset_path: str, *, verbose: bool = False) -> dict:
     """Run ER evaluation. Returns scores dict."""
     init_db()
     from pearscarf.storage import store
@@ -397,8 +421,11 @@ def run_er_eval(dataset_path: str) -> dict:
         # Score timeslice if ground truth exists for this record
         if record_key in timeslice_by_record:
             graph_entities = _get_all_graph_entities()
-            ts_scores = _score_er_timeslice(timeslice_by_record[record_key], graph_entities)
+            ts = timeslice_by_record[record_key]
+            ts_scores = _score_er_timeslice(ts, graph_entities)
             timeslice_scores.append((record_key, ts_scores))
+            if verbose:
+                _verbose_er_timeslice(ts, graph_entities)
 
     print()
 
@@ -407,6 +434,13 @@ def run_er_eval(dataset_path: str) -> dict:
     global_scores = _score_er_global(er_ground_truth, graph_entities)
 
     _print_er_report(global_scores, timeslice_scores if timeslice_scores else None)
+
+    if verbose:
+        print("-" * 50)
+        print("Entity Resolution — Global Diagnostics")
+        print("-" * 50)
+        _verbose_er_timeslice({"entities": er_ground_truth.get("global", [])}, graph_entities)
+        print()
 
     return {
         "global": global_scores,
