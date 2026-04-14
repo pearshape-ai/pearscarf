@@ -72,7 +72,7 @@ class Indexer:
     def __init__(self, debug_dir: str | None = None) -> None:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
+        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None, max_retries=3)
         self._resolution_prompt = load_prompt("entity_resolution")
         self._debug_dir = debug_dir
 

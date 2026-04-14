@@ -21,7 +21,8 @@ class BaseAgent:
         on_tool_result: Callable[[str, str], None] | None = None,
     ) -> None:
         self._client = anthropic.Anthropic(
-            api_key=ANTHROPIC_API_KEY or None
+            api_key=ANTHROPIC_API_KEY or None,
+            max_retries=3,
         )
         self._registry = tool_registry
         self._messages: list[dict] = []

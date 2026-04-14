@@ -46,7 +46,7 @@ def judge_equivalence(
         lines.append("")
     user_message = "\n".join(lines)
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None, max_retries=3)
 
     with trace_span(
         "curator_judge",
