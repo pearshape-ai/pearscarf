@@ -14,11 +14,14 @@ the body, not the headers.
 
 ### What to extract from emails
 
-- **People mentioned in the body.** The sender and recipient are already
-  in the headers — do not re-extract them as new entities unless they
-  also appear by name in the body. Pay attention to people referenced by
-  first name only (e.g. "Sarah is going to review this"). Use context to
-  decide if they are clearly the same person who appears elsewhere.
+- **Sender and recipient.** Always extract the sender and recipient as
+  person entities. Use the display name from the From/To header as the
+  entity name and the email address as metadata. These are participants
+  in the conversation and should always be captured.
+- **People mentioned in the body.** Also extract people referenced by
+  name in the body text. Pay attention to first-name-only references
+  (e.g. "Sarah flagged the issue"). Use context to decide if they are
+  clearly identifiable.
 - **Companies that are parties to the conversation.** A company mentioned
   in passing (e.g. "we use Stripe for payments") is not a party — skip
   it. A company that the email is about (a customer, vendor, or partner)
