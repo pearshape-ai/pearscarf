@@ -71,7 +71,7 @@ class Registry:
         self._by_name: dict[str, Expert] = {}
         self._by_record_type: dict[str, Expert] = {}
         self._connects: dict[str, Any] = {}
-        self._core_cache: str | None = None
+        self._core_cache: dict[str, str] | None = None
         self._schema_cache: str | None = None
         self._load()
 
@@ -238,30 +238,31 @@ class Registry:
         """Look up the cached connect instance for a record_type."""
         return self._connects.get(record_type)
 
-    # --- Layer 1 / Layer 2 prompt assembly ---
+    # --- Prompt assembly ---
 
-    def core_prompt(self) -> str:
-        """Layer 1 — universal extraction rules. Cached on first call."""
+    def _core_parts(self) -> dict[str, str]:
+        """Load core prompt components. Cached on first call."""
         if self._core_cache is None:
             from pearscarf.knowledge import KNOWLEDGE_DIR
 
             core = KNOWLEDGE_DIR / "core"
-            parts = [
-                (core / "extraction.md").read_text(),
-                "## Fact Edge Labels\n",
-                (core / "facts.md").read_text(),
-                (core / "output_format.md").read_text(),
-            ]
-            self._core_cache = "\n".join(parts)
+            self._core_cache = {
+                "intro": (core / "extraction.md").read_text(),
+                "normalization": (core / "normalization.md").read_text(),
+                "fact_structure": (core / "fact_structure.md").read_text(),
+                "fact_labels": "## Fact Edge Labels\n\n" + (core / "facts.md").read_text(),
+                "ignore": (core / "ignore.md").read_text(),
+                "output_format": (core / "output_format.md").read_text(),
+            }
         return self._core_cache
 
     def schema_fragment(self) -> str:
-        """Layer 2 — entity type definitions, including expert-declared types.
+        """Entity type definitions + normalization rules.
 
-        Reads the base entity types from pearscarf/knowledge/core/entities/
-        and then loops over registered experts to append any extra entity
-        files declared via `new_entity_types` in the manifest. The expert
-        loop is a no-op until an expert declares new types.
+        Reads base entity types from pearscarf/knowledge/core/entities/
+        plus any types declared by installed experts. Appends entity
+        normalization rules so "what to look for" and "how to name them"
+        are together.
         """
         if self._schema_cache is None:
             from pearscarf.knowledge import KNOWLEDGE_DIR
@@ -280,6 +281,9 @@ class Registry:
                     if md_path.is_file():
                         parts.append(md_path.read_text())
 
+            # Normalization follows entity types
+            parts.append(self._core_parts()["normalization"])
+
             self._schema_cache = "\n".join(parts)
         return self._schema_cache
 
@@ -288,13 +292,14 @@ class Registry:
     def compose_prompt(self, record: dict) -> str:
         """Compose the extraction system prompt for a given record.
 
-        Ingest records use ingest/extraction.md as a complete prompt — they
-        do not participate in layered composition. Every other record gets:
-
-            Layer 1 (core_prompt)
-          + Layer 2 (schema_fragment)
-          + Layer 3 (expert.extraction_path, if the record's type belongs
-                     to a registered expert that ships extraction.md)
+        Order:
+            1. Intro
+            2. Entity types + normalization
+            3. Fact structure
+            4. Fact edge labels
+            5. What to ignore
+            6. Output format
+            7. Source-specific guidance (expert's extraction.md)
         """
         from pearscarf.knowledge import load
 
@@ -303,7 +308,15 @@ class Registry:
         if record_type == "ingest":
             return load("ingest_extraction")
 
-        parts: list[str] = [self.core_prompt(), self.schema_fragment()]
+        core = self._core_parts()
+        parts: list[str] = [
+            core["intro"],
+            self.schema_fragment(),
+            core["fact_structure"],
+            core["fact_labels"],
+            core["ignore"],
+            core["output_format"],
+        ]
 
         expert = self.get_by_record_type(record_type)
         if expert and expert.extraction_path is not None:

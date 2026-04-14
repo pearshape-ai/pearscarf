@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.19.5
+- Extraction prompt decomposed into ordered components. Entity types and normalization now appear before facts and edge labels. Prompt assembly order: intro → entity types + normalization → fact structure → edge labels → what to ignore → output format → source-specific guidance.
+- Gmail extraction guidance updated: sender and recipient always extracted as entities (previously skipped if not mentioned in body).
+- Anthropic SDK retries on 429/500/529 with exponential backoff (max_retries=3) across all LLM calls.
+- ER scoring split into merge recall (per surface form) and entity merge rate (all-or-nothing per entity).
+- Debug output uses dedup_key for folder names and groups by dataset version + timestamp.
+
 ## 1.19.3
 - Debug mode for eval (`psc eval er --dataset <path> --debug`). Dumps full LLM prompts and responses to `{dataset}/debug/{timestamp}/` — extraction system/user prompts, extraction responses, resolution prompts and judge responses per entity. Eval now starts its own indexer instance.
 
