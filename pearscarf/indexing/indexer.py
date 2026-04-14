@@ -255,10 +255,21 @@ class Indexer:
         reasoning = decision.get("reasoning", "")
 
         if verdict == "match":
+            # Map candidate_number back to actual ID
+            candidate_num = decision.get("candidate_number")
+            # Fallback: try legacy candidate_id field
             candidate_id = decision.get("candidate_id", "")
+            if candidate_num is not None and 1 <= candidate_num <= len(candidates):
+                candidate_id = candidates[candidate_num - 1]["id"]
+
+            if not candidate_id:
+                log.write("indexer", "--", "warning",
+                          f"Resolution: '{name}' matched but no valid candidate ID — creating new")
+                return graph.create_entity(entity_type, name, metadata)
+
             log.write(
                 "indexer", "--", "action",
-                f"Resolution: '{name}' matched to candidate {candidate_id} — {reasoning}",
+                f"Resolution: '{name}' matched to {candidate_id} — {reasoning}",
             )
             graph.create_identified_as_edge(
                 candidate_id, name, self._current_record_id, self._current_record_type,
