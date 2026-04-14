@@ -1,381 +1,425 @@
-"""Eval runner — graph-based evaluation pipeline.
+"""Eval runner — dataset-driven evaluation pipeline.
 
-Usage: psc eval --dataset <path>
+Usage:
+    psc eval er --dataset <path>       # ER scoring only
+    psc eval --dataset <path>          # all available eval types
 
 Pipeline:
-    1. Ingest seed (if present)
-    2. Ingest records via ParseRecordFileTool
-    3. Wait for indexer to process all records
-    4. Query graph for entities and facts per record
-    5. Score against ground truth
-    6. Report and write results
+    1. Read dataset.yaml for config
+    2. Read sequence.yaml for record order (if present)
+    3. Ingest seed (if present)
+    4. Ingest records in sequence order
+    5. Wait for indexer to process all records
+    6. Score against ground truth
+    7. Print results
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
-import re
 import time
 
-from pearscarf.storage import graph
-from pearscarf.eval import scoring
+import yaml
+
+from pearscarf import __version__ as pearscarf_version
 from pearscarf.config import EXTRACTION_MODEL, EXTRACTION_TEMPERATURE, EXTRACTION_MAX_TOKENS
+from pearscarf.storage import graph
 from pearscarf.storage.db import _get_conn, init_db
-from pearscarf.eval.report import print_report, write_results
-from pearscarf.experts.ingest import ParseRecordFileTool
 
 
-# --- Dataset loading helpers ---
+# --- Dataset loading ---
 
 
-def _read_dataset_version(dataset_path: str, ground_truth: dict) -> str:
-    """Resolve dataset version from ground truth or dimensions.md."""
-    version = ground_truth.get("version")
-    if version:
-        return str(version)
+def _load_dataset_config(dataset_path: str) -> dict:
+    """Load dataset.yaml. Falls back to minimal defaults if absent."""
+    cfg_path = os.path.join(dataset_path, "dataset.yaml")
+    if os.path.isfile(cfg_path):
+        with open(cfg_path) as fh:
+            return yaml.safe_load(fh) or {}
 
-    dim_path = os.path.join(dataset_path, "dimensions.md")
-    if os.path.isfile(dim_path):
-        with open(dim_path) as fh:
-            content = fh.read()
-        match = re.search(r"^version:\s*(.+)$", content, re.MULTILINE)
-        if match:
-            return match.group(1).strip()
-        match = re.search(r"\(v([\d.]+)\)", content)
-        if match:
-            return match.group(1)
-
-    return "unknown"
+    # Legacy fallback: derive data_map from folder names
+    data_dir = os.path.join(dataset_path, "data")
+    data_map = {}
+    if os.path.isdir(data_dir):
+        for name in sorted(os.listdir(data_dir)):
+            if os.path.isdir(os.path.join(data_dir, name)):
+                data_map[name] = name
+    return {"data_map": data_map}
 
 
-def _load_ground_truth(dataset_path: str) -> tuple[dict, dict, str]:
-    """Load ground truth and resolve dataset version.
+def _load_sequence(dataset_path: str) -> list[str] | None:
+    """Load sequence.yaml if present. Returns ordered list of record keys."""
+    seq_path = os.path.join(dataset_path, "sequence.yaml")
+    if os.path.isfile(seq_path):
+        with open(seq_path) as fh:
+            return yaml.safe_load(fh) or []
+    return None
 
-    Returns (gt_records, ground_truth_raw, dataset_version).
+
+# --- Ingestion helpers ---
+
+
+def _ensure_expert_connects():
+    """Load expert connects so ingest tools can delegate."""
+    from pearscarf.bus import MessageBus
+    from pearscarf.expert_context import build_context
+    from pearscarf.indexing.registry import get_registry
+
+    bus = MessageBus()
+    registry = get_registry()
+    for expert in registry.enabled_experts():
+        if not expert.tools_module:
+            continue
+        try:
+            tools_mod = importlib.import_module(expert.tools_module)
+            ctx = build_context(expert.name, bus, expert_version=expert.version)
+            connect = tools_mod.get_tools(ctx)
+            for rt in expert.record_types:
+                registry.register_connect(rt, connect)
+        except Exception as exc:
+            print(f"  {expert.name} tools failed: {exc}")
+
+
+def _ingest_file(file_path: str, record_type: str) -> str | None:
+    """Ingest a single JSON file. Returns record_id or None."""
+    from pearscarf.indexing.registry import get_registry
+    from pearscarf.storage import store
+
+    with open(file_path) as fh:
+        data = json.load(fh)
+
+    connect = get_registry().get_connect(record_type)
+    if connect is None or not hasattr(connect, "ingest_record"):
+        print(f"    Error: no expert for record_type '{record_type}'")
+        return None
+
+    rid = connect.ingest_record(data)
+    if rid:
+        store.mark_relevant(rid)
+    return rid
+
+
+def _resolve_record_file(
+    record_key: str, data_dir: str, data_map: dict
+) -> tuple[str, str] | None:
+    """Resolve a record key (e.g. 'email_001') to (file_path, record_type).
+
+    Walks data_map folders looking for {record_key}.json.
     """
-    gt_path = os.path.join(dataset_path, "ground_truth.json")
-    if not os.path.isfile(gt_path):
-        raise SystemExit(f"Ground truth not found: {gt_path}")
-    with open(gt_path) as fh:
-        ground_truth = json.load(fh)
-
-    dataset_version = _read_dataset_version(dataset_path, ground_truth)
-
-    if "records" in ground_truth and isinstance(ground_truth["records"], dict):
-        gt_records = ground_truth["records"]
-    else:
-        gt_records = {
-            k: v for k, v in ground_truth.items()
-            if isinstance(v, dict)
-        }
-
-    return gt_records, ground_truth, dataset_version
-
-
-# --- Graph query helpers ---
-
-
-def _graph_is_empty() -> bool:
-    """Check if Neo4j has any nodes."""
-    stats = graph.graph_stats()
-    return stats.get("total_entities", 0) == 0 and stats.get("day_nodes", 0) == 0
+    for folder_name, record_type in data_map.items():
+        folder_path = os.path.join(data_dir, folder_name)
+        if not os.path.isdir(folder_path):
+            continue
+        file_path = os.path.join(folder_path, f"{record_key}.json")
+        if os.path.isfile(file_path):
+            return file_path, record_type
+    return None
 
 
 def _pending_record_count() -> int:
-    """Count records awaiting indexing."""
     with _get_conn() as conn:
         row = conn.execute(
             "SELECT COUNT(*) AS c FROM records "
             "WHERE indexed = FALSE AND classification = 'relevant'"
         ).fetchone()
-        return row["c"]
+        return dict(row).get("c", 0) if row else 0
 
 
-def _resolve_dedup_key(dedup_key: str) -> str | None:
-    """Look up the actual record ID from a dedup_key."""
-    with _get_conn() as conn:
-        row = conn.execute(
-            "SELECT id FROM records WHERE dedup_key = %s", (dedup_key,)
-        ).fetchone()
-        return row["id"] if row else None
+def _graph_is_empty() -> bool:
+    stats = graph.graph_stats()
+    return stats.get("total_entities", 0) == 0 and stats.get("day_nodes", 0) == 0
 
 
-def _build_extracted_from_graph(record_id: str) -> dict:
-    """Query the graph for entities and facts sourced from a record.
+def _wait_for_indexer():
+    """Block until all relevant records are indexed."""
+    print("Waiting for indexer...")
+    start = time.time()
+    while True:
+        pending = _pending_record_count()
+        if pending == 0:
+            print("Indexer finished.")
+            break
+        elapsed = int(time.time() - start)
+        print(f"  {pending} record(s) remaining... ({elapsed}s)")
+        time.sleep(2)
 
-    Returns {"entities": [...], "facts": [...]} matching the shape
-    that scoring.score_record() expects.
+
+# --- Graph queries for ER ---
+
+
+def _get_all_graph_entities() -> list[dict]:
+    """Get all entity nodes from Neo4j (excluding Day nodes).
+
+    Returns list of {"name", "type", "aliases"}.
     """
-    items = graph.get_nodes_by_source_record(record_id)
+    entities = []
+    labels = {"Person": "person", "Company": "company", "Project": "project",
+              "Event": "event", "Repository": "repository"}
+    with graph.get_session() as session:
+        for neo_label, type_name in labels.items():
+            result = session.run(
+                f"MATCH (n:{neo_label}) RETURN n.name AS name, elementId(n) AS eid"
+            )
+            for record in result:
+                name = record["name"]
+                eid = record["eid"]
+                # Get aliases via IDENTIFIED_AS
+                alias_result = session.run(
+                    "MATCH (n)-[r:IDENTIFIED_AS]->(n) "
+                    "WHERE elementId(n) = $eid AND r.surface_form IS NOT NULL "
+                    "RETURN r.surface_form AS sf",
+                    eid=eid,
+                )
+                aliases = [r["sf"] for r in alias_result if r["sf"].lower() != name.lower()]
+                entities.append({
+                    "name": name,
+                    "type": type_name,
+                    "aliases": aliases,
+                })
+    return entities
 
-    # Collect unique entities from the from/to fields
-    entity_set: dict[str, dict] = {}  # name -> entity dict
-    facts = []
 
-    for item in items:
-        from_name = item.get("from", "")
-        to_name = item.get("to", "")
-        edge_label = item.get("edge_label", "")
+# --- ER scoring ---
 
-        # Build fact
-        fact = {
-            "edge_label": edge_label,
-            "fact_type": item.get("fact_type", ""),
-            "fact": item.get("fact", ""),
-            "from_entity": from_name,
-            "to_entity": to_name if to_name and not _is_day(to_name) else None,
-            "confidence": item.get("confidence", ""),
-            "source_at": item.get("source_at", ""),
-            "stale": item.get("stale", False),
-            "valid_until": item.get("valid_until"),
-        }
-        facts.append(fact)
 
-        # Collect entities (skip Day nodes)
-        if from_name and not _is_day(from_name):
-            if from_name not in entity_set:
-                entity_set[from_name] = {"name": from_name, "type": item.get("from_type", "")}
-        if to_name and not _is_day(to_name):
-            if to_name not in entity_set:
-                entity_set[to_name] = {"name": to_name, "type": item.get("to_type", "")}
+def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
+    """Score ER against the global section of er_ground_truth.
 
-    # Enrich entities with aliases from IDENTIFIED_AS edges
-    for ent in entity_set.values():
-        aliases = _get_aliases(ent["name"])
-        if aliases:
-            ent["aliases"] = aliases
+    Returns {node_count_expected, node_count_actual, node_count_accuracy,
+             merge_recall, merge_total, merge_correct,
+             false_merge_rate, false_merge_count, false_merge_total}.
+    """
+    expected = er_ground_truth.get("global", [])
+    if not expected:
+        return {}
+
+    # --- Node count ---
+    node_count_expected = len(expected)
+    node_count_actual = len(graph_entities)
+
+    # --- Merge recall ---
+    # For each canonical entity, check if all its surface forms resolve
+    # to a single graph node (either as the node's name or as an alias).
+    # Build graph lookup: lowered surface form → node name
+    graph_lookup: dict[str, str] = {}
+    for ent in graph_entities:
+        canonical = ent["name"].lower()
+        graph_lookup[canonical] = ent["name"]
+        for alias in ent.get("aliases", []):
+            graph_lookup[alias.lower()] = ent["name"]
+
+    merge_total = 0
+    merge_correct = 0
+    for exp in expected:
+        surface_forms = exp.get("surface_forms", [])
+        if len(surface_forms) <= 1:
+            continue
+        merge_total += 1
+        # All surface forms should map to the same graph node
+        resolved_nodes = set()
+        for sf in surface_forms:
+            node = graph_lookup.get(sf.lower())
+            if node:
+                resolved_nodes.add(node.lower())
+        if len(resolved_nodes) == 1:
+            merge_correct += 1
+
+    merge_recall = merge_correct / merge_total if merge_total > 0 else 1.0
+
+    # --- False merge rate ---
+    # For each graph node, check that all surface forms resolving to it
+    # belong to the same canonical entity.
+    # Build reverse: graph node name → set of canonical entities it should belong to
+    sf_to_canonical: dict[str, str] = {}
+    for exp in expected:
+        canonical = exp["canonical_name"].lower()
+        for sf in exp.get("surface_forms", []):
+            sf_to_canonical[sf.lower()] = canonical
+
+    false_merge_count = 0
+    false_merge_total = 0
+    for ent in graph_entities:
+        all_forms = [ent["name"].lower()] + [a.lower() for a in ent.get("aliases", [])]
+        canonicals_for_node = set()
+        for form in all_forms:
+            c = sf_to_canonical.get(form)
+            if c:
+                canonicals_for_node.add(c)
+        if len(canonicals_for_node) > 0:
+            false_merge_total += 1
+            if len(canonicals_for_node) > 1:
+                false_merge_count += 1
+
+    false_merge_rate = false_merge_count / false_merge_total if false_merge_total > 0 else 0.0
 
     return {
-        "entities": list(entity_set.values()),
-        "facts": facts,
+        "node_count_expected": node_count_expected,
+        "node_count_actual": node_count_actual,
+        "node_count_accuracy": 1.0 - abs(node_count_expected - node_count_actual) / max(node_count_expected, 1),
+        "merge_recall": merge_recall,
+        "merge_total": merge_total,
+        "merge_correct": merge_correct,
+        "false_merge_rate": false_merge_rate,
+        "false_merge_count": false_merge_count,
+        "false_merge_total": false_merge_total,
     }
 
 
-def _get_aliases(entity_name: str) -> list[str]:
-    """Get surface forms that resolved to this entity via IDENTIFIED_AS edges."""
-    with graph.get_session() as session:
-        result = session.run(
-            "MATCH (n)-[r:IDENTIFIED_AS]->(n) "
-            "WHERE toLower(n.name) = toLower($name) AND r.surface_form IS NOT NULL "
-            "RETURN r.surface_form AS sf",
-            name=entity_name,
-        )
-        return [r["sf"] for r in result if r["sf"].lower() != entity_name.lower()]
+def _score_er_timeslice(
+    timeslice: dict, graph_entities: list[dict]
+) -> dict:
+    """Score ER for a single timeslice using the same logic as global."""
+    # Reuse global scoring by wrapping the timeslice entities as a "global" list
+    pseudo_gt = {"global": timeslice.get("entities", [])}
+    return _score_er_global(pseudo_gt, graph_entities)
 
 
-def _is_day(name: str) -> bool:
-    """Check if a name looks like a Day node date (YYYY-MM-DD)."""
-    return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", name))
+# --- Report ---
 
 
-# --- Verbose output ---
-
-
-def _print_verbose_graph(
-    record_id: str,
-    extracted: dict,
-    expected: dict,
-) -> None:
-    """Print detailed debug output for a single record."""
+def _print_er_report(global_scores: dict, timeslice_scores: list[tuple[str, dict]] | None = None):
+    """Print ER scoring results."""
     print()
-    print("=" * 60)
-    print(record_id)
-    print("=" * 60)
+    print("=" * 50)
+    print("Entity Resolution — Global")
+    print("=" * 50)
+    print(f"  Node count:    {global_scores['node_count_expected']} expected, "
+          f"{global_scores['node_count_actual']} actual "
+          f"({global_scores['node_count_accuracy']:.0%})")
+    print(f"  Merge recall:  {global_scores['merge_correct']}/{global_scores['merge_total']} "
+          f"({global_scores['merge_recall']:.0%})")
+    print(f"  False merges:  {global_scores['false_merge_count']}/{global_scores['false_merge_total']} "
+          f"({global_scores['false_merge_rate']:.0%})")
 
-    print("\n--- Expected Entities ---")
-    for e in expected.get("expected_entities", []):
-        meta = e.get("metadata", {})
-        meta_str = ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else ""
-        extra = f"  [{meta_str}]" if meta_str else ""
-        print(f"  [{e.get('type', '?')}] {e.get('name', '?')}{extra}")
-
-    print("\n--- Expected Facts ---")
-    for f in expected.get("expected_facts", []):
-        to_str = f" -> {f['to_entity']}" if f.get("to_entity") else ""
-        valid = f"  (valid_until: {f['valid_until']})" if f.get("valid_until") else ""
-        label = f"{f.get('edge_label', '?')}/{f.get('fact_type', '?')}"
-        print(f"  [{f.get('confidence', '?')}] {label}: {f.get('from_entity', '?')}{to_str}{valid}")
-
-    print("\n--- Graph Entities ---")
-    for e in extracted.get("entities", []):
-        print(f"  {e.get('name', '?')}")
-
-    print("\n--- Graph Facts ---")
-    for f in extracted.get("facts", []):
-        to_str = f" -> {f['to_entity']}" if f.get("to_entity") else ""
-        valid = f"  (valid_until: {f['valid_until']})" if f.get("valid_until") else (
-            f"  (source_at: {f['source_at']})" if f.get("source_at") else ""
-        )
-        label = f"{f.get('edge_label', '?')}/{f.get('fact_type', '?')}"
-        print(f"  [{f.get('confidence', '?')}] {label}: {f.get('from_entity', '?')}{to_str}{valid}")
-
+    if timeslice_scores:
+        print()
+        print("-" * 50)
+        print("Entity Resolution — Per Record")
+        print("-" * 50)
+        for record_key, scores in timeslice_scores:
+            if not scores:
+                continue
+            print(f"  {record_key}:")
+            print(f"    nodes: {scores['node_count_expected']} expected, {scores['node_count_actual']} actual")
+            if scores["merge_total"] > 0:
+                print(f"    merges: {scores['merge_correct']}/{scores['merge_total']}")
+            if scores["false_merge_count"] > 0:
+                print(f"    false merges: {scores['false_merge_count']}")
     print()
 
 
 # --- Main pipeline ---
 
 
-def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
-    """Graph-based eval: ingest -> index -> query graph -> score."""
-    from pearscarf import __version__ as pearscarf_version
+def run_er_eval(dataset_path: str) -> dict:
+    """Run ER evaluation. Returns scores dict."""
+    init_db()
     from pearscarf.storage import store
 
-    init_db()
+    config = _load_dataset_config(dataset_path)
+    data_map = config.get("data_map", {})
+    version = config.get("version", "unknown")
+    data_dir = os.path.join(dataset_path, "data")
 
-    # Load ground truth
-    gt_records, ground_truth, dataset_version = _load_ground_truth(dataset_path)
+    # Load ER ground truth
+    er_gt_file = config.get("ground_truth", {}).get("entity_resolution")
+    if not er_gt_file:
+        raise SystemExit("No entity_resolution ground truth configured in dataset.yaml")
+    er_gt_path = os.path.join(dataset_path, er_gt_file)
+    if not os.path.isfile(er_gt_path):
+        raise SystemExit(f"ER ground truth not found: {er_gt_path}")
+    with open(er_gt_path) as fh:
+        er_ground_truth = json.load(fh)
 
-    print(f"PearScarf v{pearscarf_version} — graph eval against dataset v{dataset_version}")
+    print(f"PearScarf v{pearscarf_version} — ER eval against dataset v{version}")
     print(f"Model: {EXTRACTION_MODEL}  Temperature: {EXTRACTION_TEMPERATURE}  Max tokens: {EXTRACTION_MAX_TOKENS}")
-    print(f"Ground truth entries: {len(gt_records)}")
     print()
 
-    # --- Require clean graph ---
+    # Require clean graph
     if not _graph_is_empty():
         raise SystemExit(
             "Neo4j graph is not empty — eval requires a clean graph.\n"
-            "Run `python scripts/reindex_all.py` to wipe and retry."
+            "Run `psc erase-all` and retry."
         )
 
-    # --- Step 1: Seed ---
+    # Load expert connects
+    _ensure_expert_connects()
+
+    # Ingest seed
     seed_path = os.path.join(dataset_path, "seed.md")
     if os.path.isfile(seed_path):
         with open(seed_path) as fh:
             seed_content = fh.read()
-        record_id = store.save_ingest(source="eval_runner", raw=seed_content)
-        print(f"Seed ingested as {record_id}")
-    else:
-        print("Warning: no seed.md found — proceeding without seed")
+        rid = store.save_ingest(source="eval_runner", raw=seed_content)
+        print(f"Seed ingested as {rid}")
 
-    # --- Step 2: Ingest records ---
-    tool = ParseRecordFileTool()
-    data_dir = os.path.join(dataset_path, "data")
+    # Determine record order
+    sequence = _load_sequence(dataset_path)
 
-    data_map_path = os.path.join(dataset_path, "data_map.yaml")
-    if os.path.isfile(data_map_path):
-        import yaml
-        type_map = yaml.safe_load(open(data_map_path).read()) or {}
-    else:
-        type_map = {}
-        # Auto-detect: folder name = record_type
-        if os.path.isdir(data_dir):
-            for name in sorted(os.listdir(data_dir)):
-                if os.path.isdir(os.path.join(data_dir, name)):
-                    type_map[name] = name
+    if sequence is None:
+        # Fallback: walk all folders, sorted
+        sequence = []
+        for folder_name in sorted(data_map.keys()):
+            folder_path = os.path.join(data_dir, folder_name)
+            if not os.path.isdir(folder_path):
+                continue
+            for fname in sorted(os.listdir(folder_path)):
+                if fname.endswith(".json"):
+                    sequence.append(fname.rsplit(".", 1)[0])
 
-    for folder_name, record_type in type_map.items():
-        folder_path = os.path.join(data_dir, folder_name)
-        if not os.path.isdir(folder_path):
-            continue
-        result = tool.execute(file_path=folder_path, record_type=record_type)
-        print(f"  {folder_name}: {result}")
-        if result.startswith("Error"):
-            raise SystemExit(f"Record ingestion failed for {folder_name} — aborting eval.")
+    print(f"Ingesting {len(sequence)} record(s)...")
 
-    print()
-
-    # --- Step 3: Wait for indexer ---
-    print("Waiting for indexer...")
-    start = time.time()
-    while True:
-        pending = _pending_record_count()
-        if pending == 0:
-            print("Indexer finished — all records processed.")
-            break
-        elapsed = int(time.time() - start)
-        print(f"  {pending} record(s) remaining... ({elapsed}s)")
-        time.sleep(2)
-
-    print()
-
-    # --- Step 4: Query graph and score ---
-    per_record: dict[str, dict] = {}
-    extracted_entities_by_record: dict[str, list[dict]] = {}
-    extracted_facts_by_record: dict[str, list[dict]] = {}
-
-    for gt_key, expected in gt_records.items():
-        # Resolve dedup_key → actual record ID for graph lookup
-        dedup_key = expected.get("dedup_key", gt_key)
-        record_id = _resolve_dedup_key(dedup_key)
-        if not record_id:
-            print(f"  {gt_key}: skipped — no record found for dedup_key '{dedup_key}'")
-            continue
-
-        extracted = _build_extracted_from_graph(record_id)
-
-        extracted_entities_by_record[gt_key] = extracted.get("entities", [])
-        extracted_facts_by_record[gt_key] = extracted.get("facts", [])
-
-        scores = scoring.score_record(extracted, expected)
-        per_record[gt_key] = scores
-
-        if verbose:
-            _print_verbose_graph(gt_key, extracted, expected)
-
-        # Confidence warnings
-        for w in scores.get("confidence_warnings", []):
-            print(f"    ⚠ confidence: {w}")
-
-        # Progress
-        if scores["is_noise"]:
-            status = "ok" if scores["noise_correctly_empty"] else "FAIL"
-            print(f"  {gt_key}: noise — {status}")
-        else:
-            print(
-                f"  {gt_key}: entities {scores['entity_matched']}/{scores['entity_expected']}"
-                f"  facts {scores['fact_matched']}/{scores['fact_expected']}"
-            )
-
-    # --- Step 5: Aggregate and report ---
-    total_fact_matched = sum(r["fact_matched"] for r in per_record.values())
-    total_fact_extracted = sum(r["fact_extracted"] for r in per_record.values())
-    total_fact_expected = sum(r["fact_expected"] for r in per_record.values())
-
-    agg_precision = scoring.precision(total_fact_matched, total_fact_extracted)
-    agg_recall = scoring.recall(total_fact_matched, total_fact_expected)
-    agg_f1 = scoring.f1(agg_precision, agg_recall)
-    agg_nrr = scoring.noise_rejection_rate(list(per_record.values()))
-
-    aggregate: dict = {
-        "extraction_precision": agg_precision,
-        "extraction_recall": agg_recall,
-        "graph_fidelity_f1": agg_f1,
+    # Ingest in sequence order
+    timeslices = er_ground_truth.get("timeslices", [])
+    timeslice_by_record: dict[str, dict] = {
+        ts["record"]: ts for ts in timeslices
     }
-    if agg_nrr is not None:
-        aggregate["noise_rejection_rate"] = agg_nrr
+    timeslice_scores: list[tuple[str, dict]] = []
 
-    # Per-label F1
-    per_label = {}
-    for label in ("affiliated", "asserted", "transitioned"):
-        lm = sum(r.get(f"{label}_matched", 0) for r in per_record.values())
-        le = sum(r.get(f"{label}_extracted", 0) for r in per_record.values())
-        lx = sum(r.get(f"{label}_expected", 0) for r in per_record.values())
-        lp = scoring.precision(lm, le)
-        lr = scoring.recall(lm, lx)
-        per_label[label] = {"precision": lp, "recall": lr, "f1": scoring.f1(lp, lr)}
-    aggregate["per_label_f1"] = per_label
+    for record_key in sequence:
+        resolved = _resolve_record_file(record_key, data_dir, data_map)
+        if not resolved:
+            print(f"  {record_key}: file not found — skipped")
+            continue
+        file_path, record_type = resolved
+        rid = _ingest_file(file_path, record_type)
+        if rid:
+            print(f"  {record_key}: ingested as {rid}")
+        else:
+            print(f"  {record_key}: skipped (duplicate or error)")
+            continue
 
-    # ERA (optional)
-    resolution_pairs = ground_truth.get("resolution_pairs")
-    if resolution_pairs:
-        era = scoring.entity_resolution_accuracy(
-            resolution_pairs, extracted_entities_by_record,
-            extracted_facts_by_record=extracted_facts_by_record,
-        )
-        if era is not None:
-            aggregate["entity_resolution_accuracy"] = era
+        # Wait for this record to be indexed before scoring timeslice
+        _wait_for_indexer()
 
-    # Temporal Accuracy (optional)
-    temporal_assertions = ground_truth.get("temporal_assertions")
-    if temporal_assertions:
-        ta = scoring.temporal_accuracy(
-            temporal_assertions, extracted_facts_by_record
-        )
-        if ta is not None:
-            aggregate["temporal_accuracy"] = ta
+        # Score timeslice if ground truth exists for this record
+        if record_key in timeslice_by_record:
+            graph_entities = _get_all_graph_entities()
+            ts_scores = _score_er_timeslice(timeslice_by_record[record_key], graph_entities)
+            timeslice_scores.append((record_key, ts_scores))
 
-    print_report(aggregate, per_record, pearscarf_version, dataset_version)
+    print()
 
-    results_dir = os.path.join(dataset_path, "results")
-    write_results(results_dir, pearscarf_version, dataset_version, aggregate, per_record)
+    # Final global scoring
+    graph_entities = _get_all_graph_entities()
+    global_scores = _score_er_global(er_ground_truth, graph_entities)
+
+    _print_er_report(global_scores, timeslice_scores if timeslice_scores else None)
+
+    return {
+        "global": global_scores,
+        "timeslices": timeslice_scores,
+    }
+
+
+def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
+    """Run all available eval types for a dataset."""
+    config = _load_dataset_config(dataset_path)
+    gt_config = config.get("ground_truth", {})
+
+    if gt_config.get("entity_resolution"):
+        run_er_eval(dataset_path)
+    else:
+        print("No eval types configured in dataset.yaml")
