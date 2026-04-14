@@ -240,27 +240,30 @@ def test_cmd() -> None:
 
 
 @cli.group("eval", invoke_without_command=True)
-@click.option("--dataset", required=True, type=click.Path(exists=True), help="Path to eval dataset directory")
+@click.option("--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory")
 @click.pass_context
-def eval_cmd(ctx, dataset: str) -> None:
+def eval_cmd(ctx, dataset: str | None) -> None:
     """Run evaluation. Use subcommands (er, facts) or run all."""
     ctx.ensure_object(dict)
     ctx.obj["dataset"] = dataset
     if ctx.invoked_subcommand is None:
+        if not dataset:
+            raise click.UsageError("--dataset is required")
         from pearscarf.eval.runner import run_graph_eval
         run_graph_eval(dataset)
 
 
 @eval_cmd.command("er")
 @click.option("--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory")
+@click.option("--verbose", "-v", is_flag=True, help="Show per-entity surface form diagnostics")
 @click.pass_context
-def eval_er(ctx, dataset: str | None) -> None:
+def eval_er(ctx, dataset: str | None, verbose: bool) -> None:
     """Run entity resolution eval only."""
     ds = dataset or ctx.obj.get("dataset")
     if not ds:
         raise click.UsageError("--dataset is required")
     from pearscarf.eval.runner import run_er_eval
-    run_er_eval(ds)
+    run_er_eval(ds, verbose=verbose)
 
 
 @cli.group(invoke_without_command=True)
