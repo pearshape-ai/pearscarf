@@ -210,23 +210,36 @@ def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
         for alias in ent.get("aliases", []):
             graph_lookup[alias.lower()] = ent["name"]
 
-    merge_total = 0
-    merge_correct = 0
+    # --- Merge recall (per surface form) ---
+    sf_total = 0
+    sf_correct = 0
+    for exp in expected:
+        canonical = exp["canonical_name"].lower()
+        for sf in exp.get("surface_forms", []):
+            sf_total += 1
+            resolved_to = graph_lookup.get(sf.lower())
+            if resolved_to and resolved_to.lower() == canonical:
+                sf_correct += 1
+
+    merge_recall = sf_correct / sf_total if sf_total > 0 else 1.0
+
+    # --- Entity merge rate (all-or-nothing per entity) ---
+    entity_merge_total = 0
+    entity_merge_correct = 0
     for exp in expected:
         surface_forms = exp.get("surface_forms", [])
         if len(surface_forms) <= 1:
             continue
-        merge_total += 1
-        # All surface forms should map to the same graph node
-        resolved_nodes = set()
-        for sf in surface_forms:
-            node = graph_lookup.get(sf.lower())
-            if node:
-                resolved_nodes.add(node.lower())
-        if len(resolved_nodes) == 1:
-            merge_correct += 1
+        entity_merge_total += 1
+        canonical = exp["canonical_name"].lower()
+        all_correct = all(
+            graph_lookup.get(sf.lower(), "").lower() == canonical
+            for sf in surface_forms
+        )
+        if all_correct:
+            entity_merge_correct += 1
 
-    merge_recall = merge_correct / merge_total if merge_total > 0 else 1.0
+    entity_merge_rate = entity_merge_correct / entity_merge_total if entity_merge_total > 0 else 1.0
 
     # --- False merge rate ---
     # For each graph node, check that all surface forms resolving to it
@@ -259,8 +272,11 @@ def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
         "node_count_actual": node_count_actual,
         "node_count_accuracy": 1.0 - abs(node_count_expected - node_count_actual) / max(node_count_expected, 1),
         "merge_recall": merge_recall,
-        "merge_total": merge_total,
-        "merge_correct": merge_correct,
+        "merge_recall_correct": sf_correct,
+        "merge_recall_total": sf_total,
+        "entity_merge_rate": entity_merge_rate,
+        "entity_merge_correct": entity_merge_correct,
+        "entity_merge_total": entity_merge_total,
         "false_merge_rate": false_merge_rate,
         "false_merge_count": false_merge_count,
         "false_merge_total": false_merge_total,
@@ -309,12 +325,14 @@ def _print_er_report(global_scores: dict, timeslice_scores: list[tuple[str, dict
     print("=" * 50)
     print("Entity Resolution — Global")
     print("=" * 50)
-    print(f"  Node count:    {global_scores['node_count_expected']} expected, "
+    print(f"  Node count:       {global_scores['node_count_expected']} expected, "
           f"{global_scores['node_count_actual']} actual "
           f"({global_scores['node_count_accuracy']:.0%})")
-    print(f"  Merge recall:  {global_scores['merge_correct']}/{global_scores['merge_total']} "
+    print(f"  Merge recall:     {global_scores['merge_recall_correct']}/{global_scores['merge_recall_total']} "
           f"({global_scores['merge_recall']:.0%})")
-    print(f"  False merges:  {global_scores['false_merge_count']}/{global_scores['false_merge_total']} "
+    print(f"  Entity merge rate:{global_scores['entity_merge_correct']}/{global_scores['entity_merge_total']} "
+          f"({global_scores['entity_merge_rate']:.0%})")
+    print(f"  False merges:     {global_scores['false_merge_count']}/{global_scores['false_merge_total']} "
           f"({global_scores['false_merge_rate']:.0%})")
 
     if timeslice_scores:
@@ -327,8 +345,9 @@ def _print_er_report(global_scores: dict, timeslice_scores: list[tuple[str, dict
                 continue
             print(f"  {record_key}:")
             print(f"    nodes: {scores['node_count_expected']} expected, {scores['node_count_actual']} actual")
-            if scores["merge_total"] > 0:
-                print(f"    merges: {scores['merge_correct']}/{scores['merge_total']}")
+            print(f"    merge recall: {scores['merge_recall_correct']}/{scores['merge_recall_total']}")
+            if scores["entity_merge_total"] > 0:
+                print(f"    entity merge rate: {scores['entity_merge_correct']}/{scores['entity_merge_total']}")
             if scores["false_merge_count"] > 0:
                 print(f"    false merges: {scores['false_merge_count']}")
     print()
