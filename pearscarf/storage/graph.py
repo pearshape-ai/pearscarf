@@ -336,9 +336,10 @@ def find_entity_candidates(
                         },
                     })
 
-    # 8. IDENTIFIED_AS edge match
+    # 8. IDENTIFIED_AS edge match (same type only)
     for entity in find_by_identified_as(name):
-        _add(entity)
+        if entity.get("type", "").lower() == entity_type.lower():
+            _add(entity)
 
     return candidates
 
