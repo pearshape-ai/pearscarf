@@ -433,6 +433,14 @@ class LinearConnect:
         description = data.get("description")
         if description:
             content += f"\n{description[:2000]}"
+        comments = data.get("comments", [])
+        if comments:
+            content += "\n\nComments:\n"
+            for c in comments:
+                author = c.get("author", "")
+                body = c.get("body", "")
+                if body:
+                    content += f"  [{author}] {body[:500]}\n"
         metadata = {
             "linear_id": data.get("id") or data.get("linear_id", ""),
             "identifier": data.get("identifier", ""),
