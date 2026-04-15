@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.1
+- Curator simplified — LLM-based semantic dedup removed. Extraction agent now handles dedup at write time by checking existing AFFILIATED facts. Curator retains expiry scanning and confidence upgrades (both deterministic, no LLM calls).
+- Extraction agent prompt updated to skip duplicate AFFILIATED facts when the same affiliation already exists in the graph.
+
 ## 1.20.0
 - Curator starts automatically with `psc run` and `psc discord`. Prints processing status to terminal — record being processed, remaining queue count, staled duplicates, expired commitments, confidence upgrades.
 - `psc eval facts` — fact extraction eval with curator processing. Scores non-stale facts against structural ground truth (precision, recall, F1).

@@ -12,7 +12,6 @@ import traceback
 from datetime import datetime, timezone
 
 from pearscarf import log
-from pearscarf.curation import curator_judge
 from pearscarf.storage import graph
 from pearscarf.config import CURATOR_CLAIM_TIMEOUT, CURATOR_POLL_INTERVAL
 from pearscarf.storage.db import _get_conn, init_db
@@ -94,65 +93,6 @@ class Curator:
             )
             conn.commit()
 
-    def _dedup_edges(self, edge_label: str, edges: list[dict]) -> None:
-        """Run semantic dedup for edges of a given label."""
-        label_lower = edge_label.lower()
-        filtered = [e for e in edges if e["edge_label"] == edge_label and not e["stale"]]
-
-        if not filtered:
-            return
-
-        # Group by slot (from_id, fact_type, to_id)
-        slots: dict[tuple, list[dict]] = {}
-        for e in filtered:
-            key = (e["from_id"], e["fact_type"], e["to_id"])
-            slots.setdefault(key, []).append(e)
-
-        for (from_id, fact_type, to_id), slot_edges in slots.items():
-            all_edges = graph.get_edges_for_slot(from_id, edge_label, fact_type, to_id)
-
-            if len(all_edges) <= 1:
-                continue
-
-            from_name = slot_edges[0]["from_name"]
-            to_name = slot_edges[0]["to_name"]
-
-            groups = curator_judge.judge_equivalence(all_edges, edge_label)
-
-            log.write(
-                "curator", "--", "action",
-                f"{label_lower} dedup: slot ({from_name}, {fact_type}, {to_name}) — "
-                f"{len(all_edges)} candidates, {len(groups)} groups",
-            )
-
-            for group_ids in groups:
-                if len(group_ids) <= 1:
-                    continue
-
-                group_edges = [e for e in all_edges if e["edge_id"] in group_ids]
-                if not group_edges:
-                    continue
-
-                # Sort by source_at descending — most recent is survivor
-                group_edges.sort(key=lambda e: e["source_at"], reverse=True)
-                survivor = group_edges[0]
-
-                for older in group_edges[1:]:
-                    if older["source_at"] == survivor["source_at"]:
-                        log.write(
-                            "curator", "--", "action",
-                            f"{label_lower} unresolved: equal source_at for "
-                            f"{older['edge_id']} and {survivor['edge_id']} — skipped",
-                        )
-                        continue
-                    graph.mark_fact_stale(older["edge_id"], survivor["edge_id"])
-                    log.write(
-                        "curator", "--", "action",
-                        f"{label_lower} staled: {older['edge_id']} → {survivor['edge_id']} "
-                        f"(source_at: {older['source_at']} < {survivor['source_at']})",
-                    )
-                    self._print(f"  staled {label_lower} duplicate: {from_name} → {to_name} ({fact_type})")
-
     def _notify_expiry(self, edge: dict) -> None:
         """Reserved hook for expiry notifications. No-op for now."""
         log.write(
@@ -208,28 +148,15 @@ class Curator:
         return upgraded
 
     def _process(self, record_id: str) -> None:
-        """Process a single record — dedup, expiry, confidence upgrade."""
+        """Process a single record — expiry + confidence upgrade."""
         log.write("curator", "--", "action", f"processing {record_id}")
 
-        edges = graph.get_edges_by_source_record(record_id)
-        if not edges:
-            self._print(f"{record_id}: no edges, skipping")
-            return
-
-        self._print(f"{record_id}: {len(edges)} edge(s)")
-
-        # Pass 1: AFFILIATED dedup
-        self._dedup_edges("AFFILIATED", edges)
-
-        # Pass 2: ASSERTED dedup
-        self._dedup_edges("ASSERTED", edges)
-
-        # Pass 3: Global expiry scan
+        # Expiry scan
         self._last_cycle_expired = self._scan_expired()
         if self._last_cycle_expired:
             self._print(f"  expired {self._last_cycle_expired} commitment(s)")
 
-        # Pass 4: Global confidence upgrade
+        # Confidence upgrade
         self._last_cycle_upgrades = self._scan_confidence_upgrades()
         if self._last_cycle_upgrades:
             self._print(f"  upgraded {self._last_cycle_upgrades} edge(s)")
