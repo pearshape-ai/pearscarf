@@ -75,6 +75,7 @@ class Indexer:
         self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None, max_retries=3)
         self._resolution_prompt = load_prompt("entity_resolution")
         self._debug_dir = debug_dir
+        self.token_usage: dict[str, dict[str, int]] = {}  # record_id → {input, output}
 
     def _debug_folder_name(self, record_id: str) -> str:
         """Resolve record_id to a human-readable folder name for debug output."""
@@ -455,8 +456,211 @@ class Indexer:
         except Exception as exc:
             log.write("indexer", "--", "error", f"Qdrant embed failed for {record_id}: {exc}")
 
+    # --- New extraction agent flow ---
+
+    def _build_extraction_prompt(self, record: dict) -> str:
+        """Build the system prompt for the extraction agent."""
+        agent_instructions = load_prompt("extraction_agent")
+        base_prompt = compose_prompt(record)
+        return agent_instructions + "\n\n" + base_prompt
+
+    def _run_extraction_agent(self, record: dict, content: str) -> dict | None:
+        """Run the extraction agent on a record. Returns extraction result or None."""
+        from pearscarf.agents.base import BaseAgent
+        from pearscarf.tools import ToolRegistry
+        from pearscarf.indexing.extraction_tools import (
+            FindEntityTool, SearchEntitiesTool, CheckAliasTool,
+            GetEntityContextTool, SaveExtractionTool,
+        )
+
+        registry = ToolRegistry()
+        save_tool = SaveExtractionTool()
+        registry.register(FindEntityTool())
+        registry.register(SearchEntitiesTool())
+        registry.register(CheckAliasTool())
+        registry.register(GetEntityContextTool())
+        registry.register(save_tool)
+
+        system_prompt = self._build_extraction_prompt(record)
+        record_id = record["id"]
+        record_type = record["type"]
+        user_message = f"Record ({record_id}, {record_type}):\n\n{content}"
+
+        agent = BaseAgent(
+            tool_registry=registry,
+            system_prompt=system_prompt,
+            agent_name="extraction_agent",
+        )
+
+        error = None
+        try:
+            agent.run(user_message)
+        except Exception as exc:
+            error = str(exc)
+            log.write("indexer", "--", "error", f"Extraction agent failed for {record_id}: {exc}")
+
+        result = save_tool.result
+        if result is not None:
+            result["_tokens"] = {
+                "input": agent.total_input_tokens,
+                "output": agent.total_output_tokens,
+            }
+
+        # Debug: always dump conversation regardless of success/failure
+        if self._debug_dir:
+            import os
+            folder = self._debug_folder_name(record_id)
+            debug_path = os.path.join(self._debug_dir, folder)
+            os.makedirs(debug_path, exist_ok=True)
+            with open(os.path.join(debug_path, "agent_system.md"), "w") as fh:
+                fh.write(system_prompt)
+            with open(os.path.join(debug_path, "agent_user.md"), "w") as fh:
+                fh.write(user_message)
+            with open(os.path.join(debug_path, "agent_conversation.json"), "w") as fh:
+                fh.write(json.dumps(agent._messages, indent=2, default=str))
+            if result:
+                with open(os.path.join(debug_path, "agent_result.json"), "w") as fh:
+                    fh.write(json.dumps(result, indent=2))
+            if error:
+                with open(os.path.join(debug_path, "agent_error.txt"), "w") as fh:
+                    fh.write(error)
+
+        if error:
+            return None
+        if result is None:
+            log.write("indexer", "--", "warning", f"Extraction agent didn't call save_extraction for {record_id}")
+            return None
+
+        return result
+
+    def _validate_extraction(self, record: dict, extraction: dict) -> list[str]:
+        """Validate an extraction result. Returns list of errors (empty = valid)."""
+        errors: list[str] = []
+        content = self._build_content(record)
+
+        entities = extraction.get("entities", [])
+        facts = extraction.get("facts", [])
+        entity_names = {e["name"].lower() for e in entities}
+
+        for ent in entities:
+            # Check resolved_to IDs exist
+            resolved_to = ent.get("resolved_to", "")
+            if resolved_to and resolved_to != "new":
+                with graph.get_session() as session:
+                    result = session.run(
+                        "MATCH (n) WHERE elementId(n) = $eid RETURN n.name AS name",
+                        eid=resolved_to,
+                    )
+                    if not result.single():
+                        errors.append(f"Entity '{ent['name']}' resolved_to non-existent node: {resolved_to}")
+
+        for fact in facts:
+            # Validate edge label
+            edge_label = fact.get("edge_label", "")
+            if edge_label not in graph.FACT_CATEGORIES:
+                errors.append(f"Invalid edge_label: {edge_label}")
+                continue
+
+            # Validate fact type
+            fact_type = fact.get("fact_type", "")
+            if fact_type and fact_type not in graph.FACT_CATEGORIES[edge_label]:
+                errors.append(f"Invalid fact_type '{fact_type}' for {edge_label}")
+
+            # Check entity references
+            from_name = fact.get("from_entity", "").lower()
+            if from_name and from_name not in entity_names:
+                errors.append(f"Fact references unknown from_entity: {fact.get('from_entity')}")
+
+            to_name = (fact.get("to_entity") or "").lower()
+            if to_name and to_name not in entity_names:
+                errors.append(f"Fact references unknown to_entity: {fact.get('to_entity')}")
+
+            # Fact grounding — check text appears in source
+            fact_text = fact.get("fact", "").lower()
+            if fact_text and fact_text not in content.lower():
+                # Allow partial match — at least 60% of words should appear
+                fact_words = set(fact_text.split())
+                content_lower = content.lower()
+                found = sum(1 for w in fact_words if w in content_lower)
+                if found / max(len(fact_words), 1) < 0.6:
+                    errors.append(f"Fact may be hallucinated (low grounding): {fact.get('fact', '')[:80]}")
+
+        return errors
+
+    def _commit_extraction(self, record: dict, extraction: dict) -> dict[str, str]:
+        """Write validated extraction to the graph. Returns entity_id_map."""
+        record_id = record["id"]
+        record_type = record["type"]
+        entity_id_map: dict[str, str] = {}
+
+        # Derive source_at from metadata
+        metadata = record.get("metadata") or {}
+        source_at = (
+            str(metadata.get("received_at", ""))
+            or str(metadata.get("linear_created_at", ""))
+            or str(metadata.get("created_at", ""))
+            or str(record.get("created_at", ""))
+            or _now()
+        )
+
+        # Create/resolve entities
+        for ent in extraction.get("entities", []):
+            name = ent["name"]
+            ent_type = ent.get("type", "")
+            ent_metadata = ent.get("metadata", {})
+            resolved_to = ent.get("resolved_to", "new")
+            canonical_name = ent.get("canonical_name", "")
+
+            if resolved_to == "new":
+                node_id = graph.create_entity(ent_type, name, ent_metadata)
+                entity_id_map[name] = node_id
+            else:
+                entity_id_map[name] = resolved_to
+                # Create alias if name differs from canonical
+                if canonical_name and canonical_name.lower() != name.lower():
+                    graph.create_identified_as_edge(
+                        resolved_to, name, record_id, record_type,
+                        confidence="inferred",
+                        reasoning=f"Extraction agent resolved '{name}' to '{canonical_name}'",
+                    )
+
+        # Write facts
+        for fact in extraction.get("facts", []):
+            edge_label = fact.get("edge_label", "")
+            fact_type = fact.get("fact_type", "")
+            fact_text = fact.get("fact", "")
+            confidence = fact.get("confidence", "stated")
+            from_name = fact.get("from_entity", "")
+            to_name = fact.get("to_entity")
+            valid_until = fact.get("valid_until")
+
+            from_id = entity_id_map.get(from_name)
+            if not from_id:
+                continue
+
+            to_id = None
+            if to_name:
+                to_id = entity_id_map.get(to_name)
+
+            if to_id:
+                self._write_fact_edge(
+                    from_id, to_id, edge_label, fact_type, fact_text,
+                    confidence, record_id, record_type, source_at, valid_until,
+                )
+            else:
+                day_date = graph.utc_to_local_date(source_at)
+                day_id = graph.get_or_create_day(day_date)
+                self._write_fact_edge(
+                    from_id, day_id, edge_label, fact_type, fact_text,
+                    confidence, record_id, record_type, source_at, valid_until,
+                )
+
+        return entity_id_map
+
+    # --- Main processing ---
+
     def _process_record(self, record: dict) -> None:
-        """Process a single record: extract → resolve → write to Neo4j → embed in Qdrant."""
+        """Process a single record: agent extracts + resolves → validate → commit → embed."""
         record_id = record["id"]
         record_type = record["type"]
         self._current_record_id = record_id
@@ -468,194 +672,46 @@ class Indexer:
         if record.get("human_context"):
             content += f"\n\nAdditional context from human:\n{record['human_context']}"
 
-        # Step 1: Extract
-        extracted = self._extract(record, content)
-        if not extracted:
+        # Step 1: Run extraction agent
+        extraction = self._run_extraction_agent(record, content)
+        if not extraction:
             log.write("indexer", "--", "action", f"no extraction result for {record_id}")
             self._mark_indexed(record_id)
             return
 
-        # Step 2: Resolve entities — build name → element ID map
-        entity_id_map: dict[str, str] = {}
-        unresolved: list[dict] = []
+        # Track token usage
+        tokens = extraction.pop("_tokens", None)
+        if tokens:
+            self.token_usage[record_id] = tokens
 
-        for entity in extracted.get("entities", []):
-            name = entity.get("name", "")
-            if not name:
-                continue
-            source_context = self._build_source_context(record, name)
-            eid = self._resolve_entity(entity, source_context)
-            if eid is None:
-                # Ambiguous — collect for pending state
-                candidates = graph.find_entity_candidates(
-                    entity.get("type", ""), name, entity.get("metadata", {})
-                )
-                unresolved.append({
-                    "name": name,
-                    "type": entity.get("type", ""),
-                    "candidate_ids": [c["id"] for c in candidates],
-                })
-            elif eid:
-                entity_id_map[name] = eid
+        # Step 2: Validate
+        errors = self._validate_extraction(record, extraction)
+        if errors:
+            for err in errors:
+                log.write("indexer", "--", "warning", f"{record_id}: {err}")
 
-        # If any entities are unresolved, mark record as pending
-        if unresolved:
-            self._set_resolution_pending(record_id, unresolved)
-            log.write(
-                "indexer", "--", "action",
-                f"{record_id}: {len(unresolved)} unresolved entity(ies) — "
-                f"resolution pending, skipping fact writes for unresolved entities",
-            )
-
-        # Derive source_at — event time from the record's own timestamp
-        source_at = str(record.get("created_at", "")) or ""
-        if record_type == "email":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT received_at FROM emails WHERE record_id = %s",
-                    (record_id,),
-                ).fetchone()
-                if row and row["received_at"]:
-                    source_at = str(row["received_at"])
-        elif record_type == "issue":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT linear_created_at FROM issues WHERE record_id = %s",
-                    (record_id,),
-                ).fetchone()
-                if row and row["linear_created_at"]:
-                    source_at = str(row["linear_created_at"])
-        elif record_type == "issue_change":
-            with _get_conn() as conn:
-                row = conn.execute(
-                    "SELECT changed_at FROM issue_changes WHERE record_id = %s",
-                    (record_id,),
-                ).fetchone()
-                if row and row["changed_at"]:
-                    source_at = str(row["changed_at"])
-
-        if not source_at:
-            source_at = _now()
-            log.write(
-                "indexer", "--", "warning",
-                f"no timestamp for {record_id}, using indexing time as source_at",
-            )
-
-        # Step 3: Write facts to Neo4j
-        for fact in extracted.get("facts", []):
-            edge_label = fact.get("edge_label", "")
-            fact_type = fact.get("fact_type", "")
-            fact_text = fact.get("fact", "")
-            confidence = fact.get("confidence", "stated")
-            from_name = fact.get("from_entity", "")
-            to_name = fact.get("to_entity")  # None for single-entity facts
-            valid_until = fact.get("valid_until")
-
-            if not from_name or not fact_text or not edge_label:
-                continue
-
-            # Validate edge_label and fact_type
-            if edge_label not in graph.FACT_CATEGORIES:
-                log.write(
-                    "indexer", "--", "warning",
-                    f"unrecognized edge_label '{edge_label}' in {record_id}, skipping",
-                )
-                continue
-            if fact_type and fact_type not in graph.FACT_CATEGORIES[edge_label]:
-                log.write(
-                    "indexer", "--", "warning",
-                    f"unrecognized fact_type '{fact_type}' for {edge_label} in {record_id}, skipping",
-                )
-                continue
-
-            from_id = entity_id_map.get(from_name)
-            if not from_id:
-                log.write(
-                    "indexer", "--", "warning",
-                    f"fact references unknown from_entity '{from_name}' in {record_id}, skipping",
-                )
-                continue
-
-            to_id = None
-            if to_name:
-                # Try entity_id_map first
-                to_id = entity_id_map.get(to_name)
-                if not to_id:
-                    # Full resolution for to_entity
-                    try:
-                        to_candidates = graph.find_entity_candidates("", to_name)
-                        if to_candidates:
-                            # Exact name match — fast path
-                            matched = next(
-                                (c for c in to_candidates if c["name"].lower() == to_name.lower()),
-                                None,
-                            )
-                            if matched:
-                                to_id = matched["id"]
-                            else:
-                                # LLM judge
-                                to_ctx = [graph.get_entity_context(c["id"]) for c in to_candidates]
-                                decision = self._resolve_entity_with_llm(
-                                    {"name": to_name, "type": "", "metadata": {}},
-                                    self._build_source_context(record, to_name), to_ctx,
-                                )
-                                verdict = decision.get("decision", "new")
-                                if verdict == "match":
-                                    to_id = decision.get("candidate_id", "")
-                                elif verdict == "new":
-                                    to_id = graph.create_entity("", to_name)
-                                # ambiguous or other → to_id stays None → Day node
-                        else:
-                            # No candidates — create new entity
-                            to_id = graph.create_entity("", to_name)
-                    except Exception as exc:
-                        log.write(
-                            "indexer", "--", "warning",
-                            f"to_entity resolution failed for '{to_name}' in {record_id}: {exc}",
-                        )
-                        # to_id stays None → Day node
-
-                    if to_id:
-                        entity_id_map[to_name] = to_id
-
-            if to_id:
-                # Two-entity fact
-                self._write_fact_edge(
-                    from_id, to_id, edge_label, fact_type, fact_text,
-                    confidence, record_id, record_type,
-                    source_at, valid_until,
-                )
-            else:
-                # Single-entity fact or degraded to_entity → Day node
-                day_date = graph.utc_to_local_date(source_at)
-                day_id = graph.get_or_create_day(day_date)
-                self._write_fact_edge(
-                    from_id, day_id, edge_label, fact_type, fact_text,
-                    confidence, record_id, record_type,
-                    source_at, valid_until,
-                )
+        # Step 3: Commit to graph
+        entity_id_map = self._commit_extraction(record, extraction)
 
         # Step 4: Embed in Qdrant
         self._embed_record(record, content)
 
         entity_count = len(entity_id_map)
-        fact_count = len(extracted.get("facts", []))
+        fact_count = len(extraction.get("facts", []))
         log.write(
             "indexer", "--", "action",
             f"indexed {record_id}: {entity_count} entities, {fact_count} facts",
         )
 
-        # Only mark indexed if all entities resolved
-        if not unresolved:
-            self._mark_indexed(record_id)
-            try:
-                from pearscarf.storage.store import enqueue_for_curation
-                enqueue_for_curation(record_id)
-            except Exception as exc:
-                log.write(
-                    "indexer", "--", "warning",
-                    f"failed to enqueue {record_id} for curation: {exc}",
-                )
+        self._mark_indexed(record_id)
+        try:
+            from pearscarf.storage.store import enqueue_for_curation
+            enqueue_for_curation(record_id)
+        except Exception as exc:
+            log.write(
+                "indexer", "--", "warning",
+                f"failed to enqueue {record_id} for curation: {exc}",
+            )
 
     def _mark_indexed(self, record_id: str) -> None:
         with _get_conn() as conn:

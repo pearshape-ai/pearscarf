@@ -445,6 +445,8 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     graph_entities = _get_all_graph_entities()
     global_scores = _score_er_global(er_ground_truth, graph_entities)
 
+    # Collect token usage from indexer
+    token_usage = indexer.token_usage
     indexer.stop()
 
     # Build verbose diagnostics
@@ -460,6 +462,13 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     )
     print(report)
 
+    # Print token summary
+    if token_usage:
+        total_in = sum(t["input"] for t in token_usage.values())
+        total_out = sum(t["output"] for t in token_usage.values())
+        print(f"Token usage: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)")
+        print()
+
     # Save to debug dir — always include full diagnostics in the file
     if debug_dir:
         full_verbose = _format_verbose_er({"entities": er_ground_truth.get("global", [])}, graph_entities)
@@ -474,6 +483,13 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
             fh.write(f"PearScarf v{pearscarf_version} — dataset v{version}\n")
             fh.write(f"Model: {EXTRACTION_MODEL}\n\n")
             fh.write(full_report)
+            if token_usage:
+                fh.write(f"\n## Token Usage\n\n")
+                total_in = sum(t["input"] for t in token_usage.values())
+                total_out = sum(t["output"] for t in token_usage.values())
+                for rid, t in token_usage.items():
+                    fh.write(f"  {rid}: {t['input']:,} in, {t['output']:,} out\n")
+                fh.write(f"\n  Total: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)\n")
         print(f"Results saved to {results_path}")
 
     return {

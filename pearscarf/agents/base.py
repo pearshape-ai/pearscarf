@@ -31,6 +31,8 @@ class BaseAgent:
         self._on_tool_call = on_tool_call
         self._on_text = on_text
         self._on_tool_result = on_tool_result
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
 
     def run(self, user_message: str) -> str:
         self._messages.append({"role": "user", "content": user_message})
@@ -60,6 +62,8 @@ class BaseAgent:
                     inputs={"model": MODEL, "message_count": len(self._messages)},
                 ) as llm_span:
                     response = self._client.messages.create(**kwargs)
+                    self.total_input_tokens += response.usage.input_tokens
+                    self.total_output_tokens += response.usage.output_tokens
                     if llm_span:
                         llm_span.end(outputs={
                             "stop_reason": response.stop_reason,
