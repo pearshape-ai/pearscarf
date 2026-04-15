@@ -591,6 +591,67 @@ class Indexer:
 
         return errors
 
+    def _commit_entities(self, record: dict, extraction: dict) -> dict[str, str]:
+        """Commit entities from a regular record. Returns entity_id_map."""
+        record_id = record["id"]
+        record_type = record["type"]
+        entity_id_map: dict[str, str] = {}
+
+        for ent in extraction.get("entities", []):
+            name = ent["name"]
+            ent_type = ent.get("type", "")
+            ent_metadata = ent.get("metadata", {})
+            resolved_to = ent.get("resolved_to", "new")
+            canonical_name = ent.get("canonical_name", "")
+
+            if resolved_to == "new":
+                node_id = graph.create_entity(ent_type, name, ent_metadata)
+                entity_id_map[name] = node_id
+            else:
+                entity_id_map[name] = resolved_to
+                if canonical_name and canonical_name.lower() != name.lower():
+                    graph.create_identified_as_edge(
+                        resolved_to, name, record_id, record_type,
+                        confidence="inferred",
+                        reasoning=f"Extraction agent resolved '{name}' to '{canonical_name}'",
+                    )
+
+        return entity_id_map
+
+    def _commit_seed(self, record: dict, extraction: dict) -> dict[str, str]:
+        """Commit entities + aliases from a seed record. Returns entity_id_map."""
+        record_id = record["id"]
+        record_type = record["type"]
+        entity_id_map: dict[str, str] = {}
+
+        # First pass: create canonical entities
+        for ent in extraction.get("entities", []):
+            name = ent["name"]
+            canonical_name = ent.get("canonical_name", "")
+            if canonical_name and canonical_name.lower() != name.lower():
+                continue  # alias — handled in second pass
+            node_id = graph.create_entity(
+                ent.get("type", ""), name, ent.get("metadata", {}),
+            )
+            entity_id_map[name] = node_id
+
+        # Second pass: create alias edges
+        for ent in extraction.get("entities", []):
+            name = ent["name"]
+            canonical_name = ent.get("canonical_name", "")
+            if not canonical_name or canonical_name.lower() == name.lower():
+                continue  # not an alias
+            canonical_id = entity_id_map.get(canonical_name)
+            if canonical_id:
+                entity_id_map[name] = canonical_id
+                graph.create_identified_as_edge(
+                    canonical_id, name, record_id, record_type,
+                    confidence="stated",
+                    reasoning=f"Seed alias: '{name}' for '{canonical_name}'",
+                )
+
+        return entity_id_map
+
     def _commit_extraction(self, record: dict, extraction: dict) -> dict[str, str]:
         """Write validated extraction to the graph. Returns entity_id_map."""
         record_id = record["id"]
@@ -607,26 +668,11 @@ class Indexer:
             or _now()
         )
 
-        # Create/resolve entities
-        for ent in extraction.get("entities", []):
-            name = ent["name"]
-            ent_type = ent.get("type", "")
-            ent_metadata = ent.get("metadata", {})
-            resolved_to = ent.get("resolved_to", "new")
-            canonical_name = ent.get("canonical_name", "")
-
-            if resolved_to == "new":
-                node_id = graph.create_entity(ent_type, name, ent_metadata)
-                entity_id_map[name] = node_id
-            else:
-                entity_id_map[name] = resolved_to
-                # Create alias if name differs from canonical
-                if canonical_name and canonical_name.lower() != name.lower():
-                    graph.create_identified_as_edge(
-                        resolved_to, name, record_id, record_type,
-                        confidence="inferred",
-                        reasoning=f"Extraction agent resolved '{name}' to '{canonical_name}'",
-                    )
+        # Seed records have their own commit path (entities + aliases in one go)
+        if record_type == "ingest":
+            entity_id_map = self._commit_seed(record, extraction)
+        else:
+            entity_id_map = self._commit_entities(record, extraction)
 
         # Write facts
         for fact in extraction.get("facts", []):

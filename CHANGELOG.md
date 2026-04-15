@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.19.7
+- Extraction agent replaces separate extraction + resolution pipeline. Single agent with read-only graph tools handles both in one reasoning loop. Validation layer checks structural integrity and fact grounding before committing.
+- Seed aliases processed through the extraction agent — `## aliases` section creates IDENTIFIED_AS edges via the same commit path. Separate `_commit_seed` for seed records.
+- Seed guidance prompt added (`knowledge/ingest/seed_guidance.md`). Agent prompt moved to `knowledge/indexer/extraction_agent.md`.
+- Token usage tracked per record and reported in eval results.
+- Debug captures full agent conversation regardless of success/failure.
+- Linear issue comments included in content sent for extraction.
+
 ## 1.19.6
 - Eval sequence is now self-contained — each entry specifies file path (relative to dataset) and record type. No more data_map in dataset.yaml. Seed records are just another sequence entry with `type: seed`. Dataset folder renamed `data/` → `records/`.
 

@@ -306,7 +306,7 @@ class Registry:
         record_type = record.get("type", "")
 
         if record_type == "ingest":
-            return load("ingest_extraction")
+            return load("seed_guidance")
 
         core = self._core_parts()
         parts: list[str] = [
