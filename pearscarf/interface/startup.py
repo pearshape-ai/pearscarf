@@ -20,6 +20,7 @@ class SystemComponents:
     bus: Any
     runners: list = field(default_factory=list)
     indexer: Any = None
+    curator: Any = None
     mcp_server: Any = None
 
 
@@ -126,6 +127,13 @@ def start_system(poll: bool = False, log_fn=None) -> SystemComponents:
     components.indexer = indexer
     log_fn("Indexer started.")
 
+    # --- Start curator ---
+    from pearscarf.curation.curator import Curator
+    curator = Curator(log_fn=log_fn)
+    curator.start()
+    components.curator = curator
+    log_fn("Curator started.")
+
     # --- Start MCP server ---
     mcp_srv = MCPServer()
     mcp_srv.start()
@@ -139,6 +147,8 @@ def stop_system(components: SystemComponents) -> None:
     """Shut down all running components."""
     if components.mcp_server:
         components.mcp_server.stop()
+    if components.curator:
+        components.curator.stop()
     if components.indexer:
         components.indexer.stop()
     for runner in components.runners:

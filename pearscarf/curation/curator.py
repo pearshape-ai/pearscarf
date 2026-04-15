@@ -25,12 +25,18 @@ def _now() -> str:
 class Curator:
     """Background worker that drains the curator_queue."""
 
-    def __init__(self) -> None:
+    def __init__(self, log_fn=None) -> None:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._log_fn = log_fn
         self._last_cycle_upgrades = 0
         self._last_cycle_expired = 0
         self._last_cycle_at: str | None = None
+
+    def _print(self, msg: str) -> None:
+        """Print to terminal if log_fn is set."""
+        if self._log_fn:
+            self._log_fn(f"[curator] {msg}")
 
     def _reset_timed_out_claims(self) -> None:
         """Release claims that have been held too long (crash recovery)."""
@@ -145,6 +151,7 @@ class Curator:
                         f"{label_lower} staled: {older['edge_id']} → {survivor['edge_id']} "
                         f"(source_at: {older['source_at']} < {survivor['source_at']})",
                     )
+                    self._print(f"  staled {label_lower} duplicate: {from_name} → {to_name} ({fact_type})")
 
     def _notify_expiry(self, edge: dict) -> None:
         """Reserved hook for expiry notifications. No-op for now."""
@@ -206,7 +213,10 @@ class Curator:
 
         edges = graph.get_edges_by_source_record(record_id)
         if not edges:
+            self._print(f"{record_id}: no edges, skipping")
             return
+
+        self._print(f"{record_id}: {len(edges)} edge(s)")
 
         # Pass 1: AFFILIATED dedup
         self._dedup_edges("AFFILIATED", edges)
@@ -216,9 +226,13 @@ class Curator:
 
         # Pass 3: Global expiry scan
         self._last_cycle_expired = self._scan_expired()
+        if self._last_cycle_expired:
+            self._print(f"  expired {self._last_cycle_expired} commitment(s)")
 
         # Pass 4: Global confidence upgrade
         self._last_cycle_upgrades = self._scan_confidence_upgrades()
+        if self._last_cycle_upgrades:
+            self._print(f"  upgraded {self._last_cycle_upgrades} edge(s)")
 
         self._last_cycle_at = _now()
 
@@ -235,6 +249,14 @@ class Curator:
                 if record_id is None:
                     self._stop.wait(CURATOR_POLL_INTERVAL)
                     continue
+
+                # Count remaining
+                with _get_conn() as conn:
+                    row = conn.execute(
+                        "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NULL"
+                    ).fetchone()
+                    remaining = dict(row).get("c", 0) if row else 0
+                self._print(f"processing {record_id} ({remaining} remaining)")
 
                 # Step 3: Process
                 try:

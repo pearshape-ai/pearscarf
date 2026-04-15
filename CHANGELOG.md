@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.20.0
+- Curator starts automatically with `psc run` and `psc discord`. Prints processing status to terminal — record being processed, remaining queue count, staled duplicates, expired commitments, confidence upgrades.
+- `psc eval facts` — fact extraction eval with curator processing. Scores non-stale facts against structural ground truth (precision, recall, F1).
+- Legacy eval runner removed.
+
 ## 1.19.8
 - `psc eval facts` — fact extraction eval with curator processing. Ingests records, waits for indexer + curator to finish, scores non-stale facts against ground truth. Reports precision, recall, F1, missing and extra facts.
 - Legacy eval runner removed.
