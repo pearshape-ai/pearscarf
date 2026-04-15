@@ -12,6 +12,8 @@ Your workflow for each record:
 4. Extract facts — relationships and claims from the record.
    - Cut the fact text directly from the record. Never paraphrase or summarize.
    - Classify each fact: AFFILIATED, ASSERTED, or TRANSITIONED with the appropriate fact_type.
+   - For AFFILIATED facts: check the entity's existing facts from get_entity_context. If the same affiliation already exists (same from, to, and same nature/role), skip it — it's a duplicate. Only include AFFILIATED facts that add new information (new role, new relationship, new affiliation not yet in the graph).
+   - For ASSERTED and TRANSITIONED facts: always include them. Each record's assertions and state changes are new data points, even if they reference the same entities.
 5. Call save_extraction once with all entities and facts.
 
 Important:
