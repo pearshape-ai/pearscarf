@@ -269,6 +269,22 @@ def eval_er(ctx, dataset: str | None, verbose: bool, debug: bool, debug_dir: str
     run_er_eval(ds, verbose=verbose, debug_dir=d)
 
 
+@eval_cmd.command("facts")
+@click.option("--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory")
+@click.option("--verbose", "-v", is_flag=True, help="Show missing and extra facts")
+@click.option("--debug", "-d", is_flag=True, help="Dump LLM prompts/responses to data/debug/")
+@click.option("--debug-dir", type=click.Path(), default=None, help="Custom debug output folder")
+@click.pass_context
+def eval_facts(ctx, dataset: str | None, verbose: bool, debug: bool, debug_dir: str | None) -> None:
+    """Run fact extraction eval only. Includes curator processing."""
+    ds = dataset or ctx.obj.get("dataset")
+    if not ds:
+        raise click.UsageError("--dataset is required")
+    from pearscarf.eval.runner import run_facts_eval
+    d = debug_dir or ("data/debug" if debug else None)
+    run_facts_eval(ds, verbose=verbose, debug_dir=d)
+
+
 @cli.group(invoke_without_command=True)
 @click.pass_context
 def mcp(ctx):
