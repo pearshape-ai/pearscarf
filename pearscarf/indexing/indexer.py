@@ -506,24 +506,7 @@ class Indexer:
                 "output": agent.total_output_tokens,
             }
 
-        # Debug: always dump conversation regardless of success/failure
-        if self._debug_dir:
-            import os
-            folder = self._debug_folder_name(record_id)
-            debug_path = os.path.join(self._debug_dir, folder)
-            os.makedirs(debug_path, exist_ok=True)
-            with open(os.path.join(debug_path, "agent_system.md"), "w") as fh:
-                fh.write(system_prompt)
-            with open(os.path.join(debug_path, "agent_user.md"), "w") as fh:
-                fh.write(user_message)
-            with open(os.path.join(debug_path, "agent_conversation.json"), "w") as fh:
-                fh.write(json.dumps(agent._messages, indent=2, default=str))
-            if result:
-                with open(os.path.join(debug_path, "agent_result.json"), "w") as fh:
-                    fh.write(json.dumps(result, indent=2))
-            if error:
-                with open(os.path.join(debug_path, "agent_error.txt"), "w") as fh:
-                    fh.write(error)
+        self._debug_agent(record_id, system_prompt, user_message, agent, result, error)
 
         if error:
             return None
@@ -532,6 +515,27 @@ class Indexer:
             return None
 
         return result
+
+    def _debug_agent(self, record_id, system_prompt, user_message, agent, result, error):
+        """Dump agent conversation to debug dir if active."""
+        if not self._debug_dir:
+            return
+        import os
+        folder = self._debug_folder_name(record_id)
+        debug_path = os.path.join(self._debug_dir, folder)
+        os.makedirs(debug_path, exist_ok=True)
+        with open(os.path.join(debug_path, "agent_system.md"), "w") as fh:
+            fh.write(system_prompt)
+        with open(os.path.join(debug_path, "agent_user.md"), "w") as fh:
+            fh.write(user_message)
+        with open(os.path.join(debug_path, "agent_conversation.json"), "w") as fh:
+            fh.write(json.dumps(agent._messages, indent=2, default=str))
+        if result:
+            with open(os.path.join(debug_path, "agent_result.json"), "w") as fh:
+                fh.write(json.dumps(result, indent=2))
+        if error:
+            with open(os.path.join(debug_path, "agent_error.txt"), "w") as fh:
+                fh.write(error)
 
     def _validate_extraction(self, record: dict, extraction: dict) -> list[str]:
         """Validate an extraction result. Returns list of errors (empty = valid)."""
