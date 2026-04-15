@@ -147,6 +147,60 @@ def _record_label(entry: dict) -> str:
     return os.path.splitext(os.path.basename(file_rel))[0]
 
 
+# --- Graph queries ---
+
+
+def _get_all_graph_facts() -> list[dict]:
+    """Get all non-stale fact edges from Neo4j.
+
+    Returns list of {"edge_label", "fact_type", "from_entity", "to_entity", "fact", "confidence", "valid_until"}.
+    """
+    facts = []
+    with graph.get_session() as session:
+        result = session.run(
+            "MATCH (a)-[r]->(b) "
+            "WHERE r.fact IS NOT NULL AND (r.stale IS NULL OR r.stale = false) "
+            "AND NOT 'Day' IN labels(b) "
+            "RETURN a.name AS from_name, type(r) AS edge_label, "
+            "r.fact_type AS fact_type, r.fact AS fact, "
+            "r.confidence AS confidence, r.valid_until AS valid_until, "
+            "b.name AS to_name, labels(b) AS to_labels"
+        )
+        for record in result:
+            to_name = record["to_name"] if record["to_labels"] and "Day" not in record["to_labels"] else None
+            facts.append({
+                "edge_label": record["edge_label"],
+                "fact_type": record["fact_type"] or "",
+                "from_entity": record["from_name"] or "",
+                "to_entity": to_name,
+                "fact": record["fact"] or "",
+                "confidence": record["confidence"] or "",
+                "valid_until": record["valid_until"],
+            })
+
+    # Also get single-entity facts (to Day nodes)
+    with graph.get_session() as session:
+        result = session.run(
+            "MATCH (a)-[r]->(b:Day) "
+            "WHERE r.fact IS NOT NULL AND (r.stale IS NULL OR r.stale = false) "
+            "RETURN a.name AS from_name, type(r) AS edge_label, "
+            "r.fact_type AS fact_type, r.fact AS fact, "
+            "r.confidence AS confidence, r.valid_until AS valid_until"
+        )
+        for record in result:
+            facts.append({
+                "edge_label": record["edge_label"],
+                "fact_type": record["fact_type"] or "",
+                "from_entity": record["from_name"] or "",
+                "to_entity": None,
+                "fact": record["fact"] or "",
+                "confidence": record["confidence"] or "",
+                "valid_until": record["valid_until"],
+            })
+
+    return facts
+
+
 # --- Graph queries for ER ---
 
 
@@ -498,12 +552,201 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     }
 
 
+# --- Facts scoring ---
+
+
+def _score_facts(expected_facts: list[dict], graph_facts: list[dict], match_on: list[str]) -> dict:
+    """Score extracted facts against ground truth.
+
+    Matches on the fields listed in match_on. Returns precision, recall, F1, details.
+    """
+    def _key(f: dict) -> tuple:
+        return tuple((f.get(k) or "").lower() for k in match_on)
+
+    expected_keys = {_key(f): f for f in expected_facts}
+    graph_keys = {_key(f): f for f in graph_facts}
+
+    matched = set(expected_keys.keys()) & set(graph_keys.keys())
+    missing = set(expected_keys.keys()) - set(graph_keys.keys())
+    extra = set(graph_keys.keys()) - set(expected_keys.keys())
+
+    total_expected = len(expected_facts)
+    total_extracted = len(graph_facts)
+    total_matched = len(matched)
+
+    prec = total_matched / total_extracted if total_extracted > 0 else 1.0
+    rec = total_matched / total_expected if total_expected > 0 else 1.0
+    f1_score = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+
+    return {
+        "precision": prec,
+        "recall": rec,
+        "f1": f1_score,
+        "matched": total_matched,
+        "expected": total_expected,
+        "extracted": total_extracted,
+        "missing": [expected_keys[k] for k in missing],
+        "extra": [graph_keys[k] for k in extra],
+    }
+
+
+def _format_facts_report(scores: dict) -> str:
+    """Format the facts scoring report."""
+    lines = []
+    lines.append("")
+    lines.append("=" * 50)
+    lines.append("Fact Extraction — Global")
+    lines.append("=" * 50)
+    lines.append(f"  Matched:    {scores['matched']}/{scores['expected']}")
+    lines.append(f"  Precision:  {scores['precision']:.0%}")
+    lines.append(f"  Recall:     {scores['recall']:.0%}")
+    lines.append(f"  F1:         {scores['f1']:.0%}")
+    lines.append(f"  Extracted:  {scores['extracted']} total in graph")
+
+    if scores["missing"]:
+        lines.append("")
+        lines.append("  Missing (expected but not found):")
+        for f in scores["missing"]:
+            to = f" → {f['to_entity']}" if f.get('to_entity') else ""
+            lines.append(f"    {f['edge_label']}/{f['fact_type']}: {f['from_entity']}{to}")
+
+    if scores["extra"]:
+        lines.append("")
+        lines.append("  Extra (found but not expected):")
+        for f in scores["extra"]:
+            to = f" → {f['to_entity']}" if f.get('to_entity') else ""
+            lines.append(f"    {f['edge_label']}/{f['fact_type']}: {f['from_entity']}{to}")
+            if f.get("fact"):
+                lines.append(f"      \"{f['fact'][:80]}\"")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | None = None) -> dict:
+    """Run facts evaluation. Returns scores dict."""
+    init_db()
+
+    config = _load_dataset_config(dataset_path)
+    version = config.get("version", "unknown")
+    sequence = _load_sequence(dataset_path, config)
+
+    # Load fact ground truth
+    facts_gt_file = config.get("ground_truth", {}).get("facts")
+    if not facts_gt_file:
+        raise SystemExit("No facts ground truth configured in dataset.yaml")
+    facts_gt_path = os.path.join(dataset_path, facts_gt_file)
+    if not os.path.isfile(facts_gt_path):
+        raise SystemExit(f"Facts ground truth not found: {facts_gt_path}")
+    with open(facts_gt_path) as fh:
+        facts_gt = json.load(fh)
+
+    expected_facts = facts_gt.get("expected_facts", [])
+    match_on = facts_gt.get("match_on", ["edge_label", "fact_type", "from_entity", "to_entity"])
+
+    print(f"PearScarf v{pearscarf_version} — facts eval against dataset v{version}")
+    print(f"Model: {EXTRACTION_MODEL}  Temperature: {EXTRACTION_TEMPERATURE}  Max tokens: {EXTRACTION_MAX_TOKENS}")
+    print()
+
+    # Require clean graph
+    if not _graph_is_empty():
+        raise SystemExit(
+            "Neo4j graph is not empty — eval requires a clean graph.\n"
+            "Run `psc erase-all` and retry."
+        )
+
+    # Load expert connects
+    _ensure_expert_connects()
+
+    # Start indexer + curator
+    from pearscarf.indexing.indexer import Indexer
+    from pearscarf.curation.curator import Curator
+
+    if debug_dir:
+        from datetime import datetime, timezone
+        dataset_name = os.path.basename(os.path.normpath(dataset_path))
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        run_name = f"{dataset_name}_v{version}_{timestamp}"
+        debug_dir = os.path.join(debug_dir, run_name)
+        os.makedirs(debug_dir, exist_ok=True)
+        print(f"Debug output: {debug_dir}")
+
+    indexer = Indexer(debug_dir=debug_dir)
+    indexer.start()
+
+    curator = Curator()
+    curator.start()
+
+    # Ingest all records
+    print(f"Ingesting {len(sequence)} record(s)...")
+    for entry in sequence:
+        file_rel = entry.get("file", "")
+        record_type = entry.get("type", "")
+        label = _record_label(entry)
+
+        rid = _ingest_record_file(dataset_path, file_rel, record_type)
+        if rid:
+            print(f"  {label}: ingested as {rid}")
+        else:
+            print(f"  {label}: skipped (duplicate or error)")
+
+    # Wait for indexer
+    _wait_for_indexer()
+
+    # Wait for curator to drain the queue
+    print("Waiting for curator...")
+    while True:
+        with _get_conn() as conn:
+            row = conn.execute("SELECT COUNT(*) AS c FROM curator_queue").fetchone()
+            count = dict(row).get("c", 0) if row else 0
+        if count == 0:
+            print("Curator finished.")
+            break
+        print(f"  {count} record(s) in queue...")
+        time.sleep(2)
+
+    # Collect token usage
+    token_usage = indexer.token_usage
+    indexer.stop()
+    curator.stop()
+
+    # Score facts
+    graph_facts = _get_all_graph_facts()
+    scores = _score_facts(expected_facts, graph_facts, match_on)
+
+    report = _format_facts_report(scores)
+    print(report)
+
+    if token_usage:
+        total_in = sum(t["input"] for t in token_usage.values())
+        total_out = sum(t["output"] for t in token_usage.values())
+        print(f"Token usage: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)")
+        print()
+
+    # Save to debug dir
+    if debug_dir:
+        results_path = os.path.join(debug_dir, "eval-results.md")
+        with open(results_path, "w") as fh:
+            fh.write(f"# Facts Eval Results\n\n")
+            fh.write(f"PearScarf v{pearscarf_version} — dataset v{version}\n")
+            fh.write(f"Model: {EXTRACTION_MODEL}\n\n")
+            fh.write(report)
+        print(f"Results saved to {results_path}")
+
+    return scores
+
+
 def run_graph_eval(dataset_path: str, *, verbose: bool = False) -> None:
     """Run all available eval types for a dataset."""
     config = _load_dataset_config(dataset_path)
     gt_config = config.get("ground_truth", {})
 
+    ran = False
     if gt_config.get("entity_resolution"):
-        run_er_eval(dataset_path)
-    else:
+        run_er_eval(dataset_path, verbose=verbose)
+        ran = True
+    if gt_config.get("facts"):
+        run_facts_eval(dataset_path, verbose=verbose)
+        ran = True
+    if not ran:
         print("No eval types configured in dataset.yaml")

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.8
+- `psc eval facts` — fact extraction eval with curator processing. Ingests records, waits for indexer + curator to finish, scores non-stale facts against ground truth. Reports precision, recall, F1, missing and extra facts.
+- Legacy eval runner removed.
+
 ## 1.19.7
 - Extraction agent replaces separate extraction + resolution pipeline. Single agent with read-only graph tools handles both in one reasoning loop. Validation layer checks structural integrity and fact grounding before committing.
 - Seed aliases processed through the extraction agent — `## aliases` section creates IDENTIFIED_AS edges via the same commit path. Separate `_commit_seed` for seed records.
