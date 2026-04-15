@@ -26,6 +26,7 @@ _KNOWLEDGE_MAP: dict[str, str] = {
     "ingest": "ingest/agent.md",
     "ingest_extraction": "ingest/extraction.md",
     "entity_resolution": "entity_resolution/resolution.md",
+    "extraction_agent": "indexer/extraction_agent.md",
     "curator_affiliated": "curator/affiliated.md",
     "curator_asserted": "curator/asserted.md",
     "gmail_mcp": "gmail/agent.md",
