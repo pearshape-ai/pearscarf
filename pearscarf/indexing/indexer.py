@@ -27,43 +27,8 @@ from pearscarf.knowledge import load as load_prompt
 from pearscarf.tracing import trace_span
 
 
-import re
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _sentence_window(text: str, mention: str, radius: int = 2) -> str:
-    """Extract sentences around all occurrences of a mention.
-
-    Finds every sentence containing the mention, includes `radius` sentences
-    before and after each, merges overlapping windows, and joins with '...'
-    for gaps. Falls back to full text if short or mention not found.
-    """
-    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-    if not mention or len(sentences) <= (2 * radius + 1):
-        return text
-
-    mention_lower = mention.lower()
-    included: set[int] = set()
-    for i, s in enumerate(sentences):
-        if mention_lower in s.lower():
-            for j in range(max(0, i - radius), min(len(sentences), i + radius + 1)):
-                included.add(j)
-
-    if not included:
-        return text[:600]
-
-    parts: list[str] = []
-    prev = -2
-    for i in sorted(included):
-        if i > prev + 1 and parts:
-            parts.append("...")
-        parts.append(sentences[i])
-        prev = i
-
-    return " ".join(parts)
 
 
 class Indexer:
@@ -73,7 +38,6 @@ class Indexer:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None, max_retries=3)
-        self._resolution_prompt = load_prompt("entity_resolution")
         self._debug_dir = debug_dir
         self.token_usage: dict[str, dict[str, int]] = {}  # record_id → {input, output}
 
@@ -100,27 +64,6 @@ class Indexer:
         with open(os.path.join(record_dir, name), "w") as fh:
             fh.write(content)
 
-    def _debug_extraction(self, record_id: str, system: str, user: str, raw_response: str, parsed: dict | None) -> None:
-        """Dump extraction LLM call if debug is active."""
-        if not self._debug_dir:
-            return
-        self._debug_write(record_id, "extraction_system.md", system)
-        self._debug_write(record_id, "extraction_user.md", user)
-        self._debug_write(record_id, "extraction_response.txt", raw_response)
-        if parsed:
-            self._debug_write(record_id, "extraction_response.json", json.dumps(parsed, indent=2))
-
-    def _debug_resolution(self, record_id: str, entity_name: str, system: str, user: str, raw_response: str, parsed: dict | None) -> None:
-        """Dump resolution LLM call if debug is active."""
-        if not self._debug_dir:
-            return
-        safe = re.sub(r"[^a-zA-Z0-9_-]", "_", entity_name)
-        self._debug_write(record_id, f"resolution_{safe}_system.md", system)
-        self._debug_write(record_id, f"resolution_{safe}_user.md", user)
-        self._debug_write(record_id, f"resolution_{safe}_response.txt", raw_response)
-        if parsed:
-            self._debug_write(record_id, f"resolution_{safe}_response.json", json.dumps(parsed, indent=2))
-
     def _build_content(self, record: dict) -> str:
         """Return the record's content string for extraction.
 
@@ -129,282 +72,6 @@ class Indexer:
         the raw markdown is used directly.
         """
         return record.get("content") or record.get("raw") or "(no content)"
-
-    def _build_source_context(self, record: dict, entity_name: str = "") -> str:
-        """Build a context string from the record for the resolution judge.
-
-        Uses the record's content (LLM-ready formatted string) and applies
-        a sentence window around the entity mention so the resolution judge
-        sees focused context rather than the full record.
-        """
-        text = record.get("content") or record.get("raw") or ""
-        if not text:
-            return "(no context)"
-        if entity_name:
-            return _sentence_window(text, entity_name)
-        return text[:500]
-
-    def _parse_json_response(self, text: str) -> dict | None:
-        """Parse JSON from an LLM response, handling ```json fencing."""
-        text = text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return None
-
-    def _extract(self, record: dict, content: str) -> dict:
-        """Call Claude to extract entities and facts."""
-        record_id = record["id"]
-        record_type = record["type"]
-        user_message = f"Record ({record_id}, {record_type}):\n\n{content}"
-
-        system_prompt = compose_prompt(record)
-
-        with trace_span(
-            "indexer_extract",
-            run_type="llm",
-            metadata={"record_id": record_id, "record_type": record_type},
-            inputs={"model": EXTRACTION_MODEL, "prompt_length": len(user_message)},
-        ) as span:
-            response = self._client.messages.create(
-                model=EXTRACTION_MODEL,
-                max_tokens=EXTRACTION_MAX_TOKENS,
-                temperature=EXTRACTION_TEMPERATURE,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}],
-            )
-            if span:
-                span.end(outputs={
-                    "input_tokens": response.usage.input_tokens,
-                    "output_tokens": response.usage.output_tokens,
-                })
-
-        raw_text = ""
-        for block in response.content:
-            if block.type == "text":
-                raw_text += block.text
-
-        parsed = self._parse_json_response(raw_text)
-        self._debug_extraction(record_id, system_prompt, user_message, raw_text, parsed)
-
-        if parsed is None:
-            log.write("indexer", "--", "error", f"JSON parse failed for {record_id}: {raw_text[:200]}")
-            return {}
-
-        return parsed
-
-    def _resolve_entity(self, entity: dict, source_context: str) -> str | None:
-        """Resolve an extracted entity against the graph.
-
-        Returns element ID, or None if ambiguous.
-        """
-        entity_type = entity.get("type", "")
-        name = entity.get("name", "")
-        metadata = entity.get("metadata", {})
-
-        if not name:
-            return ""
-
-        candidates = graph.find_entity_candidates(entity_type, name, metadata)
-
-        # No candidates — create new entity
-        if not candidates:
-            return graph.create_entity(entity_type, name, metadata)
-
-        # Exact name match — fast path, no LLM
-        for c in candidates:
-            if c["name"].lower() == name.lower():
-                return c["id"]
-
-        # Exact email/domain match — deterministic, no LLM
-        email = metadata.get("email", "").lower()
-        domain = metadata.get("domain", "").lower()
-        if email or domain:
-            for c in candidates:
-                c_meta = c.get("metadata", {})
-                if email and c_meta.get("email", "").lower() == email:
-                    if c["name"].lower() != name.lower():
-                        graph.create_identified_as_edge(
-                            c["id"], name, self._current_record_id, self._current_record_type,
-                            confidence="stated",
-                            reasoning=f"Email match: {email}",
-                        )
-                    return c["id"]
-                if domain and c_meta.get("domain", "").lower() == domain:
-                    if c["name"].lower() != name.lower():
-                        graph.create_identified_as_edge(
-                            c["id"], name, self._current_record_id, self._current_record_type,
-                            confidence="stated",
-                            reasoning=f"Domain match: {domain}",
-                        )
-                    return c["id"]
-
-        # Non-exact — call LLM judge
-        context_packages = [
-            graph.get_entity_context(c["id"])
-            for c in candidates
-        ]
-
-        decision = self._resolve_entity_with_llm(entity, source_context, context_packages)
-
-        verdict = decision.get("decision", "new")
-        reasoning = decision.get("reasoning", "")
-
-        if verdict == "match":
-            # Map candidate_number back to actual ID
-            candidate_num = decision.get("candidate_number")
-            # Fallback: try legacy candidate_id field
-            candidate_id = decision.get("candidate_id", "")
-            if candidate_num is not None and 1 <= candidate_num <= len(candidates):
-                candidate_id = candidates[candidate_num - 1]["id"]
-
-            if not candidate_id:
-                log.write("indexer", "--", "warning",
-                          f"Resolution: '{name}' matched but no valid candidate ID — creating new")
-                return graph.create_entity(entity_type, name, metadata)
-
-            log.write(
-                "indexer", "--", "action",
-                f"Resolution: '{name}' matched to {candidate_id} — {reasoning}",
-            )
-            graph.create_identified_as_edge(
-                candidate_id, name, self._current_record_id, self._current_record_type,
-                confidence="inferred",
-                reasoning=reasoning,
-            )
-            return candidate_id
-
-        elif verdict == "new":
-            log.write(
-                "indexer", "--", "action",
-                f"Resolution: '{name}' is new entity — {reasoning}",
-            )
-            return graph.create_entity(entity_type, name, metadata)
-
-        elif verdict == "ambiguous":
-            log.write(
-                "indexer", "--", "action",
-                f"Resolution: '{name}' is ambiguous — {reasoning}",
-            )
-            return None  # caller handles ambiguity
-
-        # Unknown verdict — fallback to new
-        log.write(
-            "indexer", "--", "warning",
-            f"Resolution: unknown verdict '{verdict}' for '{name}' — creating new entity",
-        )
-        return graph.create_entity(entity_type, name, metadata)
-
-    def _resolve_entity_with_llm(
-        self,
-        entity: dict,
-        source_context: str,
-        context_packages: list[dict],
-    ) -> dict:
-        """Call the resolution judge LLM to decide: match, new, or ambiguous.
-
-        Args:
-            entity: Extracted entity dict (name, type, metadata).
-            source_context: The record content snippet that produced this entity.
-            context_packages: List of context packages from get_entity_context(),
-                one per candidate.
-
-        Returns:
-            {"decision": "match"|"new"|"ambiguous",
-             "candidate_id": str (if match),
-             "candidate_ids": list[str] (if ambiguous),
-             "reasoning": str}
-        """
-        # Build user message
-        lines = []
-
-        # Section 1: Extracted entity
-        lines.append("## Extracted entity")
-        lines.append(f"Name: {entity.get('name', '')}")
-        lines.append(f"Type: {entity.get('type', '')}")
-        meta = entity.get("metadata", {})
-        if meta:
-            lines.append(f"Metadata: {json.dumps(meta)}")
-
-        # Section 2: Source record context
-        lines.append("")
-        lines.append("## Source record context")
-        lines.append(source_context)
-
-        # Section 3: Candidates
-        lines.append("")
-        lines.append("## Candidates")
-        for i, pkg in enumerate(context_packages):
-            ent = pkg.get("entity", {})
-            lines.append(f"### Candidate {i + 1}")
-            lines.append(f"ID: {ent.get('id', '')}")
-            lines.append(f"Name: {ent.get('name', '')}")
-            lines.append(f"Type: {ent.get('type', '')}")
-            ent_meta = ent.get("metadata", {})
-            if ent_meta:
-                lines.append(f"Metadata: {json.dumps(ent_meta)}")
-
-            facts = pkg.get("facts", [])
-            if facts:
-                lines.append("Facts:")
-                for f in facts:
-                    lines.append(f"  - [{f['edge_label']}] {f['fact']}")
-
-            conns = pkg.get("connections", [])
-            if conns:
-                lines.append("Connections:")
-                for c in conns:
-                    lines.append(f"  - {c['name']} ({c.get('type', '')})")
-
-            lines.append("")
-
-        user_message = "\n".join(lines)
-
-        with trace_span(
-            "indexer_resolve",
-            run_type="llm",
-            metadata={
-                "entity_name": entity.get("name", ""),
-                "entity_type": entity.get("type", ""),
-                "candidate_count": len(context_packages),
-            },
-            inputs={"model": EXTRACTION_MODEL, "prompt_length": len(user_message)},
-        ) as span:
-            response = self._client.messages.create(
-                model=EXTRACTION_MODEL,
-                max_tokens=512,
-                temperature=0.0,
-                system=self._resolution_prompt,
-                messages=[{"role": "user", "content": user_message}],
-            )
-            if span:
-                span.end(outputs={
-                    "input_tokens": response.usage.input_tokens,
-                    "output_tokens": response.usage.output_tokens,
-                })
-
-        raw_text = ""
-        for block in response.content:
-            if block.type == "text":
-                raw_text += block.text
-
-        entity_name = entity.get("name", "unknown")
-        parsed = self._parse_json_response(raw_text)
-        self._debug_resolution(self._current_record_id, entity_name, self._resolution_prompt, user_message, raw_text, parsed)
-
-        if parsed is None:
-            log.write(
-                "indexer", "--", "error",
-                f"Resolution JSON parse failed for '{entity_name}': {raw_text[:200]}",
-            )
-            return {"decision": "new", "reasoning": "JSON parse failure — defaulting to new"}
-
-        return parsed
 
     def _write_fact_edge(
         self,
@@ -456,7 +123,7 @@ class Indexer:
         except Exception as exc:
             log.write("indexer", "--", "error", f"Qdrant embed failed for {record_id}: {exc}")
 
-    # --- New extraction agent flow ---
+    # --- Extraction agent ---
 
     def _build_extraction_prompt(self, record: dict) -> str:
         """Build the system prompt for the extraction agent."""
@@ -770,16 +437,6 @@ class Indexer:
             )
             conn.commit()
 
-    def _set_resolution_pending(self, record_id: str, unresolved: list[dict]) -> None:
-        """Store ambiguity state on the record."""
-        with _get_conn() as conn:
-            conn.execute(
-                "UPDATE records SET resolution_pending = %s, resolution_status = 'pending' "
-                "WHERE id = %s",
-                (json.dumps(unresolved), record_id),
-            )
-            conn.commit()
-
     def _loop(self) -> None:
         init_db()
         graph.ensure_constraints()
@@ -791,7 +448,6 @@ class Indexer:
                         "metadata, human_context "
                         "FROM records "
                         "WHERE indexed = FALSE AND classification = 'relevant' "
-                        "AND (resolution_status IS NULL OR resolution_status != 'pending') "
                         "ORDER BY created_at"
                     ).fetchall()
 

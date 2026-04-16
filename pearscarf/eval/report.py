@@ -52,10 +52,6 @@ def print_report(
     if nrr is not None:
         print(f"  Noise Rejection Rate:          {nrr:.4f}")
 
-    era = aggregate.get("entity_resolution_accuracy")
-    if era is not None:
-        print(f"  Entity Resolution Accuracy:    {era:.4f}")
-
     ta = aggregate.get("temporal_accuracy")
     if ta is not None:
         print(f"  Temporal Accuracy:             {ta:.4f}")

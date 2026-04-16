@@ -108,9 +108,7 @@ CREATE TABLE IF NOT EXISTS records (
     indexed BOOLEAN NOT NULL DEFAULT FALSE,
     classification TEXT,
     classification_reason TEXT,
-    human_context TEXT,
-    resolution_pending JSONB,
-    resolution_status TEXT
+    human_context TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_type ON records(type);
