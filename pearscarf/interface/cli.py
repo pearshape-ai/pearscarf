@@ -229,16 +229,6 @@ def gmail_shortcut(auth: bool) -> None:
     click.echo("Usage: pearscarf gmail --auth")
 
 
-@cli.command("test")
-def test_cmd() -> None:
-    """Run the execution harness (pytest tests/test_harness.py)."""
-    import subprocess
-    import sys
-    raise SystemExit(
-        subprocess.call([sys.executable, "-m", "pytest", "tests/test_harness.py", "-v"])
-    )
-
-
 @cli.group("eval", invoke_without_command=True)
 @click.option("--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory")
 @click.pass_context

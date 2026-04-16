@@ -137,8 +137,7 @@ pearscarf/
 │   ├── indexer.py           # Background LLM extraction into knowledge graph
 │   └── registry.py          # Expert registry — discovery, prompt composition, connect cache
 ├── curation/
-│   ├── curator.py           # Background graph quality (dedup, expiry, confidence)
-│   └── curator_judge.py     # LLM judge for semantic equivalence
+│   └── curator.py           # Background graph quality (expiry, confidence)
 ├── query/
 │   └── context_query.py     # Read-only data access layer for retriever + MCP
 ├── mcp/
@@ -163,17 +162,16 @@ pearscarf/
 │   ├── repl.py              # Non-blocking session-aware REPL
 │   ├── terminal.py          # Raw terminal I/O
 │   └── discord_bot.py       # Discord bot with thread-per-session
-├── knowledge/               # Layered prompts for extraction, agents, curation
+├── knowledge/               # Layered prompts for extraction and agents
 │   ├── core/                # universal extraction rules + base entity types
 │   ├── ingest/              # Ingest expert prompts
-│   ├── entity_resolution/   # Resolution LLM judge prompt
-│   ├── curator/             # Curator judge prompts
+│   ├── indexer/             # Extraction agent system prompt
 │   ├── retriever/           # Retriever agent prompt
 │   └── worker/              # Worker agent prompt
 ├── eval/
-│   ├── runner.py            # Eval pipeline
+│   ├── runner.py            # Eval pipeline (ER + facts)
 │   ├── report.py            # Report formatter
-│   └── scoring.py           # Entity/fact matching, F1, NRR, ERA
+│   └── scoring.py           # Entity/fact matching, F1, noise rejection, temporal accuracy
 ├── bus.py                   # MessageBus — send/receive/poll over Postgres
 ├── config.py                # Loads from env/.env
 ├── log.py                   # Shared session logger
@@ -208,7 +206,7 @@ discord_threads(session_id, thread_id, channel_id)
 -- System of Record
 records(id, type, source, created_at, raw, content, metadata JSONB,
         dedup_key, expert_name, expert_version, indexed, classification,
-        classification_reason, human_context, resolution_pending, resolution_status)
+        classification_reason, human_context)
 
 -- Expert registration
 experts(id, name, version, source_type, package_name, install_method, enabled, installed_at)
@@ -273,12 +271,11 @@ The indexer processes records into a knowledge graph. All graph data lives in Ne
 Background daemon polling `records WHERE indexed = FALSE AND classification = 'relevant'`. For each record:
 
 1. Build content from `records.content` column
-2. Load extraction prompt via `compose_prompt(record)` — universal rules + entity types + source guidance
-3. LLM extraction → entities + facts
-4. Entity resolution (exact → metadata → alias → LLM judge)
-5. Write fact-edges to Neo4j
-6. Embed content in Qdrant
-7. Mark indexed, enqueue for curator
+2. Compose the extraction prompt — agent system prompt + universal rules + entity types + source guidance
+3. Run the extraction agent with read-only graph tools (`find_entity`, `search_entities`, `check_alias`, `get_entity_context`, `save_extraction`). The agent looks up candidates in the graph and decides match-or-new inline — there is no separate resolution pass.
+4. Validate the extraction output and commit entities + fact-edges to Neo4j
+5. Embed content in Qdrant
+6. Mark indexed, enqueue for curator
 
 ## Data Access
 

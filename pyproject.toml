@@ -32,10 +32,5 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 path = "pearscarf/__init__.py"
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-]
-
 [tool.pyright]
 extraPaths = ["experts"]

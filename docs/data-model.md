@@ -213,18 +213,11 @@ No deletion. No overwriting. History is always preserved.
 
 ## Entity resolution
 
-The same retrieve -> judge -> decide loop runs on every entity mention in every record.
+Entity resolution is handled inline by the extraction agent. The agent has read-only graph tools (`find_entity`, `search_entities`, `check_alias`, `get_entity_context`) and uses them during extraction to look up candidates before deciding whether a mention matches an existing entity or introduces a new one.
 
-**Retrieve:** exact match -> email/domain -> first name -> substring -> IDENTIFIED_AS aliases
+When the agent resolves a mention to an existing entity under a different surface form, it writes an IDENTIFIED_AS self-edge. One edge per unique surface form, deduplicated via MERGE. `source_records` accumulates all records that confirmed the alias.
 
-**Judge:** LLM with candidate context packages — current facts and connections per candidate
-
-**Decide:**
-- **Match** — write facts to existing node
-- **New** — create new entity node
-- **Ambiguous** — flag record as `resolution_pending`, defer to HIL
-
-IDENTIFIED_AS self-edges record confirmed aliases. One edge per unique surface form, deduplicated via MERGE. `source_records` accumulates all records that confirmed the alias.
+Uncertainty surfacing (for cases the agent cannot confidently resolve) is future work — see PEA-11 / PEA-117.
 
 ---
 

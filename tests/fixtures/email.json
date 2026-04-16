@@ -1,9 +1,0 @@
-{
-  "record_id": "test_email_001",
-  "message_id": "test_msg_001",
-  "sender": "j.whitfield@meridiansys.com",
-  "recipient": "gev@pearventures.io",
-  "subject": "Re: Meridian demo follow-up",
-  "body": "Hi Gev,\n\nThanks for the demo last week. The team at Meridian Systems was impressed with the platform. I'd like to set up a deeper technical review next Tuesday.\n\nBest,\nJames",
-  "received_at": "2026-04-01T15:30:00+00:00"
-}

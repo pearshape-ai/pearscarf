@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.20.2
+- Dead code cleanup across the paths that architectural migrations left behind. The old single-shot extraction, the three-way entity resolution judge, the blocking HIL flow (`resolution_pending` / `resolution_status`), the curator's LLM dedup prompts, and the pre-packaging Gmail/Linear prompt folders are all gone. No behaviour change — none of it was on a live execution path.
+- Pytest harness removed — it was a safety net during the architecture migration and no longer tests current behaviour. `psc test` command and pytest dev dependency dropped alongside. `psc integration-test` (smoke test for context_query tools) stays.
+- One-time migration scripts removed (`migrate_sqlite_to_postgres.py`, `retrofit_temporal.py`, `extract_test.py`) — all artefacts of past transitions, not used in the current flow.
+- Docs updated to reflect current reality: indexer uses the extraction agent inline for ER; curator does expiry + confidence upgrade only; knowledge tree no longer lists removed folders.
+
 ## 1.20.1
 - Curator simplified — LLM-based semantic dedup removed. Extraction agent now handles dedup at write time by checking existing AFFILIATED facts. Curator retains expiry scanning and confidence upgrades (both deterministic, no LLM calls).
 - Extraction agent prompt updated to skip duplicate AFFILIATED facts when the same affiliation already exists in the graph.

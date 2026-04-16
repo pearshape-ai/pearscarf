@@ -16,17 +16,17 @@ The goal: a shared memory layer for multi-agent systems that improves itself ove
 
 **Bi-temporal modeling** — two independent timestamps on every fact-edge. `source_at` derives from the record's own timestamp (email sent date, issue `created_at`, change `changed_at`). `recorded_at` is when PearScarf indexed it. Records arriving out of order land at the correct point in the factual timeline regardless of processing order.
 
-**Entity resolution** — retrieve → judge → decide loop on every entity mention. Candidate retrieval via exact name, email/domain match, first-name prefix, substring, and IDENTIFIED_AS alias edges. LLM judge receives candidate context packages (current facts + connections). Three verdicts: match, new, ambiguous (deferred HIL). IDENTIFIED_AS self-edges accumulate confirmed aliases; deduplicated via MERGE on surface form.
+**Entity resolution** — handled inline by the extraction agent via read-only graph tools (`find_entity`, `search_entities`, `check_alias`, `get_entity_context`). The agent looks up candidates in the graph during extraction and decides match-or-new before writing. IDENTIFIED_AS self-edges accumulate confirmed aliases; deduplicated via MERGE on surface form. Uncertainty surfacing for low-confidence decisions is future work (see PEA-11).
 
 **Expert plugin architecture** — self-contained expert packages in `experts/`. Each expert owns a connect module (API client + tools), an ingester (background polling loop), and knowledge files (agent prompt, extraction guidance, entity types, record schemas). Manifest declares source type, record types, schema paths, and entry points. Registry builds runtime indexes from DB on startup; falls back to filesystem scan. `ExpertContext` is the single interface experts receive — `StorageProtocol`, `BusProtocol`, `LogProtocol`, config dict, and expert name. No pearscarf internals imported by experts. Three experts ship: gmailscarf, linearscarf, githubscarf.
 
-**Curator** — background worker polling `curator_queue`. Four passes per cycle: AFFILIATED semantic dedup (LLM equivalence judge), ASSERTED semantic dedup, expired commitment detection (`valid_until < today`), confidence upgrades (`inferred` → `stated` when a `stated` source record exists in `source_record_ids`). Structurally correct at write time; semantically correct after curator runs. Never deletes.
+**Curator** — background worker polling `curator_queue`. Two passes per cycle: expired commitment detection (`valid_until < today`) and confidence upgrades (`inferred` → `stated` when a `stated` source record exists in `source_records`). Semantic dedup happens at write time via the extraction agent's graph tools rather than as a curator pass. Never deletes.
 
 **MCP server** — FastMCP over HTTP/SSE. Read-only. Seven tools: `find_entity`, `get_facts`, `get_connections`, `get_relationship`, `get_conflicts`, `get_open_commitments`, `get_open_blockers`. Named API key auth. `context_query.py` is the shared read layer used by both the retriever agent and the MCP server.
 
 **Install pipeline** — 7-stage validation (package locatable, manifest valid, knowledge contract, entry points importable, conflict checks, identifier pattern validation, eval dataset). DB writes on install: `experts`, `entity_types`, `identifier_patterns`, `expert_record_schemas`. Typed tables created from JSON Schema declarations in manifest. Lifecycle commands: install, enable, disable, uninstall, update.
 
-**Eval framework** — graph-based pipeline: ingest → index → query graph → score. Metrics: extraction precision/recall, graph fidelity F1 (primary), noise rejection rate, entity resolution accuracy, temporal accuracy. Per-label F1 for AFFILIATED/ASSERTED/TRANSITIONED. Versioned results: `(dataset_version, pearscarf_version)`.
+**Eval framework** — graph-based pipeline: ingest → index → query graph → score. Two subcommands: `psc eval er` (entity resolution: merge recall, false merges, node count) and `psc eval facts` (fact extraction precision/recall/F1 per edge label). Temporal accuracy and noise rejection where applicable. Versioned results: `(dataset_version, pearscarf_version)`.
 
 ---
 
