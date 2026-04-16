@@ -122,6 +122,12 @@ def start_system(poll: bool = False, log_fn=None) -> SystemComponents:
     log_fn("Worker agent started.")
 
     # --- Start indexer ---
+    from pearscarf.knowledge import onboarding_summary
+    onb_source, onb_chars = onboarding_summary()
+    log_fn(f"Onboarding: {onb_chars} chars ({onb_source}).")
+    if onb_chars > 8000:
+        log_fn(f"Onboarding: {onb_chars} chars exceeds soft budget (~6000 chars / ~1500 tokens).")
+
     indexer = Indexer()
     indexer.start()
     components.indexer = indexer

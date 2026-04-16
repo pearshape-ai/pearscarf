@@ -70,6 +70,10 @@ psc expert gmail --auth        # Gmail OAuth setup
 # Edit env/.linearscarf.env    # add LINEAR_API_KEY
 # Edit env/.githubscarf.env    # add GITHUB_TOKEN + GITHUB_REPO
 
+# Optional: tell the extraction agent about your world
+# cp docs/onboarding.example.md env/onboarding.md && $EDITOR env/onboarding.md
+# Then set ONBOARDING_PROMPT_PATH=env/onboarding.md in env/.env
+
 # Run
 psc run                        # start system + REPL
 psc run --poll                 # also start expert ingesters

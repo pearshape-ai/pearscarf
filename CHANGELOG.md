@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.21.0
+- Onboarding — a single markdown file that onboards PearScarf to the world it operates in (team, vocabulary, what matters), injected into the extraction prompt and overridable via `ONBOARDING_PROMPT_PATH`.
+
 ## 1.20.2
 - Dead code cleanup across the paths that architectural migrations left behind. The old single-shot extraction, the three-way entity resolution judge, the blocking HIL flow (`resolution_pending` / `resolution_status`), the curator's LLM dedup prompts, and the pre-packaging Gmail/Linear prompt folders are all gone. No behaviour change — none of it was on a live execution path.
 - Pytest harness removed — it was a safety net during the architecture migration and no longer tests current behaviour. `psc test` command and pytest dev dependency dropped alongside. `psc integration-test` (smoke test for context_query tools) stays.

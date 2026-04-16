@@ -104,13 +104,17 @@ The registry discovers installed experts from the `experts` DB table and builds 
 
 ### Extraction prompts
 
-When the indexer processes a record, the extraction prompt is composed from three sources:
+When the indexer processes a record, the extraction prompt is composed in this order:
 
-- **Universal rules** — how to extract entities and facts, edge labels, output format. Shared across all record types. Lives in `pearscarf/knowledge/core/`.
-- **Entity types** — what kinds of things to look for (person, company, project, event, plus any types declared by experts like repository). Automatically includes new types when an expert is installed.
-- **Source-specific guidance** — what to extract from *this* source's records. Each expert ships an `extraction.md` that tells the LLM what matters in emails vs issues vs PRs, and what to ignore.
+1. **Agent role** — `pearscarf/knowledge/indexer/extraction_agent.md`. Behavioural prompt for the extraction agent: how to reason, how to use its graph tools, match-or-new decisions.
+2. **Onboarding** — a single markdown file that onboards PearScarf to the world it will operate in (the team, the kinds of interactions, the vocabulary, what matters, what to ignore). Defaults to `pearscarf/knowledge/onboarding.md` (neutral framing shipped with the repo). Operators override by setting `ONBOARDING_PROMPT_PATH` to their own file (typically `env/onboarding.md`). See `docs/onboarding.example.md` for a template.
+3. **Universal rules** — how to extract entities and facts, edge labels, output format. Shared across all record types. Lives in `pearscarf/knowledge/core/`.
+4. **Entity types** — what kinds of things to look for (person, company, project, event, plus any types declared by experts like repository). Automatically includes new types when an expert is installed.
+5. **Source-specific guidance** — what to extract from *this* source's records. Each expert ships an `extraction.md` that tells the LLM what matters in emails vs issues vs PRs, and what to ignore.
 
-This means installing a new expert automatically extends what the system can extract — no manual prompt editing.
+Order is stable-to-variable: agent role and onboarding rarely change, rules update on release, source guidance changes per expert install. Installing a new expert automatically extends what the system can extract — no manual prompt editing.
+
+Onboarding is loaded once at startup and cached (edits require restart). Target budget: 500–1500 tokens; a warning is logged above ~2000 tokens.
 
 ### Install and lifecycle
 
@@ -255,6 +259,7 @@ Core config loads from `env/.env`. Expert credentials load from `env/.<name>.env
 | `QDRANT_URL` | `http://localhost:6333` | env/.env |
 | `TIMEZONE` | `America/Los_Angeles` | env/.env |
 | `MCP_PORT` / `MCP_HOST` | `8090` / `0.0.0.0` | env/.env |
+| `ONBOARDING_PROMPT_PATH` | shipped default | env/.env |
 | `GMAIL_*` | | env/.gmailscarf.env |
 | `LINEAR_*` | | env/.linearscarf.env |
 | `GITHUB_*` | | env/.githubscarf.env |

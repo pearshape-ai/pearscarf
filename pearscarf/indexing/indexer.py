@@ -23,7 +23,7 @@ from pearscarf.config import (
 )
 from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.indexing.registry import compose_prompt
-from pearscarf.knowledge import load as load_prompt
+from pearscarf.knowledge import load as load_prompt, load_onboarding_block
 from pearscarf.tracing import trace_span
 
 
@@ -128,8 +128,9 @@ class Indexer:
     def _build_extraction_prompt(self, record: dict) -> str:
         """Build the system prompt for the extraction agent."""
         agent_instructions = load_prompt("extraction_agent")
+        onboarding = load_onboarding_block()
         base_prompt = compose_prompt(record)
-        return agent_instructions + "\n\n" + base_prompt
+        return agent_instructions + "\n\n" + onboarding + base_prompt
 
     def _run_extraction_agent(self, record: dict, content: str) -> dict | None:
         """Run the extraction agent on a record. Returns extraction result or None."""
