@@ -143,8 +143,10 @@ class GmailConnect:
     def ingest_record(self, data: dict) -> str | None:
         """Save a record from a JSON fixture or API response.
 
-        Builds raw (true source), content (LLM-ready), and metadata
-        from the data dict. Returns record_id or None on duplicate.
+        Runs a deterministic hard filter on the record. Clear noise is
+        saved as `classification='noise'` and never reaches the triage
+        agent; everything else is left unclassified — the framework
+        applies the manifest policy and routes to pending_triage.
         """
         raw = json.dumps(data)
         content = (
@@ -162,10 +164,51 @@ class GmailConnect:
             "subject": data.get("subject", ""),
             "received_at": data.get("received_at", ""),
         }
+        classification = "noise" if self._is_noise(raw, metadata) else None
         return self._ctx.storage.save_record(
             "email", raw, content=content, metadata=metadata,
             dedup_key=data.get("message_id"),
+            classification=classification,
         )
+
+    def _is_noise(self, raw: str, metadata: dict) -> bool:
+        """Deterministic hard filter for obvious automated/bulk mail.
+
+        Conservative — only rejects things with unambiguous signals
+        (no-reply senders, list-unsubscribe headers, auto-submitted,
+        bulk precedence). Everything borderline is passed through to
+        the triage agent.
+        """
+        sender = (metadata.get("sender") or "").lower()
+        for marker in (
+            "no-reply", "noreply", "donotreply", "do-not-reply",
+            "mailer-daemon", "postmaster@",
+        ):
+            if marker in sender:
+                return True
+
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return False
+
+        headers: dict[str, str] = {}
+        for h in data.get("payload", {}).get("headers", []):
+            name = (h.get("name") or "").lower()
+            value = h.get("value") or ""
+            headers[name] = value
+
+        if headers.get("list-unsubscribe"):
+            return True
+        auto_submitted = headers.get("auto-submitted", "").lower()
+        if auto_submitted and auto_submitted != "no":
+            return True
+        if headers.get("precedence", "").lower() in ("bulk", "list", "junk"):
+            return True
+        if headers.get("x-auto-response-suppress"):
+            return True
+
+        return False
 
     def get_tools(self) -> list[BaseTool]:
         """Return the list of BaseTool instances for the LLM agent."""
