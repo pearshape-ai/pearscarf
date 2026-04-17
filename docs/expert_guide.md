@@ -70,7 +70,7 @@ eval: eval/
 ```
 
 Key fields:
-- **`relevancy_check`** — required. `skip` marks every record relevant on save (use for internal/trusted sources). `required` routes records through the triage pipeline; expert may implement a hard filter and ships a relevancy guidance file for the triage agent's LLM check.
+- **`relevancy_check`** — required. `skip` auto-marks every record relevant on save (use for internal/trusted sources). `required` means the expert owns classification: its `ingest_record` may run an internal hard filter and pass `classification="noise"` for unambiguous noise, or leave it unset to let the framework default to `pending_triage` so the triage agent can judge it. Required experts should also ship a `knowledge/relevancy.md` describing source-specific signal vs noise — the triage agent loads it into its LLM check.
 - **`record_types`** — the record type strings this expert produces. Must be globally unique (prefix with source name to avoid collisions: `github_issue` not `issue`).
 - **`schemas`** — maps each record type to a JSON Schema file. Used to create typed tables at install time.
 - **`tools`** — module with `get_tools(ctx)` entry point. Called at startup.
@@ -260,6 +260,33 @@ Do not extract when: "repository" is used generically.
 ### `knowledge/records/*.md`
 
 Documents each record type's fields and identity rules. Not used in prompt composition — for human reference and agent context.
+
+### `knowledge/relevancy.md` (required experts only)
+
+Source-specific prose guidance for the triage agent. Describes what looks like signal, what looks like noise, and what should be flagged as uncertain for this expert's records. Loaded by the triage agent alongside the deployment onboarding when classifying `pending_triage` records.
+
+```markdown
+Relevancy guidance for <source> records.
+
+## Keep as relevant
+- Direct human correspondence with a known sender or recipient
+- Replies in an ongoing thread
+- Messages referencing a known project or deal
+
+## Discard as noise
+- Marketing, newsletters, sales outreach past the hard filter
+- Transactional system mail unrelated to operational work
+
+## Flag as uncertain
+- Unknown sender, personally written, no anchor in the world
+- Anything where the signal is subtle
+```
+
+Skip experts don't need this file.
+
+### Internal hard filter (required experts only)
+
+Inside your connect class, add a method like `_is_noise(raw, metadata) -> bool` and call it in `ingest_record`. Pass `classification="noise"` to `save_record` on a hit; pass nothing (`None`) on a miss and the framework will default to `pending_triage`. Keep the filter deterministic and conservative — only flag unambiguous automated/bulk patterns. Everything borderline should pass through to the triage agent, which has world context the hard filter lacks.
 
 ## Step 6: Credentials
 

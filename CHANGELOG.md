@@ -2,6 +2,7 @@
 
 ## 1.22.0
 - Expert manifests declare `relevancy_check: skip | required`; `skip` auto-marks records relevant on save, restoring the indexer hand-off for the three shipped experts after the stalled worker-side-triage migration.
+- Triage pipeline — `required` experts classify noise internally via a hard filter and leave the rest for a new triage agent that grounds its LLM decision in onboarding, per-expert `relevancy.md` guidance, and read-only graph context; gmail is the first consumer.
 
 ## 1.21.0
 - Onboarding — a single markdown file that onboards PearScarf to the world it operates in (team, vocabulary, what matters), injected into the extraction prompt and overridable via `ONBOARDING_PROMPT_PATH`.

@@ -15,7 +15,7 @@
              │ Postgres messages         │ context_query.py
 ┌────────────▼──────────────────────────┐│
 │            Worker Agent                ││
-│   (reasoning, routing, triage)         ││
+│   (reasoning, routing, human surface)  ││
 └──┬──────┬──────┬──────┬───────────────┘│
    │      │      │      │               │
 ┌──▼──┐┌──▼──┐┌──▼───┐┌─▼────┐  ┌──────▼──────┐
@@ -35,13 +35,13 @@
 │  │ sessions │ │          │ │              │ │
 │  └──────────┘ └──────────┘ └──────────────┘ │
 └──────────────────────────────────────────────┘
-        ↑ writes              ↑ writes
-┌───────┴──────┐     ┌───────┴──────┐
-│   Indexer    │────→│   Curator    │
-│ (extraction) │queue│ (dedup,      │
-│              │     │  expiry,     │
-│              │     │  confidence) │
-└──────────────┘     └──────────────┘
+        ↑ writes              ↑ writes          ↑ writes
+┌───────┴──────┐     ┌───────┴──────┐   ┌──────┴──────┐
+│   Triage     │────→│   Indexer    │──→│   Curator   │
+│ (classify    │     │ (extraction) │   │ (dedup,     │
+│  pending)    │     │              │   │  expiry,    │
+│              │     │              │   │  confidence)│
+└──────────────┘     └──────────────┘   └─────────────┘
 ```
 </details>
 
@@ -142,6 +142,8 @@ pearscarf/
 │   └── registry.py          # Expert registry — discovery, prompt composition, connect cache
 ├── curation/
 │   └── curator.py           # Background graph quality (expiry, confidence)
+├── triage/
+│   └── triage_agent.py      # Classifies pending_triage records via LLM
 ├── query/
 │   └── context_query.py     # Read-only data access layer for retriever + MCP
 ├── mcp/
@@ -149,7 +151,7 @@ pearscarf/
 ├── agents/
 │   ├── base.py              # BaseAgent — agentic loop on Anthropic SDK
 │   ├── expert.py            # ExpertAgent — domain-specialized, receives ExpertContext
-│   ├── worker.py            # Worker — routing, triage, human interface
+│   ├── worker.py            # Worker — routing, human interface
 │   └── runner.py            # AgentRunner — polls bus, dispatches to agents, caches per session
 ├── experts/
 │   ├── ingest.py            # Ingest expert — file-based data entry (seed + JSON records)
@@ -235,16 +237,23 @@ Record IDs use `{type}_{uuid4_short}` format (e.g. `email_3f2a1b4c`).
 
 ### Classification
 
-Every record carries a `classification` column; the indexer only processes `classification = 'relevant'`. Policy is declared per expert in the manifest:
+Every record carries a `classification`. The indexer only processes `classification = 'relevant'`. Policy is declared per expert in the manifest:
 
 ```yaml
 relevancy_check: skip | required
 ```
 
-- **`skip`** — ingester saves, framework immediately marks the record relevant. Used for internal/trusted sources (Linear, GitHub) where noise is rare.
-- **`required`** — records enter a triage pipeline before reaching the indexer. The expert may run a deterministic hard filter (source-format rules) at ingest; ambiguous records are picked up by the triage agent, which runs an LLM check with onboarding + per-expert guidance + read-only graph context. Output → `relevant` / `noise` / `uncertain`; uncertain goes to the HIL queue.
+- **`skip`** — framework auto-classifies every record as `relevant` on save. Used for internal/trusted sources (Linear, GitHub) where noise is rare.
+- **`required`** — the expert is responsible for classification. In its `ingest_record`, it may run a deterministic hard filter and pass `classification="noise"` to `save_record` for unambiguous hits. Everything else is passed through without a classification; the framework then defaults it to `pending_triage` and the triage agent picks it up.
 
-The triage pipeline is landing incrementally. Today the three shipped experts declare `skip`; the `required` path (triage agent, per-expert guidance, HIL wiring) is follow-up work.
+**State machine for `required` records:**
+```
+(ingest) → noise | pending_triage → triaging → relevant | noise | uncertain
+```
+
+The triage agent (`pearscarf/triage/triage_agent.py`) polls `classification='pending_triage'`, claims atomically via `UPDATE-RETURNING` to `triaging`, and runs an LLM check with onboarding + the expert's `knowledge/relevancy.md` + read-only graph tools (`find_entity`, `search_entities`, `check_alias`, `get_entity_context`). The read-only constraint preserves the extractor/triage boundary — triage can use the graph to judge relevance but never writes facts. Uncertain results sit in an HIL queue pending the human-facing path.
+
+If an expert passes any classification value directly, the framework stores it verbatim — no policy override.
 
 Seed records (`psc expert ingest --seed`) and manually ingested files (`--record`) bypass both paths — they're trivially relevant by construction.
 
