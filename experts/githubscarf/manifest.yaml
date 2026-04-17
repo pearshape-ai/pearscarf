@@ -1,8 +1,10 @@
 name: githubscarf
-version: 0.1.1
+version: 0.1.2
 source_type: github
 author: pearshape-ai
 description: GitHub expert for PearScarf — polls PRs and issues via the GitHub REST API
+
+relevancy_check: skip
 
 record_types:
   - github_pr
