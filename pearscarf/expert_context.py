@@ -93,9 +93,15 @@ class ExpertContext:
 class PearscarfStorage:
     """Wraps pearscarf.storage.store to implement StorageProtocol."""
 
-    def __init__(self, expert_name: str, expert_version: str = "") -> None:
+    def __init__(
+        self,
+        expert_name: str,
+        expert_version: str = "",
+        relevancy_policy: str = "",
+    ) -> None:
         self._expert_name = expert_name
         self._expert_version = expert_version
+        self._relevancy_policy = relevancy_policy
 
     def save_record(
         self,
@@ -107,7 +113,7 @@ class PearscarfStorage:
     ) -> str | None:
         from pearscarf.storage import store
 
-        return store.save_record(
+        record_id = store.save_record(
             record_type=record_type,
             raw=raw,
             content=content,
@@ -117,6 +123,11 @@ class PearscarfStorage:
             expert_name=self._expert_name,
             expert_version=self._expert_version,
         )
+
+        if record_id is not None and self._relevancy_policy == "skip":
+            store.mark_relevant(record_id)
+
+        return record_id
 
     def get_record(self, record_id: str) -> dict | None:
         from pearscarf.storage import store
@@ -215,13 +226,20 @@ def build_context(
     Called by pearscarf at startup for each enabled expert (and for
     internal agents). The bus is the running MessageBus instance.
     For experts, the config is auto-loaded from env/.<expert_name>.env.
+    Relevancy policy is resolved once from the registry and handed to
+    the storage wrapper so it has no runtime dependency on orchestration.
     """
+    from pearscarf.indexing.registry import get_registry
+
     if config is None:
         config = _load_expert_env(expert_name)
 
+    expert = get_registry().get_by_name(expert_name)
+    relevancy_policy = expert.relevancy_check if expert else ""
+
     return ExpertContext(
         bus=PearscarfBus(bus, expert_name),
-        storage=PearscarfStorage(expert_name, expert_version),
+        storage=PearscarfStorage(expert_name, expert_version, relevancy_policy),
         log=PearscarfLog(),
         config=config,
         expert_name=expert_name,

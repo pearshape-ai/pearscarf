@@ -146,6 +146,12 @@ def stage_manifest(ctx: ValidationContext) -> StageResult:
     if not all(isinstance(rt, str) and rt for rt in record_types):
         return _fail("manifest record_types must contain non-empty strings")
 
+    relevancy_check = data.get("relevancy_check")
+    if relevancy_check is not None and relevancy_check not in ("skip", "required"):
+        return _fail(
+            f"manifest relevancy_check must be 'skip' or 'required', got '{relevancy_check}'"
+        )
+
     ctx.manifest = data
     return _ok(f"name={name} version={version} source_type={data['source_type']}")
 
