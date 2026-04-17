@@ -233,17 +233,20 @@ Record IDs use `{type}_{uuid4_short}` format (e.g. `email_3f2a1b4c`).
 - **Typed tables** — per-expert, per-record-type, per-version. Created from JSON Schema at install. Columns match schema properties.
 - **`store.save_record()`** — single write path used by all experts via `ctx.storage`. Handles dedup, ID generation, and dual-write to typed table.
 
-### Triage
+### Classification
 
-When an expert pushes a new record via the bus, the worker classifies it:
+Every record carries a `classification` column; the indexer only processes `classification = 'relevant'`. Policy is declared per expert in the manifest:
 
-1. **Obvious noise** (no-reply, promotional, automated) → auto-classify as noise
-2. **Uncertain** → ask the human "Is this relevant and why?"
-3. **Human responds** → `classify_record` with reasoning
+```yaml
+relevancy_check: skip | required
+```
 
-Records ingested via `psc expert ingest --record` are auto-marked relevant.
+- **`skip`** — ingester saves, framework immediately marks the record relevant. Used for internal/trusted sources (Linear, GitHub) where noise is rare.
+- **`required`** — records enter a triage pipeline before reaching the indexer. The expert may run a deterministic hard filter (source-format rules) at ingest; ambiguous records are picked up by the triage agent, which runs an LLM check with onboarding + per-expert guidance + read-only graph context. Output → `relevant` / `noise` / `uncertain`; uncertain goes to the HIL queue.
 
-The indexer only processes records where `classification = 'relevant'`.
+The triage pipeline is landing incrementally. Today the three shipped experts declare `skip`; the `required` path (triage agent, per-expert guidance, HIL wiring) is follow-up work.
+
+Seed records (`psc expert ingest --seed`) and manually ingested files (`--record`) bypass both paths — they're trivially relevant by construction.
 
 ## Configuration
 
