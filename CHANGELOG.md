@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.22.0
+- Expert manifests declare `relevancy_check: skip | required`; `skip` auto-marks records relevant on save, restoring the indexer hand-off for the three shipped experts after the stalled worker-side-triage migration.
+
 ## 1.21.0
 - Onboarding — a single markdown file that onboards PearScarf to the world it operates in (team, vocabulary, what matters), injected into the extraction prompt and overridable via `ONBOARDING_PROMPT_PATH`.
 

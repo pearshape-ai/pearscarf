@@ -45,6 +45,8 @@ source_type: github
 author: pearshape-ai
 description: GitHub expert for PearScarf
 
+relevancy_check: skip
+
 record_types:
   - github_pr
   - github_issue
@@ -68,6 +70,7 @@ eval: eval/
 ```
 
 Key fields:
+- **`relevancy_check`** — required. `skip` marks every record relevant on save (use for internal/trusted sources). `required` routes records through the triage pipeline; expert may implement a hard filter and ships a relevancy guidance file for the triage agent's LLM check.
 - **`record_types`** — the record type strings this expert produces. Must be globally unique (prefix with source name to avoid collisions: `github_issue` not `issue`).
 - **`schemas`** — maps each record type to a JSON Schema file. Used to create typed tables at install time.
 - **`tools`** — module with `get_tools(ctx)` entry point. Called at startup.
