@@ -439,6 +439,8 @@ class Indexer:
             conn.commit()
 
     def _loop(self) -> None:
+        from pearscarf.storage import store
+
         init_db()
         graph.ensure_constraints()
         while not self._stop.is_set():
@@ -448,8 +450,9 @@ class Indexer:
                         "SELECT id, type, source, created_at, raw, content, "
                         "metadata, human_context "
                         "FROM records "
-                        "WHERE indexed = FALSE AND classification = 'relevant' "
-                        "ORDER BY created_at"
+                        "WHERE indexed = FALSE AND classification = %s "
+                        "ORDER BY created_at",
+                        (store.RELEVANT,),
                     ).fetchall()
 
                 if rows:

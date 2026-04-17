@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from pearscarf.storage import graph
+from pearscarf.storage import graph, store
 from pearscarf.agents.base import BaseAgent
 from pearscarf.expert_context import ExpertContext
 from pearscarf.knowledge import load as load_prompt
@@ -61,7 +61,7 @@ class ClassifyRecordTool(BaseTool):
 
     name = "classify_record"
     description = (
-        "Classify a record as 'relevant' or 'noise'. "
+        f"Classify a record as '{store.RELEVANT}' or '{store.NOISE}'. "
         "Use after triaging an email. Include reasoning and any human context."
     )
     input_schema = {
@@ -73,8 +73,8 @@ class ClassifyRecordTool(BaseTool):
             },
             "classification": {
                 "type": "string",
-                "enum": ["relevant", "noise"],
-                "description": "Classification: 'relevant' or 'noise'",
+                "enum": [store.RELEVANT, store.NOISE],
+                "description": f"Classification: '{store.RELEVANT}' or '{store.NOISE}'",
             },
             "reason": {
                 "type": "string",
@@ -89,8 +89,6 @@ class ClassifyRecordTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf.storage import store
-
         ok = store.classify_record(
             record_id=kwargs["record_id"],
             classification=kwargs["classification"],
