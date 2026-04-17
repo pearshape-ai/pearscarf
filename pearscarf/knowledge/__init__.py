@@ -28,6 +28,7 @@ _KNOWLEDGE_MAP: dict[str, tuple[str, str | None]] = {
     "ingest":           ("ingest/agent.md",             None),
     "extraction_agent": ("indexer/extraction_agent.md", None),
     "seed_guidance":    ("ingest/seed_guidance.md",     None),
+    "triage_agent":     ("triage/agent.md",             None),
     "onboarding":       ("onboarding.md",               "ONBOARDING_PROMPT_PATH"),
 }
 
@@ -86,3 +87,21 @@ def onboarding_summary() -> tuple[str, int]:
     """Return (source_label, char_count) for startup logging."""
     _resolve_onboarding_block()
     return _onboarding_source or "", len(_onboarding_block or "")
+
+
+# --- Per-expert relevancy guidance ---
+
+
+def load_relevancy_guidance(expert_name: str) -> str | None:
+    """Load an expert's knowledge/relevancy.md. Returns None if absent.
+
+    The triage agent loads this per-record to get source-specific cues
+    about what looks like noise vs signal for that particular expert.
+    """
+    from pearscarf.indexing.registry import get_registry
+
+    expert = get_registry().get_by_name(expert_name)
+    if expert is None:
+        return None
+    path = expert.knowledge_dir / "relevancy.md"
+    return path.read_text() if path.is_file() else None

@@ -21,6 +21,7 @@ class SystemComponents:
     runners: list = field(default_factory=list)
     indexer: Any = None
     curator: Any = None
+    triage: Any = None
     mcp_server: Any = None
 
 
@@ -140,6 +141,13 @@ def start_system(poll: bool = False, log_fn=None) -> SystemComponents:
     components.curator = curator
     log_fn("Curator started.")
 
+    # --- Start triage agent ---
+    from pearscarf.triage.triage_agent import TriageAgent
+    triage = TriageAgent(log_fn=log_fn)
+    triage.start()
+    components.triage = triage
+    log_fn("Triage agent started.")
+
     # --- Start MCP server ---
     mcp_srv = MCPServer()
     mcp_srv.start()
@@ -153,6 +161,8 @@ def stop_system(components: SystemComponents) -> None:
     """Shut down all running components."""
     if components.mcp_server:
         components.mcp_server.stop()
+    if components.triage:
+        components.triage.stop()
     if components.curator:
         components.curator.stop()
     if components.indexer:
