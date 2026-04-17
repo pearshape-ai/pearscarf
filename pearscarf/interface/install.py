@@ -123,7 +123,7 @@ def stage_manifest(ctx: ValidationContext) -> StageResult:
     except yaml.YAMLError as exc:
         return _fail(f"manifest.yaml not valid YAML: {exc}")
 
-    required = ["name", "version", "source_type", "record_types"]
+    required = ["name", "version", "source_type", "record_types", "relevancy_check"]
     missing = [f for f in required if not data.get(f)]
     if missing:
         return _fail(f"manifest missing required field(s): {', '.join(missing)}")
@@ -147,7 +147,7 @@ def stage_manifest(ctx: ValidationContext) -> StageResult:
         return _fail("manifest record_types must contain non-empty strings")
 
     relevancy_check = data.get("relevancy_check")
-    if relevancy_check is not None and relevancy_check not in ("skip", "required"):
+    if relevancy_check not in ("skip", "required"):
         return _fail(
             f"manifest relevancy_check must be 'skip' or 'required', got '{relevancy_check}'"
         )
