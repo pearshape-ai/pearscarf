@@ -117,7 +117,8 @@ def _pending_record_count() -> int:
     with _get_conn() as conn:
         row = conn.execute(
             "SELECT COUNT(*) AS c FROM records "
-            "WHERE indexed = FALSE AND classification = 'relevant'"
+            "WHERE indexed = FALSE AND classification = %s",
+            (store.RELEVANT,),
         ).fetchone()
         return dict(row).get("c", 0) if row else 0
 

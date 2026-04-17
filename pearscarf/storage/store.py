@@ -86,21 +86,23 @@ def get_record(record_id: str) -> dict | None:
         return dict(row) if row else None
 
 
-def mark_relevant(record_id: str) -> None:
-    """Mark a record as relevant (sets classification = 'relevant')."""
-    init_db()
-    with _get_conn() as conn:
-        conn.execute(
-            "UPDATE records SET classification = 'relevant' WHERE id = %s",
-            (record_id,),
-        )
-        conn.commit()
+# --- Classification labels ---
+#
+# Single source of truth for records.classification values. Everywhere
+# that reads or writes this column should use these constants.
+
+RELEVANT = "relevant"
+NOISE = "noise"
+PENDING_TRIAGE = "pending_triage"
+TRIAGING = "triaging"      # transient: triage agent is processing
+UNCERTAIN = "uncertain"    # triage couldn't decide; HIL queue
 
 
 def set_classification(record_id: str, label: str) -> None:
-    """Set classification to an arbitrary label. System-path write used by
-    the framework when an expert passes a classification on save, and by
-    the triage agent when resolving pending_triage records."""
+    """Set classification on a record. System-path write used by the
+    framework when an expert passes a classification on save, by the
+    triage agent when resolving pending_triage records, and by the
+    sugar helpers below."""
     init_db()
     with _get_conn() as conn:
         conn.execute(
@@ -108,6 +110,11 @@ def set_classification(record_id: str, label: str) -> None:
             (label, record_id),
         )
         conn.commit()
+
+
+def mark_relevant(record_id: str) -> None:
+    """Shortcut for set_classification(id, RELEVANT)."""
+    set_classification(record_id, RELEVANT)
 
 
 # --- Per-type record helpers (legacy, used by existing experts) ---
@@ -220,7 +227,7 @@ def save_ingest(
 ) -> str:
     """Save a seed ingest record to the SOR.
 
-    Auto-classified as 'relevant' — bypasses triage.
+    Auto-classified as relevant — bypasses triage.
     Returns record_id (e.g. 'ingest_001').
     """
     init_db()
@@ -231,7 +238,7 @@ def save_ingest(
         conn.execute(
             "INSERT INTO records (id, type, source, created_at, raw, classification, human_context) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (record_id, "ingest", source, now, raw, "relevant", human_context or None),
+            (record_id, "ingest", source, now, raw, RELEVANT, human_context or None),
         )
         conn.commit()
         return record_id
@@ -259,7 +266,7 @@ def save_issue_change(
     """Save an issue change to the SOR.
 
     Returns record_id (e.g. 'change_001'), or None if duplicate (same linear_history_id).
-    Auto-classified as 'relevant' since the parent issue was already triaged.
+    Auto-classified as relevant since the parent issue was already triaged.
     """
     init_db()
     with _get_conn() as conn:
@@ -278,7 +285,7 @@ def save_issue_change(
         conn.execute(
             "INSERT INTO records (id, type, source, created_at, classification) "
             "VALUES (%s, %s, %s, %s, %s)",
-            (record_id, "issue_change", "linear_expert", now, "relevant"),
+            (record_id, "issue_change", "linear_expert", now, RELEVANT),
         )
         conn.execute(
             "INSERT INTO issue_changes (record_id, issue_record_id, linear_history_id, "

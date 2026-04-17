@@ -137,9 +137,9 @@ class PearscarfStorage:
         if classification is not None:
             store.set_classification(record_id, classification)
         elif self._relevancy_policy == "skip":
-            store.mark_relevant(record_id)
+            store.set_classification(record_id, store.RELEVANT)
         elif self._relevancy_policy == "required":
-            store.set_classification(record_id, "pending_triage")
+            store.set_classification(record_id, store.PENDING_TRIAGE)
 
         return record_id
 
