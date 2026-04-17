@@ -97,6 +97,19 @@ def mark_relevant(record_id: str) -> None:
         conn.commit()
 
 
+def set_classification(record_id: str, label: str) -> None:
+    """Set classification to an arbitrary label. System-path write used by
+    the framework when an expert passes a classification on save, and by
+    the triage agent when resolving pending_triage records."""
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "UPDATE records SET classification = %s WHERE id = %s",
+            (label, record_id),
+        )
+        conn.commit()
+
+
 # --- Per-type record helpers (legacy, used by existing experts) ---
 
 
