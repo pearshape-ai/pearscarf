@@ -46,6 +46,7 @@ class Expert:
     new_entity_types: list[dict] = field(default_factory=list)
     record_types: list[str] = field(default_factory=list)
     enabled: bool = True
+    relevancy_check: str = ""  # "skip" | "required" | "" (not declared)
 
     def start(self, ctx: Any) -> threading.Thread | None:
         """Import the ingester entry point and call its start(ctx).
@@ -188,6 +189,7 @@ class Registry:
             tools_module=tools_module,
             new_entity_types=list(data.get("new_entity_types") or []),
             record_types=[str(rt) for rt in (data.get("record_types") or [])],
+            relevancy_check=str(data.get("relevancy_check") or ""),
         )
 
     def _register(self, expert: Expert) -> None:
