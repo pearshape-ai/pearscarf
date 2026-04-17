@@ -26,11 +26,18 @@ class StorageProtocol(Protocol):
         content: str = "",
         metadata: dict | None = None,
         dedup_key: str | None = None,
+        classification: str | None = None,
     ) -> str | None:
         """Save a record. Returns record_id on success, None on duplicate.
 
         raw: true source data (JSON, markdown, whatever came from the API).
         content: LLM-ready formatted string the indexer uses for extraction.
+        classification: when passed, framework stores this label verbatim
+            (for experts that classify their own records — e.g. a gmail
+            expert running an internal hard filter). When omitted, the
+            framework applies the expert's manifest policy: `skip` → the
+            record is auto-marked relevant; `required` → the record lands
+            as pending_triage for the triage agent to handle.
         """
         ...
 
@@ -110,6 +117,7 @@ class PearscarfStorage:
         content: str = "",
         metadata: dict | None = None,
         dedup_key: str | None = None,
+        classification: str | None = None,
     ) -> str | None:
         from pearscarf.storage import store
 
@@ -123,9 +131,15 @@ class PearscarfStorage:
             expert_name=self._expert_name,
             expert_version=self._expert_version,
         )
+        if record_id is None:
+            return None
 
-        if record_id is not None and self._relevancy_policy == "skip":
+        if classification is not None:
+            store.set_classification(record_id, classification)
+        elif self._relevancy_policy == "skip":
             store.mark_relevant(record_id)
+        elif self._relevancy_policy == "required":
+            store.set_classification(record_id, "pending_triage")
 
         return record_id
 
