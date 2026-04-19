@@ -17,9 +17,12 @@ COPY scripts/ ./scripts/
 COPY README.md CHANGELOG.md ./
 RUN uv sync --frozen --no-dev
 
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     EXPERTS_DIR=/app/experts
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]
 CMD ["psc", "discord", "--poll"]
