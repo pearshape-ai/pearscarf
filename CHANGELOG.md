@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.23.0
+- Dockerfile + compose service for the pearscarf app. `docker compose up -d` brings up the full stack — Postgres, Qdrant, Neo4j, and pearscarf running `psc discord --poll` by default. Single-stage build on `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`, `tini` for PID 1 signal handling.
+- Container entrypoint waits for Postgres to be reachable, then installs each expert under `experts/` idempotently before booting the app. First-start scaffolds the DB registration; subsequent starts detect already-installed experts via `psc expert list` and skip them.
+
 ## 1.22.0
 - Expert manifests declare `relevancy_check: skip | required`; `skip` auto-marks records relevant on save, restoring the indexer hand-off for the three shipped experts after the stalled worker-side-triage migration.
 - Triage pipeline — `required` experts classify noise internally via a hard filter and leave the rest for a new triage agent that grounds its LLM decision in onboarding, per-expert `relevancy.md` guidance, and read-only graph context; gmail is the first consumer.

@@ -16,12 +16,30 @@ uv sync
 source .venv/bin/activate
 ```
 
+## Running via Docker (operator path)
+
+For running pearscarf without a local Python setup, the full stack — Postgres, Qdrant, Neo4j, and pearscarf itself — is in `docker-compose.yml`:
+
+```bash
+# Fill in env/.env (see Configuration below)
+docker compose up -d
+docker compose logs -f pearscarf
+```
+
+The pearscarf container boots `psc discord --poll` by default. Its entrypoint waits for Postgres, installs any experts under `experts/` that aren't already registered, and then starts the app. MCP server is exposed on port 8090.
+
+If you prefer local dev (iterating on pearscarf source), skip the pearscarf container and run the DBs only:
+
+```bash
+docker compose up -d postgres qdrant neo4j
+```
+
 ## Docker Services
 
 Postgres, Qdrant, Neo4j, and pgAdmin run as Docker containers:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres qdrant neo4j pgadmin
 ```
 
 Data persists under `data/`.

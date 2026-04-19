@@ -53,12 +53,26 @@ experts/gmailscarf/
     └── extraction.md      # source-specific extraction guidance
 ```
 
-## Quick start
+## Run via Docker
+
+Fastest path from zero to running — full stack in containers:
+
+```bash
+# Fill in env/.env at minimum: ANTHROPIC_API_KEY, POSTGRES_PASSWORD, NEO4J_PASSWORD, DISCORD_BOT_TOKEN
+docker compose up -d
+docker compose logs -f pearscarf
+```
+
+This brings up Postgres, Qdrant, Neo4j, and the pearscarf app container running `psc discord --poll` — auto-installs the shipped experts and exposes the MCP server on port 8090.
+
+## Quick start (local dev)
+
+For iterating on pearscarf itself — run the app on your host, DBs in Docker:
 
 ```bash
 uv sync
 source .venv/bin/activate
-docker compose up -d           # Postgres, Qdrant, Neo4j
+docker compose up -d postgres qdrant neo4j   # skip the pearscarf container
 
 # Install experts
 psc install ./experts/gmailscarf
