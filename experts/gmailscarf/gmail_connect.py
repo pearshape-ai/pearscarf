@@ -395,18 +395,27 @@ def run_oauth_flow() -> None:
             "Install with: uv add google-auth-oauthlib"
         )
 
-    from pearscarf import config
+    import os
+    from pathlib import Path
 
-    if not config.GMAIL_CLIENT_ID or not config.GMAIL_CLIENT_SECRET:
+    from dotenv import load_dotenv
+
+    env_path = Path(__file__).resolve().parent.parent.parent / "env" / ".gmailscarf.env"
+    load_dotenv(env_path)
+
+    client_id = os.environ.get("GMAIL_CLIENT_ID", "")
+    client_secret = os.environ.get("GMAIL_CLIENT_SECRET", "")
+
+    if not client_id or not client_secret:
         raise SystemExit(
-            "Set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in .env before running --auth.\n"
+            f"Set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in {env_path} before running --auth.\n"
             "Get these from Google Cloud Console → APIs & Services → Credentials."
         )
 
     client_config = {
         "installed": {
-            "client_id": config.GMAIL_CLIENT_ID,
-            "client_secret": config.GMAIL_CLIENT_SECRET,
+            "client_id": client_id,
+            "client_secret": client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
             "redirect_uris": ["http://localhost"],

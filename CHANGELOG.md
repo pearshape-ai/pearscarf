@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.24.1
+- Fix `psc expert gmail --auth` — it was reading `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` from the top-level `pearscarf.config` module, but those settings moved to per-expert env files (`env/.gmailscarf.env`) in an earlier refactor. The flow now loads the expert env file directly and reads the credentials from the environment, matching how the runtime client is configured.
+
 ## 1.24.0
 - Project released under the MIT License. Added `LICENSE`, `CONTRIBUTING.md`, and license metadata in `pyproject.toml` (`license`, `classifiers`, `readme`). Contributions require signing a CLA (administered via [cla-assistant.io](https://cla-assistant.io/)) before first merge — the CLA grants the project a broad license to contributed code, preserving relicensing optionality while keeping the current license MIT.
 
