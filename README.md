@@ -124,6 +124,14 @@ psc discord --poll             # Discord frontend + ingesters
 - [Eval Metrics](docs/eval-metrics.md) — extraction precision, recall, entity resolution accuracy
 - [Changelog](CHANGELOG.md)
 
+## License
+
+Released under the [MIT License](LICENSE).
+
+## Contributing
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). First-time contributors sign a one-click CLA via [cla-assistant.io](https://cla-assistant.io/).
+
 ---
 
 Open source · Framework-agnostic · Built on Neo4j, Postgres, Qdrant

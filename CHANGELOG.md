@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.24.0
+- Project released under the MIT License. Added `LICENSE`, `CONTRIBUTING.md`, and license metadata in `pyproject.toml` (`license`, `classifiers`, `readme`). Contributions require signing a CLA (administered via [cla-assistant.io](https://cla-assistant.io/)) before first merge — the CLA grants the project a broad license to contributed code, preserving relicensing optionality while keeping the current license MIT.
+
 ## 1.23.0
 - Dockerfile + compose service for the pearscarf app. `docker compose up -d` brings up the full stack — Postgres, Qdrant, Neo4j, and pearscarf running `psc discord --poll` by default. Single-stage build on `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`, `tini` for PID 1 signal handling.
 - Container entrypoint waits for Postgres to be reachable, then installs each expert under `experts/` idempotently before booting the app. First-start scaffolds the DB registration; subsequent starts detect already-installed experts via `psc expert list` and skip them.
