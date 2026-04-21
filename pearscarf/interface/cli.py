@@ -107,32 +107,42 @@ expert.add_command(expert_enable_command)
 expert.add_command(expert_uninstall_command)
 
 
-@expert.command()
-@click.option("--auth", is_flag=True, help="Run Gmail OAuth flow for API-based access.")
-def gmail(auth: bool) -> None:
-    """Gmail expert — OAuth setup."""
-    if auth:
-        from gmailscarf.gmail_connect import run_oauth_flow
-
-        run_oauth_flow()
-        return
-
-    click.echo(
-        "Standalone interactive Gmail mode is offline during the expert "
-        "encapsulation rework. Run 'psc run --poll-email' to start the "
-        "Gmail connector instead. Use 'psc expert gmail --auth' to set up "
-        "OAuth credentials."
-    )
+@expert.group(invoke_without_command=True)
+@click.pass_context
+def gmail(ctx) -> None:
+    """Gmail expert — OAuth setup and ingestion control."""
+    if ctx.invoked_subcommand is None:
+        click.echo(
+            "Use 'psc expert gmail auth' to set up OAuth credentials.\n"
+            "Standalone interactive Gmail mode is offline during the expert "
+            "encapsulation rework."
+        )
 
 
-@expert.command("linear")
-def linear() -> None:
-    """Linear expert — standalone mode for direct interaction."""
-    click.echo(
-        "Standalone interactive Linear mode is offline during the expert "
-        "encapsulation rework. Run 'psc run --poll-linear' to start the "
-        "Linear connector instead."
-    )
+@gmail.command("auth")
+def gmail_auth() -> None:
+    """Run the Gmail OAuth flow to obtain a refresh token."""
+    from gmailscarf.gmail_connect import run_oauth_flow
+    run_oauth_flow()
+
+
+@expert.group("linear", invoke_without_command=True)
+@click.pass_context
+def linear(ctx) -> None:
+    """Linear expert — ingestion control."""
+    if ctx.invoked_subcommand is None:
+        click.echo(
+            "Standalone interactive Linear mode is offline during the expert "
+            "encapsulation rework."
+        )
+
+
+@expert.group("github", invoke_without_command=True)
+@click.pass_context
+def github(ctx) -> None:
+    """GitHub expert — ingestion control."""
+    if ctx.invoked_subcommand is None:
+        click.echo("GitHub expert — use 'psc expert list' to see installed experts.")
 
 
 @expert.command("ingest")
@@ -215,18 +225,6 @@ def ingest(seed: str | None, record: str | None, record_type: str | None) -> Non
             click.echo(f"\n{click.style('expert', fg='magenta')} > {response}\n")
     except (KeyboardInterrupt, EOFError):
         click.echo("\nbye.")
-
-
-@cli.command("gmail")
-@click.option("--auth", is_flag=True, help="Run Gmail OAuth flow for API-based access.")
-def gmail_shortcut(auth: bool) -> None:
-    """Gmail utilities (shortcut for 'expert gmail')."""
-    if auth:
-        from gmailscarf.gmail_connect import run_oauth_flow
-
-        run_oauth_flow()
-        return
-    click.echo("Usage: pearscarf gmail --auth")
 
 
 @cli.group("eval", invoke_without_command=True)
