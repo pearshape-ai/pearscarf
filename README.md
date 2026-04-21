@@ -107,6 +107,9 @@ psc discord --poll             # Discord frontend + ingesters
 | `psc expert list` | List installed experts |
 | `psc expert inspect <name>` | Show expert details |
 | `psc expert gmail auth` | Gmail OAuth setup |
+| `psc expert gmail start-ingestion` | Run the Gmail ingester standalone |
+| `psc expert linear start-ingestion` | Run the Linear ingester standalone |
+| `psc expert github start-ingestion` | Run the GitHub ingester standalone |
 | `psc expert ingest --seed <file>` | Ingest a seed file |
 | `psc expert ingest --record <file> --type <type>` | Ingest JSON records |
 | `psc eval --dataset <path>` | Run eval against a dataset |

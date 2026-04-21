@@ -258,3 +258,29 @@ def build_context(
         config=config,
         expert_name=expert_name,
     )
+
+
+def load_expert(expert_def: Any, bus: Any) -> ExpertContext:
+    """Build an ExpertContext and register the expert's connect in the registry.
+
+    Bundles the wiring that every standalone caller of a single expert needs:
+    context construction, tools-module import, connect instantiation, and
+    per-record-type connect registration. Returns the ExpertContext so the
+    caller can pass it to `expert_def.start(ctx)` or similar.
+
+    Callers today: `psc expert <name> start-ingestion` (cli). The equivalent
+    inline block in `start_system()` and `psc expert ingest` pre-dates this
+    helper and can migrate to it in a later cleanup.
+    """
+    import importlib
+
+    from pearscarf.indexing.registry import get_registry
+
+    ctx = build_context(expert_def.name, bus, expert_version=expert_def.version)
+    if expert_def.tools_module:
+        tools_mod = importlib.import_module(expert_def.tools_module)
+        connect = tools_mod.get_tools(ctx)
+        registry = get_registry()
+        for rt in expert_def.record_types:
+            registry.register_connect(rt, connect)
+    return ctx

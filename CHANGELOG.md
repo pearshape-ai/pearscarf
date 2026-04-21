@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.3
+- `psc expert <name> start-ingestion` — run one expert's ingester standalone in the foreground. Available for `gmail`, `linear`, `github`. Wraps the existing `ExpertDefinition.start(ctx)` path (same code `psc discord --poll` uses inline) and blocks the main thread until Ctrl+C. Each ingester can now be started / stopped / tuned independently — an expert's OAuth failing no longer takes the whole runtime down, and per-expert polling cadence via env files (e.g., `GMAIL_POLL_INTERVAL`) is now actionable by running only the experts you want. Closes Phase 1 of the runtime decomposition.
+
 ## 1.25.2
 - Convert per-expert commands (`gmail`, `linear`, `github`) from flag-commands to groups, so each can grow its own subcommands cleanly. `psc expert gmail --auth` is now `psc expert gmail auth` (breaking). `psc expert linear` and `psc expert github` become groups (`github` is new — the other two existed as placeholder commands). Top-level `psc gmail --auth` shortcut removed — redundant with `psc expert gmail auth`, undocumented, and asymmetric (no `psc linear` / `psc github` equivalents). Docs updated. Sets up the `start-ingestion` subcommand in the next commit.
 
