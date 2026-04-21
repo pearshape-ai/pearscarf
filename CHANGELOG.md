@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.5
+- Rename the Discord monolith entrypoint and add a decomposed Discord service. The bare `psc discord` command (which used to boot the full monolith with Discord as its frontend) is now `psc dev` — name matches its actual purpose (local-dev all-in-one). `psc discord` is now a group with a single subcommand, `psc discord start`, that runs only the bot + bus-coupled agents (worker, retriever, expert agents) — indexer / curator / triage / MCP are expected to run in their own containers. `start_system()` gains a `bot_only` kwarg that gates the queue-worker / MCP startup; `run_bot()` passes it through. Dockerfile CMD updated from `psc discord --poll` to `psc dev --poll`. Breaking: `psc discord --poll` no longer works; use `psc dev --poll` for local dev or `psc discord start` for the decomposed service.
+
 ## 1.25.4
 - Make the expert CLI pluggable. Per-expert Click groups (`gmail`, `linear`, `github`) and their subcommands are gone — they hardcoded expert names and used the wrong names at that (expert is `gmailscarf`, not `gmail`). Replaced with generic verbs that take the expert name as an argument: `psc expert auth <name>` and `psc expert start-ingestion <name>`. Breaking: `psc expert gmail auth` is now `psc expert auth gmailscarf`; `psc expert gmail start-ingestion` is now `psc expert start-ingestion gmailscarf`; same pattern for linear and github. Auth is dispatched by convention — if an expert's `tools_module` exports a `run_auth_flow` function, `psc expert auth <name>` invokes it; otherwise it errors cleanly. The `run_oauth_flow` function in gmailscarf renamed to `run_auth_flow` to match. Adding a new expert no longer requires editing `cli.py`.
 

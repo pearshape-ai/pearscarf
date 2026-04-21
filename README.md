@@ -63,7 +63,7 @@ docker compose up -d
 docker compose logs -f pearscarf
 ```
 
-This brings up Postgres, Qdrant, Neo4j, and the pearscarf app container running `psc discord --poll` — auto-installs the shipped experts and exposes the MCP server on port 8090.
+This brings up Postgres, Qdrant, Neo4j, and the pearscarf app container running `psc dev --poll` — auto-installs the shipped experts and exposes the MCP server on port 8090.
 
 ## Quick start (local dev)
 
@@ -91,7 +91,7 @@ psc expert auth gmailscarf     # Gmail OAuth setup
 # Run
 psc run                        # start system + REPL
 psc run --poll                 # also start expert ingesters
-psc discord --poll             # Discord frontend + ingesters
+psc dev --poll                 # Local-dev monolith: Discord frontend + all services + ingesters
 ```
 
 ## Commands
@@ -100,8 +100,9 @@ psc discord --poll             # Discord frontend + ingesters
 |---|---|
 | `psc run` | Worker + experts + session REPL |
 | `psc run --poll` | Full system + expert ingesters |
-| `psc discord` | Worker + experts + Discord bot |
-| `psc discord --poll` | Discord + expert ingesters |
+| `psc dev` | Local-dev monolith: Discord + all services in one process |
+| `psc dev --poll` | Monolith + expert ingesters |
+| `psc discord start` | Discord frontend service (decomposed runtime) |
 | `psc install <path>` | Install an expert package |
 | `psc update <name>` | Update an installed expert |
 | `psc expert list` | List installed experts |

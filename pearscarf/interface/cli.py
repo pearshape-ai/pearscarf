@@ -51,11 +51,33 @@ def run(poll: bool) -> None:
 @cli.command()
 @click.option("--poll", is_flag=True, default=False,
               help="Start all enabled expert connectors (each requires its own credentials)")
-def discord(poll: bool) -> None:
-    """Run the full system with Discord as the frontend."""
+def dev(poll: bool) -> None:
+    """Local-dev monolith: full system with Discord frontend, all in one process.
+
+    Boots bot, bus agents, indexer, curator, triage, MCP, and (with --poll)
+    expert ingesters together. For the decomposed runtime, start each service
+    independently via `psc discord start`, `psc indexer start`, etc.
+    """
     from pearscarf.interface.discord_bot import run_bot
 
     run_bot(poll=poll)
+
+
+@cli.group()
+def discord() -> None:
+    """Discord frontend."""
+
+
+@discord.command("start")
+def discord_start() -> None:
+    """Start the Discord frontend in the foreground (decomposed runtime).
+
+    Runs bot + bus-coupled agents (worker, retriever, expert agents) only.
+    Indexer / curator / triage / MCP run in their own containers under the
+    decomposed compose. For local monolithic dev, use `psc dev`.
+    """
+    from pearscarf.interface.discord_bot import run_bot
+    run_bot(bot_only=True)
 
 
 @cli.command()

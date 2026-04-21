@@ -1,9 +1,10 @@
-"""Shared startup sequence for psc run and psc discord.
+"""Shared startup sequence for the monolith entrypoints (psc run, psc dev)
+and the decomposed Discord service (psc discord start).
 
-start_system() does everything both frontends need: credential check,
-expert loading, agent wiring, indexer, MCP. Returns a SystemComponents
-dataclass the caller uses for shutdown. The caller provides the frontend
-(REPL or Discord bot).
+start_system() does everything each caller needs: credential check, expert
+loading, bus-agent wiring, and — unless bot_only=True — indexer, curator,
+triage, and MCP. Returns a SystemComponents dataclass the caller uses for
+shutdown. The caller provides the frontend (REPL or Discord bot).
 """
 
 from __future__ import annotations
@@ -25,11 +26,19 @@ class SystemComponents:
     mcp_server: Any = None
 
 
-def start_system(poll: bool = False, log_fn=None) -> SystemComponents:
+def start_system(
+    poll: bool = False,
+    bot_only: bool = False,
+    log_fn=None,
+) -> SystemComponents:
     """Boot the full PearScarf system. Returns running components.
 
-    poll: start expert ingester threads (background polling)
-    log_fn: callable(str) for status messages (defaults to sys.stdout)
+    poll: start expert ingester threads (background polling).
+    bot_only: skip indexer, curator, triage, and MCP. Intended for the
+        decomposed production runtime where those run in their own
+        containers; the bot container only needs the bus and the
+        bus-coupled agents (expert agents, retriever, worker).
+    log_fn: callable(str) for status messages (defaults to sys.stdout).
     """
     from pearscarf.agents.runner import AgentRunner
     from pearscarf.agents.worker import create_worker_agent
@@ -121,6 +130,10 @@ def start_system(poll: bool = False, log_fn=None) -> SystemComponents:
     worker_runner.start()
     components.runners.append(worker_runner)
     log_fn("Worker agent started.")
+
+    if bot_only:
+        log_fn("bot_only=True — skipping indexer, curator, triage, and MCP.")
+        return components
 
     # --- Start indexer ---
     from pearscarf.knowledge import onboarding_summary

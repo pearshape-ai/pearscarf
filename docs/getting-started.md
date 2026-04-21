@@ -26,7 +26,7 @@ docker compose up -d
 docker compose logs -f pearscarf
 ```
 
-The pearscarf container boots `psc discord --poll` by default. Its entrypoint waits for Postgres, installs any experts under `experts/` that aren't already registered, and then starts the app. MCP server is exposed on port 8090.
+The pearscarf container boots `psc dev --poll` by default. Its entrypoint waits for Postgres, installs any experts under `experts/` that aren't already registered, and then starts the app. MCP server is exposed on port 8090.
 
 If you prefer local dev (iterating on pearscarf source), skip the pearscarf container and run the DBs only:
 
@@ -114,8 +114,8 @@ Each install validates the package, creates typed tables, and scaffolds a creden
 ```bash
 psc run                # system + REPL
 psc run --poll         # also start expert ingesters (background polling)
-psc discord            # system + Discord bot
-psc discord --poll     # Discord + ingesters
+psc dev                # local-dev monolith: system + Discord bot
+psc dev --poll         # monolith + expert ingesters
 ```
 
 The pre-startup check validates all expert credentials before booting. Missing vars → clear error message with the file to edit.

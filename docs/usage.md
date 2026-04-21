@@ -6,8 +6,9 @@
 |---|---|
 | `psc run` | Worker + experts + indexer + MCP server + session REPL |
 | `psc run --poll` | Full system + expert ingesters (background polling) |
-| `psc discord` | Full system with Discord frontend |
-| `psc discord --poll` | Discord + expert ingesters |
+| `psc dev` | Local-dev monolith: Discord frontend + all services in one process |
+| `psc dev --poll` | Monolith + expert ingesters |
+| `psc discord start` | Discord frontend service (decomposed runtime) |
 | `psc chat` | Direct chat (no session bus) |
 | `psc install <path>` | Install an expert package |
 | `psc update <name>` | Update an installed expert to new version |
@@ -89,7 +90,7 @@ Expert-initiated sessions (e.g. new email detected during polling):
 
 Use `/switch ses_003` to interact.
 
-## Discord (`psc discord`)
+## Discord (`psc dev` / `psc discord start`)
 
 - Mention the bot or DM → new session + thread
 - Thread replies stay in the same session

@@ -158,7 +158,7 @@ class PearscarfBot(discord.Client):
             await asyncio.sleep(1)
 
 
-def run_bot(poll: bool = False) -> None:
+def run_bot(poll: bool = False, bot_only: bool = False) -> None:
     from pearscarf import __version__
     from pearscarf.interface.startup import start_system, stop_system
 
@@ -167,7 +167,7 @@ def run_bot(poll: bool = False) -> None:
     if not DISCORD_BOT_TOKEN:
         raise SystemExit("DISCORD_BOT_TOKEN is not set.")
 
-    components = start_system(poll=poll)
+    components = start_system(poll=poll, bot_only=bot_only)
 
     bot = PearscarfBot(components.bus)
     try:

@@ -25,4 +25,4 @@ ENV PATH="/app/.venv/bin:$PATH" \
     EXPERTS_DIR=/app/experts
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]
-CMD ["psc", "discord", "--poll"]
+CMD ["psc", "dev", "--poll"]

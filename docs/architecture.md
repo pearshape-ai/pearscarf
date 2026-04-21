@@ -96,7 +96,7 @@ Experts do not import pearscarf internals. The context is the contract.
 5. Start MCP server
 ```
 
-Both `psc run` (REPL) and `psc discord` call `start_system()` then run their frontend.
+Both `psc run` (REPL) and `psc dev` (Discord monolith) call `start_system()` then run their frontend. The decomposed Discord service `psc discord start` calls `start_system(bot_only=True)` to skip the queue workers and MCP, which run as separate services under the decomposed compose.
 
 ### Registry
 
@@ -302,14 +302,26 @@ Background daemon polling `records WHERE indexed = FALSE AND classification = 'r
 
 ## MCP Server
 
-Read-only query surface via FastMCP over HTTP/SSE. 10 tools: 5 primitive + 5 convenience. API key auth. Starts as daemon thread in `psc run`/`psc discord` or standalone via `psc mcp start`.
+Read-only query surface via FastMCP over HTTP/SSE. 10 tools: 5 primitive + 5 convenience. API key auth. Starts as daemon thread in `psc run`/`psc dev` (monolith paths) or standalone via `psc mcp start` (decomposed).
 
 ## Interfaces
 
+### Monolith (local-dev)
+
 - **`psc run`** — full system + session REPL
-- **`psc discord`** — full system + Discord bot (thread-per-session)
-- **`psc run --poll` / `psc discord --poll`** — also starts expert ingesters
-- **`psc expert ingest`** — standalone file-based ingestion
+- **`psc dev`** — full system + Discord bot (thread-per-session)
+- **`psc run --poll` / `psc dev --poll`** — also start expert ingesters
+
+### Decomposed services
+
+- **`psc discord start`** — Discord frontend + bus agents only
+- **`psc indexer start`** / **`psc curator start`** / **`psc triage start`** — queue workers
+- **`psc mcp start`** — MCP query endpoint
+- **`psc expert start-ingestion <name>`** — per-expert live-poll ingester
+
+### Other
+
+- **`psc expert ingest`** — standalone file-based ingestion (one-shot or interactive)
 - **`psc chat`** — direct agent chat without the session bus
 
 ## See also

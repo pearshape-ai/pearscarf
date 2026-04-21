@@ -548,7 +548,7 @@ def check_credentials_for_enabled_experts() -> list[CredentialError]:
 def enforce_credentials_or_exit() -> None:
     """Run the credential check and exit with a clear report on any failure.
 
-    Called by `psc run` and `psc discord` before starting any expert.
+    Called by `psc run`, `psc dev`, and `psc discord start` before starting any expert.
     """
     errors = check_credentials_for_enabled_experts()
     if not errors:
