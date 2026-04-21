@@ -16,10 +16,8 @@
 | `psc expert disable <name>` | Disable an expert (reversible) |
 | `psc expert enable <name>` | Re-enable a disabled expert |
 | `psc expert uninstall <name>` | Uninstall an expert |
-| `psc expert gmail auth` | Gmail OAuth setup |
-| `psc expert gmail start-ingestion` | Start the Gmail ingester in the foreground |
-| `psc expert linear start-ingestion` | Start the Linear ingester in the foreground |
-| `psc expert github start-ingestion` | Start the GitHub ingester in the foreground |
+| `psc expert auth <name>` | Run an expert's auth flow (e.g. `gmailscarf`) |
+| `psc expert start-ingestion <name>` | Start an expert's ingester in the foreground |
 | `psc expert ingest` | Standalone ingest expert (interactive mode) |
 | `psc expert ingest --seed <file>` | Ingest a seed file |
 | `psc expert ingest --record <file> --type <type>` | Ingest typed JSON records |
