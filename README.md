@@ -111,6 +111,7 @@ psc discord --poll             # Discord frontend + ingesters
 | `psc expert ingest --record <file> --type <type>` | Ingest JSON records |
 | `psc eval --dataset <path>` | Run eval against a dataset |
 | `psc indexer start` | Run the indexer standalone |
+| `psc triage start` | Run the triage agent standalone |
 | `psc mcp start` | Run MCP server standalone |
 | `psc erase-all` | Wipe all system state |
 

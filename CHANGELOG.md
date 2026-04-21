@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.1
+- `psc triage start` — run the triage agent standalone in the foreground. Same pattern as `psc indexer start` / `psc curator start`. Triage is the relevance classifier that moves records from `pending_triage` to `relevant` / `noise` / `uncertain`; making it its own entrypoint gives an independent cost kill-switch for LLM classification alongside the indexer's kill-switch for LLM extraction.
+
 ## 1.25.0
 - `psc indexer start` — run the indexer standalone in the foreground. Wraps the existing `Indexer` class with a signal-safe main-thread loop, mirroring the pattern already used by `psc curator start` and `psc mcp start`. First step toward running the pearscarf runtime as separately-controllable processes — the monolithic `psc discord --poll` path is unchanged and continues to boot the indexer inline as before.
 

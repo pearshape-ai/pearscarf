@@ -207,3 +207,10 @@ class TriageAgent:
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=5)
+
+    def run_foreground(self) -> None:
+        """Run the triage loop in the foreground (blocking)."""
+        try:
+            self._loop()
+        except KeyboardInterrupt:
+            pass

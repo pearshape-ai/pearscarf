@@ -441,6 +441,22 @@ def mcp_keys_revoke(key_id):
 
 @cli.group(invoke_without_command=True)
 @click.pass_context
+def triage(ctx) -> None:
+    """Triage — classifies new records as relevant, noise, or uncertain."""
+    if ctx.invoked_subcommand is None:
+        click.echo("Use 'psc triage start' to run.")
+
+
+@triage.command("start")
+def triage_start() -> None:
+    """Start the triage agent in the foreground."""
+    from pearscarf.triage.triage_agent import TriageAgent
+    click.echo("Triage starting...")
+    TriageAgent().run_foreground()
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
 def indexer(ctx) -> None:
     """Indexer — extracts entities and facts from records into the knowledge graph."""
     if ctx.invoked_subcommand is None:
