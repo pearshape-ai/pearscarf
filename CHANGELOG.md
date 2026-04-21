@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.7
+- Tighten linearscarf extraction prompt so Linear issues are treated as facts, not entities. `experts/linearscarf/knowledge/extraction.md` now explicitly tells the extractor "never create an entity for the issue itself" and "never treat other issue identifiers as projects." The open-ended "extract project references" rule is tightened to "only extract genuinely distinct named initiatives; when unsure, skip." Resolves the failure mode where Linear issues were being extracted as `Project` nodes because `Project` was the closest-fitting base type and the prompt encouraged broad project extraction. Reflects the principle that entities are things with evolving state over time; issues are work-unit snapshots — therefore facts, not entities. No data-model change; no new entity types; no code changes.
+
 ## 1.25.6
 - `docs/mcp-clients.md` — new operator guide for wiring an MCP client (Claude Code, Claude Desktop, custom) to PearScarf. Covers prerequisites, per-client setup (CLI + JSON config), generic SSE shape, verification probe, and rotation. Complements `docs/mcp_tools.md` (tool reference) — the new doc is the "how do I connect" side, the existing one is the "what tools exist" side. README + `mcp_tools.md` link to it.
 
