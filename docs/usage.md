@@ -16,7 +16,7 @@
 | `psc expert disable <name>` | Disable an expert (reversible) |
 | `psc expert enable <name>` | Re-enable a disabled expert |
 | `psc expert uninstall <name>` | Uninstall an expert |
-| `psc expert gmail --auth` | Gmail OAuth setup |
+| `psc expert gmail auth` | Gmail OAuth setup |
 | `psc expert ingest` | Standalone ingest expert (interactive mode) |
 | `psc expert ingest --seed <file>` | Ingest a seed file |
 | `psc expert ingest --record <file> --type <type>` | Ingest typed JSON records |

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.2
+- Convert per-expert commands (`gmail`, `linear`, `github`) from flag-commands to groups, so each can grow its own subcommands cleanly. `psc expert gmail --auth` is now `psc expert gmail auth` (breaking). `psc expert linear` and `psc expert github` become groups (`github` is new — the other two existed as placeholder commands). Top-level `psc gmail --auth` shortcut removed — redundant with `psc expert gmail auth`, undocumented, and asymmetric (no `psc linear` / `psc github` equivalents). Docs updated. Sets up the `start-ingestion` subcommand in the next commit.
+
 ## 1.25.1
 - `psc triage start` — run the triage agent standalone in the foreground. Same pattern as `psc indexer start` / `psc curator start`. Triage is the relevance classifier that moves records from `pending_triage` to `relevant` / `noise` / `uncertain`; making it its own entrypoint gives an independent cost kill-switch for LLM classification alongside the indexer's kill-switch for LLM extraction.
 

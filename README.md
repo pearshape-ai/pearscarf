@@ -80,7 +80,7 @@ psc install ./experts/linearscarf
 psc install ./experts/githubscarf
 
 # Configure credentials
-psc expert gmail --auth        # Gmail OAuth setup
+psc expert gmail auth          # Gmail OAuth setup
 # Edit env/.linearscarf.env    # add LINEAR_API_KEY
 # Edit env/.githubscarf.env    # add GITHUB_TOKEN + GITHUB_REPO
 
@@ -106,7 +106,7 @@ psc discord --poll             # Discord frontend + ingesters
 | `psc update <name>` | Update an installed expert |
 | `psc expert list` | List installed experts |
 | `psc expert inspect <name>` | Show expert details |
-| `psc expert gmail --auth` | Gmail OAuth setup |
+| `psc expert gmail auth` | Gmail OAuth setup |
 | `psc expert ingest --seed <file>` | Ingest a seed file |
 | `psc expert ingest --record <file> --type <type>` | Ingest JSON records |
 | `psc eval --dataset <path>` | Run eval against a dataset |
