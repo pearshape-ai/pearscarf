@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.4
+- Make the expert CLI pluggable. Per-expert Click groups (`gmail`, `linear`, `github`) and their subcommands are gone — they hardcoded expert names and used the wrong names at that (expert is `gmailscarf`, not `gmail`). Replaced with generic verbs that take the expert name as an argument: `psc expert auth <name>` and `psc expert start-ingestion <name>`. Breaking: `psc expert gmail auth` is now `psc expert auth gmailscarf`; `psc expert gmail start-ingestion` is now `psc expert start-ingestion gmailscarf`; same pattern for linear and github. Auth is dispatched by convention — if an expert's `tools_module` exports a `run_auth_flow` function, `psc expert auth <name>` invokes it; otherwise it errors cleanly. The `run_oauth_flow` function in gmailscarf renamed to `run_auth_flow` to match. Adding a new expert no longer requires editing `cli.py`.
+
 ## 1.25.3
 - `psc expert <name> start-ingestion` — run one expert's ingester standalone in the foreground. Available for `gmail`, `linear`, `github`. Wraps the existing `ExpertDefinition.start(ctx)` path (same code `psc discord --poll` uses inline) and blocks the main thread until Ctrl+C. Each ingester can now be started / stopped / tuned independently — an expert's OAuth failing no longer takes the whole runtime down, and per-expert polling cadence via env files (e.g., `GMAIL_POLL_INTERVAL`) is now actionable by running only the experts you want. Closes Phase 1 of the runtime decomposition.
 

@@ -107,21 +107,28 @@ expert.add_command(expert_enable_command)
 expert.add_command(expert_uninstall_command)
 
 
+def _resolve_expert(expert_name: str):
+    """Look up an enabled expert by name; raise a clean Click error if missing."""
+    from pearscarf.indexing.registry import get_registry
+
+    expert_def = get_registry().get_by_name(expert_name)
+    if expert_def is None or not expert_def.enabled:
+        raise click.UsageError(
+            f"No enabled expert named '{expert_name}'. "
+            f"Run 'psc expert list' to see what's installed."
+        )
+    return expert_def
+
+
 def _run_ingester(expert_name: str) -> None:
     """Start one expert's ingester in the foreground. Blocks until Ctrl+C."""
     import threading
     from pearscarf.bus import MessageBus
     from pearscarf.expert_context import load_expert
-    from pearscarf.indexing.registry import get_registry
     from pearscarf.storage.db import init_db
 
     init_db()
-    expert_def = next(
-        (e for e in get_registry().enabled_experts() if e.name == expert_name),
-        None,
-    )
-    if expert_def is None:
-        raise click.UsageError(f"No enabled expert named '{expert_name}'")
+    expert_def = _resolve_expert(expert_name)
 
     ctx = load_expert(expert_def, MessageBus())
     expert_def.start(ctx)  # launches the daemon poll thread
@@ -133,56 +140,39 @@ def _run_ingester(expert_name: str) -> None:
         pass
 
 
-@expert.group(invoke_without_command=True)
-@click.pass_context
-def gmail(ctx) -> None:
-    """Gmail expert — OAuth setup and ingestion control."""
-    if ctx.invoked_subcommand is None:
-        click.echo(
-            "Use 'psc expert gmail auth' to set up OAuth credentials, "
-            "or 'psc expert gmail start-ingestion' to run the ingester."
+def _run_auth(expert_name: str) -> None:
+    """Run an expert's auth flow, if its tools_module defines `run_auth_flow`."""
+    import importlib
+
+    expert_def = _resolve_expert(expert_name)
+
+    if not expert_def.tools_module:
+        raise click.UsageError(
+            f"Expert '{expert_name}' has no tools module; nothing to authenticate."
         )
 
-
-@gmail.command("auth")
-def gmail_auth() -> None:
-    """Run the Gmail OAuth flow to obtain a refresh token."""
-    from gmailscarf.gmail_connect import run_oauth_flow
-    run_oauth_flow()
-
-
-@gmail.command("start-ingestion")
-def gmail_start_ingestion() -> None:
-    """Start the Gmail ingester in the foreground."""
-    _run_ingester("gmailscarf")
+    tools_mod = importlib.import_module(expert_def.tools_module)
+    auth_fn = getattr(tools_mod, "run_auth_flow", None)
+    if auth_fn is None:
+        raise click.UsageError(
+            f"Expert '{expert_name}' does not declare an auth flow. "
+            f"If it needs credentials, populate env/.{expert_name}.env directly."
+        )
+    auth_fn()
 
 
-@expert.group("linear", invoke_without_command=True)
-@click.pass_context
-def linear(ctx) -> None:
-    """Linear expert — ingestion control."""
-    if ctx.invoked_subcommand is None:
-        click.echo("Use 'psc expert linear start-ingestion' to run the ingester.")
+@expert.command("auth")
+@click.argument("expert_name")
+def expert_auth(expert_name: str) -> None:
+    """Run an expert's auth flow. Example: psc expert auth gmailscarf."""
+    _run_auth(expert_name)
 
 
-@linear.command("start-ingestion")
-def linear_start_ingestion() -> None:
-    """Start the Linear ingester in the foreground."""
-    _run_ingester("linearscarf")
-
-
-@expert.group("github", invoke_without_command=True)
-@click.pass_context
-def github(ctx) -> None:
-    """GitHub expert — ingestion control."""
-    if ctx.invoked_subcommand is None:
-        click.echo("Use 'psc expert github start-ingestion' to run the ingester.")
-
-
-@github.command("start-ingestion")
-def github_start_ingestion() -> None:
-    """Start the GitHub ingester in the foreground."""
-    _run_ingester("githubscarf")
+@expert.command("start-ingestion")
+@click.argument("expert_name")
+def expert_start_ingestion(expert_name: str) -> None:
+    """Start an expert's ingester in the foreground. Example: psc expert start-ingestion gmailscarf."""
+    _run_ingester(expert_name)
 
 
 @expert.command("ingest")

@@ -85,7 +85,7 @@ Each install validates the package, creates typed tables, and scaffolds a creden
 3. Add Client ID and Client Secret to `env/.gmailscarf.env`
 4. Run the auth flow:
    ```bash
-   psc expert gmail auth
+   psc expert auth gmailscarf
    ```
 5. Copy the printed refresh token into `env/.gmailscarf.env`
 

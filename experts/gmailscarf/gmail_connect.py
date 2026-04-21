@@ -385,8 +385,14 @@ def get_tools(ctx: ExpertContext) -> GmailConnect:
     return GmailConnect(ctx)
 
 
-def run_oauth_flow() -> None:
-    """Run the Gmail OAuth2 flow to obtain a refresh token."""
+def run_auth_flow() -> None:
+    """Run the Gmail OAuth2 flow to obtain a refresh token.
+
+    Invoked by `psc expert auth gmailscarf`. Convention — pearscarf's generic
+    expert-auth dispatcher looks for a `run_auth_flow` function in the
+    expert's `tools_module`; experts without credentials (Linear, GitHub
+    API-key-only) simply don't define one.
+    """
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
     except ImportError:
