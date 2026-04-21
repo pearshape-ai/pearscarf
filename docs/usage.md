@@ -27,6 +27,7 @@
 | `psc queue list` | List up to 20 queue entries |
 | `psc queue clear --confirm` | Clear unclaimed queue entries |
 | `psc indexer start` | Start the indexer in the foreground |
+| `psc triage start` | Start the triage agent in the foreground |
 | `psc curator start` | Start the curator in the foreground |
 | `psc curator status` | Show curator queue status |
 | `psc mcp start` | Run MCP server standalone |
