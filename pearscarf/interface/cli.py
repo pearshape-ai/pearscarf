@@ -107,15 +107,40 @@ expert.add_command(expert_enable_command)
 expert.add_command(expert_uninstall_command)
 
 
+def _run_ingester(expert_name: str) -> None:
+    """Start one expert's ingester in the foreground. Blocks until Ctrl+C."""
+    import threading
+    from pearscarf.bus import MessageBus
+    from pearscarf.expert_context import load_expert
+    from pearscarf.indexing.registry import get_registry
+    from pearscarf.storage.db import init_db
+
+    init_db()
+    expert_def = next(
+        (e for e in get_registry().enabled_experts() if e.name == expert_name),
+        None,
+    )
+    if expert_def is None:
+        raise click.UsageError(f"No enabled expert named '{expert_name}'")
+
+    ctx = load_expert(expert_def, MessageBus())
+    expert_def.start(ctx)  # launches the daemon poll thread
+    click.echo(f"Ingester for '{expert_def.name}' running. Ctrl+C to stop.")
+
+    try:
+        threading.Event().wait()
+    except KeyboardInterrupt:
+        pass
+
+
 @expert.group(invoke_without_command=True)
 @click.pass_context
 def gmail(ctx) -> None:
     """Gmail expert — OAuth setup and ingestion control."""
     if ctx.invoked_subcommand is None:
         click.echo(
-            "Use 'psc expert gmail auth' to set up OAuth credentials.\n"
-            "Standalone interactive Gmail mode is offline during the expert "
-            "encapsulation rework."
+            "Use 'psc expert gmail auth' to set up OAuth credentials, "
+            "or 'psc expert gmail start-ingestion' to run the ingester."
         )
 
 
@@ -126,15 +151,24 @@ def gmail_auth() -> None:
     run_oauth_flow()
 
 
+@gmail.command("start-ingestion")
+def gmail_start_ingestion() -> None:
+    """Start the Gmail ingester in the foreground."""
+    _run_ingester("gmailscarf")
+
+
 @expert.group("linear", invoke_without_command=True)
 @click.pass_context
 def linear(ctx) -> None:
     """Linear expert — ingestion control."""
     if ctx.invoked_subcommand is None:
-        click.echo(
-            "Standalone interactive Linear mode is offline during the expert "
-            "encapsulation rework."
-        )
+        click.echo("Use 'psc expert linear start-ingestion' to run the ingester.")
+
+
+@linear.command("start-ingestion")
+def linear_start_ingestion() -> None:
+    """Start the Linear ingester in the foreground."""
+    _run_ingester("linearscarf")
 
 
 @expert.group("github", invoke_without_command=True)
@@ -142,7 +176,13 @@ def linear(ctx) -> None:
 def github(ctx) -> None:
     """GitHub expert — ingestion control."""
     if ctx.invoked_subcommand is None:
-        click.echo("GitHub expert — use 'psc expert list' to see installed experts.")
+        click.echo("Use 'psc expert github start-ingestion' to run the ingester.")
+
+
+@github.command("start-ingestion")
+def github_start_ingestion() -> None:
+    """Start the GitHub ingester in the foreground."""
+    _run_ingester("githubscarf")
 
 
 @expert.command("ingest")
