@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.8
+- Tighten the base `project` entity definition. Drops the loose "workstream" framing that let work-tickets match too easily. The new definition anchors the concept with "a project is the thing work happens *for*, not the work itself" and extends the do-not-extract list with explicit negatives: tasks / tickets / issues / bugs / PRs / commits / meetings (which are records of work, not projects), code repositories, and generic technologies or product categories without a named context. Core vocabulary files intentionally avoid naming expert-contributed types (like `repository`, which only exists when githubscarf is installed) — negative rules stay principled so the LLM picks from whatever vocabulary it actually has in the current install. Complements `1.25.7`'s linearscarf-side tightening — this one affects every extractor since `project` is a base type shared across experts.
+
 ## 1.25.7
 - Tighten linearscarf extraction prompt so Linear issues are treated as facts, not entities. `experts/linearscarf/knowledge/extraction.md` now explicitly tells the extractor "never create an entity for the issue itself" and "never treat other issue identifiers as projects." The open-ended "extract project references" rule is tightened to "only extract genuinely distinct named initiatives; when unsure, skip." Resolves the failure mode where Linear issues were being extracted as `Project` nodes because `Project` was the closest-fitting base type and the prompt encouraged broad project extraction. Reflects the principle that entities are things with evolving state over time; issues are work-unit snapshots — therefore facts, not entities. No data-model change; no new entity types; no code changes.
 
