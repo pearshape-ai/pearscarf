@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.0
+- `psc indexer start` — run the indexer standalone in the foreground. Wraps the existing `Indexer` class with a signal-safe main-thread loop, mirroring the pattern already used by `psc curator start` and `psc mcp start`. First step toward running the pearscarf runtime as separately-controllable processes — the monolithic `psc discord --poll` path is unchanged and continues to boot the indexer inline as before.
+
 ## 1.24.1
 - Fix `psc expert gmail --auth` — it was reading `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` from the top-level `pearscarf.config` module, but those settings moved to per-expert env files (`env/.gmailscarf.env`) in an earlier refactor. The flow now loads the expert env file directly and reads the credentials from the environment, matching how the runtime client is configured.
 
