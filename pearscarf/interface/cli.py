@@ -441,6 +441,22 @@ def mcp_keys_revoke(key_id):
 
 @cli.group(invoke_without_command=True)
 @click.pass_context
+def indexer(ctx) -> None:
+    """Indexer — extracts entities and facts from records into the knowledge graph."""
+    if ctx.invoked_subcommand is None:
+        click.echo("Use 'psc indexer start' to run.")
+
+
+@indexer.command("start")
+def indexer_start() -> None:
+    """Start the indexer in the foreground."""
+    from pearscarf.indexing.indexer import Indexer
+    click.echo("Indexer starting...")
+    Indexer().run_foreground()
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
 def curator(ctx) -> None:
     """Curator agent — processes indexed records for graph quality."""
     if ctx.invoked_subcommand is None:
