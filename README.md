@@ -125,6 +125,7 @@ psc dev --poll                 # Local-dev monolith: Discord frontend + all serv
 - [Usage](docs/usage.md) — full command reference
 - [Data Model](docs/data-model.md) — entities, fact types, full schema, bi-temporal model
 - [Query Surface](docs/query-surface.md) — MCP tools reference
+- [MCP Clients](docs/mcp-clients.md) — connect Claude Code, Claude Desktop, or a custom client
 - [Eval Metrics](docs/eval-metrics.md) — extraction precision, recall, entity resolution accuracy
 - [Changelog](CHANGELOG.md)
 

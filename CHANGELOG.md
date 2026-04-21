@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.25.6
+- `docs/mcp-clients.md` — new operator guide for wiring an MCP client (Claude Code, Claude Desktop, custom) to PearScarf. Covers prerequisites, per-client setup (CLI + JSON config), generic SSE shape, verification probe, and rotation. Complements `docs/mcp_tools.md` (tool reference) — the new doc is the "how do I connect" side, the existing one is the "what tools exist" side. README + `mcp_tools.md` link to it.
+
 ## 1.25.5
 - Rename the Discord monolith entrypoint and add a decomposed Discord service. The bare `psc discord` command (which used to boot the full monolith with Discord as its frontend) is now `psc dev` — name matches its actual purpose (local-dev all-in-one). `psc discord` is now a group with a single subcommand, `psc discord start`, that runs only the bot + bus-coupled agents (worker, retriever, expert agents) — indexer / curator / triage / MCP are expected to run in their own containers. `start_system()` gains a `bot_only` kwarg that gates the queue-worker / MCP startup; `run_bot()` passes it through. Dockerfile CMD updated from `psc discord --poll` to `psc dev --poll`. Breaking: `psc discord --poll` no longer works; use `psc dev --poll` for local dev or `psc discord start` for the decomposed service.
 

@@ -2,6 +2,8 @@
 
 PearScarf exposes a read-only query surface via MCP over HTTP/SSE. Any MCP-compatible agent framework connects once and queries for context.
 
+For client-side setup (Claude Code, Claude Desktop, etc.) see [mcp-clients.md](mcp-clients.md).
+
 ## Authentication
 
 Create an API key:
