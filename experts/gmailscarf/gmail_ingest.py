@@ -1,7 +1,9 @@
 """Gmail background ingestion loop.
 
-Polls Gmail for new unread emails, saves each as a record via
-ctx.storage.save_record(), and notifies the worker via the bus.
+Polls Gmail for new unread emails and saves each as a record via
+ctx.storage.save_record(). Records land with classification=pending_triage;
+the triage agent picks them up via queue polling. This ingester does
+not touch the bus.
 """
 
 from __future__ import annotations
@@ -35,22 +37,10 @@ def start(ctx: ExpertContext) -> None:
 
 
 def _poll_once(connect, ctx: ExpertContext) -> None:
-    """Fetch unread emails, save new ones, notify the worker."""
+    """Fetch unread emails and save new ones as records."""
     emails = connect.fetch_new()
     for email in emails:
         rid = connect.ingest_record(email)
         if not rid:
             continue
-
-        session_id = ctx.bus.create_session(f"New email from {email['sender']}")
-        ctx.bus.send(
-            session_id=session_id,
-            to_agent="worker",
-            content=(
-                f"New email from {email['sender']}\n"
-                f"Subject: \"{email['subject']}\"\n"
-                f"Record: {rid}\n\n"
-                f"Is this relevant and why?"
-            ),
-        )
         ctx.log.write(ctx.expert_name, "action", f"Ingested {rid} from {email['sender']}")

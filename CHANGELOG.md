@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.26.0
+- Remove the legacy triage-via-worker path from all three ingesters (`gmailscarf`, `linearscarf`, `githubscarf`). They used to end `ingest_record` with `ctx.bus.send(to_agent="worker", ...)` asking "is this relevant?" — a leftover from before the triage agent existed. Records now land with `classification=pending_triage` and the triage agent picks them up via queue polling. Restores the cost-safety assumption that disabling the workers profile means no triage LLM spend. Begins the `1.26.x` agent-architecture series.
+
 ## 1.25.8
 - Tighten the base `project` entity definition. Drops the loose "workstream" framing that let work-tickets match too easily. The new definition anchors the concept with "a project is the thing work happens *for*, not the work itself" and extends the do-not-extract list with explicit negatives: tasks / tickets / issues / bugs / PRs / commits / meetings (which are records of work, not projects), code repositories, and generic technologies or product categories without a named context. Core vocabulary files intentionally avoid naming expert-contributed types (like `repository`, which only exists when githubscarf is installed) — negative rules stay principled so the LLM picks from whatever vocabulary it actually has in the current install. Complements `1.25.7`'s linearscarf-side tightening — this one affects every extractor since `project` is a base type shared across experts.
 
