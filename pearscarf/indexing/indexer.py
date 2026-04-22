@@ -11,16 +11,8 @@ import threading
 import traceback
 from datetime import datetime, timezone
 
-import anthropic
-
 from pearscarf.storage import graph, vectorstore
 from pearscarf import log
-from pearscarf.config import (
-    ANTHROPIC_API_KEY,
-    EXTRACTION_MAX_TOKENS,
-    EXTRACTION_MODEL,
-    EXTRACTION_TEMPERATURE,
-)
 from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.indexing.registry import compose_prompt
 from pearscarf.knowledge import load as load_prompt, load_onboarding_block
@@ -37,7 +29,6 @@ class Indexer:
     def __init__(self, debug_dir: str | None = None) -> None:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None, max_retries=3)
         self._debug_dir = debug_dir
         self.token_usage: dict[str, dict[str, int]] = {}  # record_id → {input, output}
 

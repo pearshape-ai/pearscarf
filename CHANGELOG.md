@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.26.1
+- Remove dead Anthropic client and its supporting imports from `Indexer.__init__`. `self._client = anthropic.Anthropic(...)` was never referenced; extraction routes through `BaseAgent` via `_run_extraction_agent`. Also drops the unused `import anthropic` and the four unused `pearscarf.config` imports (`ANTHROPIC_API_KEY`, `EXTRACTION_MAX_TOKENS`, `EXTRACTION_MODEL`, `EXTRACTION_TEMPERATURE`) from the module. No behavior change.
+
 ## 1.26.0
 - Remove the legacy triage-via-worker path from all three ingesters (`gmailscarf`, `linearscarf`, `githubscarf`). They used to end `ingest_record` with `ctx.bus.send(to_agent="worker", ...)` asking "is this relevant?" — a leftover from before the triage agent existed. Records now land with `classification=pending_triage` and the triage agent picks them up via queue polling. Restores the cost-safety assumption that disabling the workers profile means no triage LLM spend. Begins the `1.26.x` agent-architecture series.
 
