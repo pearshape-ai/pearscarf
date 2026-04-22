@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.26.2
+- Introduce `pearscarf.consumer.Consumer` — abstract base for channel consumers. Subclasses implement `_next()` (poll one message) and `_handle(msg)` (process it); the base class owns the poll loop, daemon-thread lifecycle (`start` / `stop` / `run_foreground`), and sleep cadence between empty polls. An optional `_setup()` hook runs once before the loop starts (for e.g. `init_db`). `poll_interval` is configurable per consumer via constructor kwarg, with a `default_poll_interval` class-level fallback so each subclass can carry its own natural cadence. No existing runners are touched — this commit only introduces the base class.
+
 ## 1.26.1
 - Remove dead Anthropic client and its supporting imports from `Indexer.__init__`. `self._client = anthropic.Anthropic(...)` was never referenced; extraction routes through `BaseAgent` via `_run_extraction_agent`. Also drops the unused `import anthropic` and the four unused `pearscarf.config` imports (`ANTHROPIC_API_KEY`, `EXTRACTION_MAX_TOKENS`, `EXTRACTION_MODEL`, `EXTRACTION_TEMPERATURE`) from the module. No behavior change.
 
