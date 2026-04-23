@@ -19,7 +19,8 @@ from typing import Any
 class SystemComponents:
     """Running components returned by start_system(). Caller shuts them down."""
     bus: Any
-    runners: list = field(default_factory=list)
+    runners: list = field(default_factory=list)  # AgentRunner — retriever only (dies 1.26.10)
+    expert_bots: list = field(default_factory=list)
     extraction: Any = None
     curation: Any = None
     triage: Any = None
@@ -45,6 +46,7 @@ def start_system(
     from pearscarf.assistant import Assistant
     from pearscarf.bus import MessageBus
     from pearscarf.config import MCP_PORT
+    from pearscarf.expert_bot import ExpertBot
     from pearscarf.expert_context import build_context
     from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.extraction import Extraction
@@ -79,7 +81,7 @@ def start_system(
             except Exception as exc:
                 log_fn(f"{expert.name} tools failed: {exc}")
 
-        # Start LLM agent if tools + agent.md exist
+        # Start expert bot if tools + agent.md exist
         connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
         if connect is not None:
             prompt_path = expert.knowledge_dir / "agent.md"
@@ -87,20 +89,16 @@ def start_system(
                 prompt = prompt_path.read_text()
                 tools = connect.get_tools()
 
-                def _make_factory(ctx, p, t):
-                    def factory(session_id: str):
-                        from pearscarf.agents.expert import ExpertAgent
-                        from pearscarf.tools import ToolRegistry
-                        reg = ToolRegistry()
-                        for tool in t:
-                            reg.register(tool)
-                        return ExpertAgent(ctx=ctx, domain_prompt=p, tool_registry=reg)
-                    return factory
-
-                runner = AgentRunner(expert.name, _make_factory(expert_ctx, prompt, tools), bus)
-                runner.start()
-                components.runners.append(runner)
-                log_fn(f"{expert.name} agent started.")
+                bot = ExpertBot(
+                    ctx=expert_ctx,
+                    bus=bus,
+                    expert_name=expert.name,
+                    system_prompt=prompt,
+                    tools=tools,
+                )
+                bot.start()
+                components.expert_bots.append(bot)
+                log_fn(f"{expert.name} bot started.")
 
         # Start ingester
         if poll and expert.ingester_module:
@@ -179,5 +177,7 @@ def stop_system(components: SystemComponents) -> None:
         components.extraction.stop()
     if components.assistant:
         components.assistant.stop()
+    for bot in components.expert_bots:
+        bot.stop()
     for runner in components.runners:
         runner.stop()
