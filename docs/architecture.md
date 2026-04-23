@@ -89,9 +89,9 @@ Experts do not import pearscarf internals. The context is the contract.
 2. For each enabled expert:
    a. build_context()                — load env/.<name>.env, create ExpertContext
    b. Load tools module              — get_tools(ctx) → connect instance, cached by record_type
-   c. Start LLM agent                — if tools + knowledge/agent.md exist → AgentRunner
+   c. Start bus bot                  — if tools + knowledge/agent.md exist → ExpertBot
    d. Start ingester                 — if --poll and ingester_module exists → start(ctx)
-3. Start internal agents             — retriever, assistant
+3. Start the assistant
 4. Start extraction consumer
 5. Start MCP server
 ```
@@ -145,19 +145,18 @@ pearscarf/
 ├── tools.py                 # BaseTool + ToolRegistry (framework)
 ├── graph_access_tools.py    # Read-only graph tools — shared by Triage and Extraction
 ├── query/
-│   └── context_query.py     # Read-only data access layer for retriever + MCP
+│   └── context_query.py     # Read-only data access layer for graph_query_tools + MCP
 ├── mcp/
 │   └── mcp_server.py        # FastMCP over HTTP/SSE, 10 tools
 ├── session_consumer.py      # SessionConsumer — poll bus target, cache per-session agents
-├── assistant.py             # Assistant(SessionConsumer) + AssistantAgent
+├── assistant.py             # Assistant(SessionConsumer) + AssistantAgent + SendMessageTool
 ├── expert_bot.py            # ExpertBot(SessionConsumer) — one instance per enabled expert
+├── graph_query_tools.py     # Read-only graph + vector tools used by the Assistant
 ├── agents/
 │   ├── base.py              # BaseAgent — agentic loop on Anthropic SDK
-│   ├── expert.py            # ExpertAgent — domain-specialized, receives ExpertContext
-│   └── runner.py            # AgentRunner — retained only for the retriever (dies with 1.26.10)
+│   └── expert.py            # ExpertAgent — domain-specialized, receives ExpertContext
 ├── experts/
-│   ├── ingest.py            # Ingest expert — file-based data entry (seed + JSON records)
-│   └── retriever.py         # Retriever expert — context queries via context_query.py
+│   └── ingest.py            # Ingest expert — file-based data entry (seed + JSON records)
 ├── expert_context.py        # ExpertContext + protocols (Storage, Bus, Log) + build_context()
 ├── interface/
 │   ├── cli.py               # Click CLI
@@ -170,7 +169,6 @@ pearscarf/
 │   ├── core/                # universal extraction rules + base entity types
 │   ├── ingest/              # Ingest expert prompts
 │   ├── extractor/           # Extractor agent system prompt
-│   ├── retriever/           # Retriever agent prompt
 │   └── assistant/           # Assistant system prompt
 ├── eval/
 │   ├── runner.py            # Eval pipeline (ER + facts)
@@ -296,7 +294,7 @@ Consumer subscribed to `records WHERE indexed = FALSE AND classification = 'rele
 
 <p align="center"><img src="assets/write-path.svg" alt="Write Path — Records to Graph" width="640"></p>
 
-`context_query.py` is the single read layer. Both the retriever and MCP server call through it. Extraction and the curator own all writes.
+`context_query.py` is the single read layer. Both the Assistant's graph query tools (`graph_query_tools.py`) and the MCP server call through it. Extraction and Curation own all writes.
 
 ## MCP Server
 

@@ -22,7 +22,7 @@ The goal: a shared memory layer for multi-agent systems that improves itself ove
 
 **Curation** — Consumer polling `curator_queue`. Two passes per cycle: expired commitment detection (`valid_until < today`) and confidence upgrades (`inferred` → `stated` when a `stated` source record exists in `source_records`). Semantic dedup happens at write time via the extractor agent's graph tools rather than as a curation pass. Never deletes.
 
-**MCP server** — FastMCP over HTTP/SSE. Read-only. Seven tools: `find_entity`, `get_facts`, `get_connections`, `get_relationship`, `get_conflicts`, `get_open_commitments`, `get_open_blockers`. Named API key auth. `context_query.py` is the shared read layer used by both the retriever agent and the MCP server.
+**MCP server** — FastMCP over HTTP/SSE. Read-only. Seven tools: `find_entity`, `get_facts`, `get_connections`, `get_relationship`, `get_conflicts`, `get_open_commitments`, `get_open_blockers`. Named API key auth. `context_query.py` is the shared read layer used by both the Assistant's graph query tools and the MCP server.
 
 **Install pipeline** — 7-stage validation (package locatable, manifest valid, knowledge contract, entry points importable, conflict checks, identifier pattern validation, eval dataset). DB writes on install: `experts`, `entity_types`, `identifier_patterns`, `expert_record_schemas`. Typed tables created from JSON Schema declarations in manifest. Lifecycle commands: install, enable, disable, uninstall, update.
 
@@ -42,7 +42,7 @@ The goal: a shared memory layer for multi-agent systems that improves itself ove
 
 **Cross-source entity resolution** — same entity referenced with different naming conventions across Gmail, Linear, and GitHub. Requires the resolver to use source context and cross-record signals, not just within-record surface form matching. Depends on name-variations eval dataset.
 
-**Session-aware messaging** — AgentRunner currently clears message history per invocation. Sessions should persist across turns with bounded context window (summarize or truncate older turns).
+**Session-aware messaging** — `SessionConsumer` currently rebuilds message history from the bus on every invocation. Sessions should persist across turns with bounded context window (summarize or truncate older turns).
 
 **Bus replacement** — Postgres polling at 1s intervals is the bottleneck for real-time behavior. NATS is the leading candidate: native request/reply, persistent streams (JetStream), any-language clients. Required before external agent protocol is viable.
 

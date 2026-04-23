@@ -2,14 +2,11 @@
 
 Subscribes to `messages WHERE to_agent='assistant'`. Per session, spawns
 (or reuses) an `AssistantAgent` and lets it reason + delegate to experts
-via the `send_message` tool.
+via the `send_message` tool, or query the knowledge graph directly via
+the graph query tools folded in from the retired Retriever.
 
 This is the front-of-house for humans — the component they talk to in
-Discord / the REPL. It is not domain-specific; domain-specific bots are
-the generic `ExpertBot` instances (one per enabled expert).
-
-The session-caching + history-rebuild machinery lives in
-`SessionConsumer`; this module just configures tools + prompt.
+Discord / the REPL.
 """
 
 from __future__ import annotations
@@ -18,9 +15,15 @@ from typing import Any
 
 from pearscarf.agents.base import BaseAgent
 from pearscarf.expert_context import ExpertContext
+from pearscarf.graph_query_tools import (
+    DayLookupTool,
+    FactsLookupTool,
+    GraphTraverseTool,
+    SearchEntitiesTool,
+    VectorSearchTool,
+)
 from pearscarf.knowledge import load as load_prompt
 from pearscarf.session_consumer import SessionConsumer
-from pearscarf.storage import graph
 from pearscarf.tools import BaseTool, ToolRegistry
 
 
@@ -70,46 +73,6 @@ class SendMessageTool(BaseTool):
         return f"Message sent to {to}."
 
 
-class SearchEntitiesTool(BaseTool):
-    """Assistant uses this to search the knowledge graph for known entities."""
-
-    name = "search_entities"
-    description = (
-        "Search the knowledge graph for entities by name, email, or domain. "
-        "Use this to check if an email sender is a known person or company."
-    )
-    input_schema = {
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "Name, email address, or domain to search for",
-            },
-            "entity_type": {
-                "type": "string",
-                "description": "Optional filter: 'person' or 'company'",
-            },
-        },
-        "required": ["query"],
-    }
-
-    def execute(self, **kwargs: Any) -> str:
-        query = kwargs["query"]
-        entity_type = kwargs.get("entity_type")
-        results = graph.search_entities(query, entity_type=entity_type, limit=5)
-        if not results:
-            return "No entities found."
-        lines = []
-        for e in results:
-            meta = e.get("metadata", {})
-            meta_str = ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else ""
-            line = f"- {e['name']} ({e['type']}, id={e['id']})"
-            if meta_str:
-                line += f"  [{meta_str}]"
-            lines.append(line)
-        return "\n".join(lines)
-
-
 class AssistantAgent(BaseAgent):
     """LLM agent spawned per session by `Assistant` to reason + delegate."""
 
@@ -141,7 +104,12 @@ class Assistant(SessionConsumer):
         send_tool = SendMessageTool(self._ctx)
         send_tool._session_id = session_id
         registry.register(send_tool)
+        # Graph query tools — folded in from the retired Retriever
         registry.register(SearchEntitiesTool())
+        registry.register(FactsLookupTool())
+        registry.register(GraphTraverseTool())
+        registry.register(DayLookupTool())
+        registry.register(VectorSearchTool())
 
         on_tool_call, on_text, on_tool_result = self._session_logging_callbacks(session_id)
         agent = AssistantAgent(

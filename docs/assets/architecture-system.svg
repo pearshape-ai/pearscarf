@@ -71,8 +71,8 @@
   <text x="495" y="254" text-anchor="middle" font-size="10" fill="#42a5f5">seed + JSON</text>
 
   <rect x="570" y="218" width="120" height="48" rx="7" fill="#e8f5e9" stroke="#81c784" stroke-width="1.1" filter="url(#shadow)"/>
-  <text x="630" y="238" text-anchor="middle" font-weight="500" fill="#2e7d32">Retriever</text>
-  <text x="630" y="254" text-anchor="middle" font-size="10" fill="#43a047">context_query</text>
+  <text x="630" y="238" text-anchor="middle" font-weight="500" fill="#2e7d32">Graph tools</text>
+  <text x="630" y="254" text-anchor="middle" font-size="10" fill="#43a047">(in Assistant)</text>
 
   <!-- Arrows: Assistant → Experts -->
   <line x1="200" y1="188" x2="90" y2="218" stroke="#bdbdbd" stroke-width="1"/>
@@ -95,7 +95,7 @@
   <text x="360" y="338" text-anchor="middle" font-size="9" fill="#1565c0">writes</text>
   <text x="495" y="338" text-anchor="middle" font-size="9" fill="#1565c0">writes</text>
 
-  <!-- Arrows: retriever → context_query, context_query → storage -->
+  <!-- Arrows: graph tools → context_query, context_query → storage -->
   <line x1="630" y1="266" x2="630" y2="296" stroke="#2e7d32" stroke-width="1" marker-end="url(#aGreen)"/>
   <text x="640" y="286" font-size="9" fill="#2e7d32">reads</text>
   <line x1="685" y1="328" x2="685" y2="360" stroke="#9575cd" stroke-width="1" marker-end="url(#aGray)"/>
