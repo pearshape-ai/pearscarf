@@ -145,7 +145,7 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
 
 @mcp.tool(description=(
     "Find AFFILIATED facts where the graph holds two current conflicting values for the same slot. "
-    "These are cases where the Curator detected equal source_at timestamps and could not resolve automatically. "
+    "These are cases where Curation detected equal source_at timestamps and could not resolve automatically. "
     "Use when reviewing graph health or validating entity affiliations."
 ))
 def get_conflicts(entity_name: str = None) -> dict:

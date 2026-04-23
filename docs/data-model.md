@@ -194,15 +194,15 @@ Extraction's write loop is structurally focused: it checks for **literal duplica
 
 Before every `create_fact_edge` call, Extraction queries for an existing edge matching all of: `(from, to, edge_label, fact_type, source_record, fact)`. If found, the source record is appended to the edge's `source_records` list — no new edge is created. If not found, a new edge is created.
 
-This check prevents duplicate edges from re-processing the same record. It does not perform semantic deduplication, supersession, or staleness checks — those are the responsibility of the Curator.
+This check prevents duplicate edges from re-processing the same record. It does not perform semantic deduplication, supersession, or staleness checks — those are the responsibility of Curation.
 
 ## Staleness and supersession
 
 The `stale` and `replaced_by` fields are set by the **verification & augmentation agent**, not Extraction.
 
-Between writes and the Curator running, the graph may contain redundant or semantically equivalent facts. This is by design — the graph is eventually consistent. Structurally correct at write time, semantically correct after the Curator runs. See [Curator](curator.md) for details.
+Between writes and Curation running, the graph may contain redundant or semantically equivalent facts. This is by design — the graph is eventually consistent. Structurally correct at write time, semantically correct after Curation runs. See [Curation](curation.md) for details.
 
-When the Curator runs:
+When Curation runs:
 
 - **AFFILIATED/ASSERTED**: newer `source_at` for same (entity, edge label, fact_type, target) supersedes older — sets `stale=true`, `replaced_by=<new edge id>`
 - **TRANSITIONED**: never staled — every transition is a real event in the chain

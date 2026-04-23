@@ -37,7 +37,7 @@
 └──────────────────────────────────────────────┘
         ↑ writes              ↑ writes          ↑ writes
 ┌───────┴──────┐     ┌───────┴──────┐   ┌──────┴──────┐
-│   Triage     │────→│  Extraction  │──→│   Curator   │
+│   Triage     │────→│  Extraction  │──→│  Curation   │
 │ (classify    │     │ (entities,   │   │ (dedup,     │
 │  pending)    │     │  facts)      │   │  expiry,    │
 │              │     │              │   │  confidence)│
@@ -141,7 +141,7 @@ pearscarf/
 │   ├── extraction.py        # Extraction consumer + ExtractorAgent — LLM extraction into graph
 │   └── registry.py          # Expert registry — discovery, prompt composition, connect cache
 ├── curation/
-│   └── curator.py           # Background graph quality (expiry, confidence)
+│   └── curation.py          # Curation consumer — graph quality (expiry, confidence)
 ├── triage/
 │   └── triage.py            # Triage consumer + TriageAgent — classifies pending records
 ├── query/
@@ -315,7 +315,7 @@ Read-only query surface via FastMCP over HTTP/SSE. 10 tools: 5 primitive + 5 con
 ### Decomposed services
 
 - **`psc discord start`** — Discord frontend + bus agents only
-- **`psc extraction start`** / **`psc curator start`** / **`psc triage start`** — queue workers
+- **`psc extraction start`** / **`psc curation start`** / **`psc triage start`** — queue workers
 - **`psc mcp start`** — MCP query endpoint
 - **`psc expert start-ingestion <name>`** — per-expert live-poll ingester
 

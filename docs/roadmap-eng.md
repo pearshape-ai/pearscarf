@@ -20,7 +20,7 @@ The goal: a shared memory layer for multi-agent systems that improves itself ove
 
 **Expert plugin architecture** — self-contained expert packages in `experts/`. Each expert owns a connect module (API client + tools), an ingester (background polling loop), and knowledge files (agent prompt, extraction guidance, entity types, record schemas). Manifest declares source type, record types, schema paths, and entry points. Registry builds runtime indexes from DB on startup; falls back to filesystem scan. `ExpertContext` is the single interface experts receive — `StorageProtocol`, `BusProtocol`, `LogProtocol`, config dict, and expert name. No pearscarf internals imported by experts. Three experts ship: gmailscarf, linearscarf, githubscarf.
 
-**Curator** — background worker polling `curator_queue`. Two passes per cycle: expired commitment detection (`valid_until < today`) and confidence upgrades (`inferred` → `stated` when a `stated` source record exists in `source_records`). Semantic dedup happens at write time via the extraction agent's graph tools rather than as a curator pass. Never deletes.
+**Curation** — Consumer polling `curator_queue`. Two passes per cycle: expired commitment detection (`valid_until < today`) and confidence upgrades (`inferred` → `stated` when a `stated` source record exists in `source_records`). Semantic dedup happens at write time via the extractor agent's graph tools rather than as a curation pass. Never deletes.
 
 **MCP server** — FastMCP over HTTP/SSE. Read-only. Seven tools: `find_entity`, `get_facts`, `get_connections`, `get_relationship`, `get_conflicts`, `get_open_commitments`, `get_open_blockers`. Named API key auth. `context_query.py` is the shared read layer used by both the retriever agent and the MCP server.
 
