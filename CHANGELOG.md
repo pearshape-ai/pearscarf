@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.27.3
+- `scripts/cost.py` — standalone utility that computes dollar cost from `llm_calls` rows. Pearscarf deliberately keeps dollars out of the core (tokens are ground truth, pricing lives externally) and this is the external tool. Flags filter rows by `record-id`, `run-id`, `session-id`, `runtime-id`, `consumer`, `model`, time window, or `--latest-eval` (shortcut for the most recent extraction runtime); at least one filter is required. Output defaults to per-call + per-record/session + summary tables with dollar figures; `--no-per-call` / `--no-per-record` suppress detail, `--json` emits machine-readable output. Pricing is a hardcoded `PRICES` dict at the top of the script — currently covers `claude-sonnet-4-5-20250929` and `claude-haiku-4-5-20251001` at Anthropic public rates as of 2026-04-23; unknown models print `$?.????` and are flagged in the summary, not misattributed. Reads env via `env/.env` and connects through `pearscarf.storage.db._get_conn`. New `scripts/README.md` documents `cost.py` alongside the existing `erase_all.py` and `reindex_all.py`. Closes PEA-139.
+
 ## 1.27.2
 - Multi-stage Docker build. `Dockerfile` now has a `builder` stage on `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` that resolves and installs deps into `/app/.venv`, and a separate runtime stage on `python:3.12-slim-bookworm` that copies only `/app` + `tini`. Drops uv itself, its package cache, and intermediate build layers from the shipped image. Pushed content size: 358 MB → **333 MB** (−25 MB); local disk usage: 1.82 GB → 1.72 GB. Smoke-tested end-to-end: `psc --version`, `sentence_transformers` import, `torch 2.11.0+cpu`, Consumer and `tracked_call` imports all clean.
 
