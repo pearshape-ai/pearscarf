@@ -307,7 +307,7 @@ Item(s) unresolved past `sla_at`:
 
 **Doesn't cover (v1 deliberately):**
 - Fact contradiction (`case_type='fact_contradiction'`) — same framework, different payload and handler; scaffolded in schema, not implemented.
-- Curator-side uncertainty, V&A uncertainty — same framework, future producers.
+- Curation-side uncertainty, V&A uncertainty — same framework, future producers.
 - Auto-resolver for routine cases (cheap LLM polling queue and resolving) — enabled by the interface, to be added post-v1.
 - Two-resolver consensus for high-stakes decisions — deferred.
 - Per-uncertainty resolution within a record (partial acceptance) — bundle is all-or-nothing in v1.

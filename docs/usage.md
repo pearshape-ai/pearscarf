@@ -25,13 +25,13 @@
 | `psc eval --dataset <path>` | Graph-based eval: ingest, index, query graph, score |
 | `psc eval --dataset <path> -v` | Verbose eval with per-record detail |
 | `psc erase-all` | Wipe all system state |
-| `psc queue` | Curator queue summary |
+| `psc queue` | Curation queue summary |
 | `psc queue list` | List up to 20 queue entries |
 | `psc queue clear --confirm` | Clear unclaimed queue entries |
 | `psc extraction start` | Start the extraction consumer in the foreground |
 | `psc triage start` | Start the triage agent in the foreground |
-| `psc curator start` | Start the curator in the foreground |
-| `psc curator status` | Show curator queue status |
+| `psc curation start` | Start the curation consumer in the foreground |
+| `psc curation status` | Show curator queue status |
 | `psc mcp start` | Run MCP server standalone |
 | `psc mcp status` | Show MCP server info |
 | `psc mcp keys list` | List all API keys |

@@ -1,19 +1,18 @@
-"""Curator — processes the curator_queue after the indexer writes facts.
+"""Curation — Consumer that drains the curator_queue after Extraction writes facts.
 
-Polls the queue for unclaimed entries, claims one at a time, processes it,
-and deletes the entry. Handles AFFILIATED/ASSERTED dedup, expiry, and
-confidence upgrades.
+Polls `curator_queue` for unclaimed entries, claims one at a time,
+processes it (expiry scan + confidence upgrade scan), and deletes the
+entry. One entry at a time — no concurrency.
 """
 
 from __future__ import annotations
 
-import threading
-import traceback
 from datetime import datetime, timezone
 
 from pearscarf import log
-from pearscarf.storage import graph
+from pearscarf.consumer import Consumer
 from pearscarf.config import CURATOR_CLAIM_TIMEOUT, CURATOR_POLL_INTERVAL
+from pearscarf.storage import graph
 from pearscarf.storage.db import _get_conn, init_db
 
 
@@ -21,21 +20,44 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class Curator:
-    """Background worker that drains the curator_queue."""
+class Curation(Consumer):
+    """Consumer that drains the curator_queue."""
 
-    def __init__(self, log_fn=None) -> None:
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._log_fn = log_fn
+    name = "curation"
+    default_poll_interval = float(CURATOR_POLL_INTERVAL)
+
+    def __init__(self, poll_interval: float | None = None) -> None:
+        super().__init__(poll_interval=poll_interval)
         self._last_cycle_upgrades = 0
         self._last_cycle_expired = 0
         self._last_cycle_at: str | None = None
+        self._current_record_id: str | None = None
 
-    def _print(self, msg: str) -> None:
-        """Print to terminal if log_fn is set."""
-        if self._log_fn:
-            self._log_fn(f"[curator] {msg}")
+    # --- Consumer hooks ---
+
+    def _setup(self) -> None:
+        init_db()
+
+    def _next(self) -> str | None:
+        # Crash recovery: reclaim anything held too long.
+        self._reset_timed_out_claims()
+        return self._claim_one()
+
+    def _handle(self, record_id: str) -> None:
+        self._current_record_id = record_id
+        try:
+            self._process(record_id)
+            self._delete_entry(record_id)
+        except Exception:
+            try:
+                self._release_claim(record_id)
+            except Exception:
+                pass
+            raise  # Consumer base logs + continues
+        finally:
+            self._current_record_id = None
+
+    # --- Queue operations ---
 
     def _reset_timed_out_claims(self) -> None:
         """Release claims that have been held too long (crash recovery)."""
@@ -52,7 +74,7 @@ class Curator:
                 conn.commit()
                 for r in rows:
                     log.write(
-                        "curator", "--", "warning",
+                        self.name, "--", "warning",
                         f"reset timed-out claim: {r['record_id']} "
                         f"(claimed at {r['claimed_at']})",
                     )
@@ -93,10 +115,12 @@ class Curator:
             )
             conn.commit()
 
+    # --- Graph operations ---
+
     def _notify_expiry(self, edge: dict) -> None:
         """Reserved hook for expiry notifications. No-op for now."""
         log.write(
-            "curator", "--", "action",
+            self.name, "--", "action",
             f"expiry notification reserved for {edge['edge_id']}",
         )
 
@@ -109,7 +133,7 @@ class Curator:
             self._notify_expiry(edge)
             graph.mark_fact_stale(edge["edge_id"], replaced_by_id=None)
             log.write(
-                "curator", "--", "action",
+                self.name, "--", "action",
                 f"expired {edge['fact_type']} staled — edge_id={edge['edge_id']}, "
                 f"from={edge['from_name']}, valid_until={edge['valid_until']}, "
                 f"source_record={edge['source_record']}",
@@ -139,7 +163,7 @@ class Curator:
             if has_stated:
                 graph.set_edge_confidence(edge["edge_id"], "stated")
                 log.write(
-                    "curator", "--", "action",
+                    self.name, "--", "action",
                     f"confidence upgraded: {edge['edge_id']} inferred → stated "
                     f"({edge['from_name']} → {edge['to_name']})",
                 )
@@ -149,83 +173,8 @@ class Curator:
 
     def _process(self, record_id: str) -> None:
         """Process a single record — expiry + confidence upgrade."""
-        log.write("curator", "--", "action", f"processing {record_id}")
+        log.write(self.name, "--", "action", f"processing {record_id}")
 
-        # Expiry scan
         self._last_cycle_expired = self._scan_expired()
-        if self._last_cycle_expired:
-            self._print(f"  expired {self._last_cycle_expired} commitment(s)")
-
-        # Confidence upgrade
         self._last_cycle_upgrades = self._scan_confidence_upgrades()
-        if self._last_cycle_upgrades:
-            self._print(f"  upgraded {self._last_cycle_upgrades} edge(s)")
-
         self._last_cycle_at = _now()
-
-    def _loop(self) -> None:
-        init_db()
-        record_id = None
-        while not self._stop.is_set():
-            try:
-                # Step 1: Reset timed-out claims
-                self._reset_timed_out_claims()
-
-                # Step 2: Claim one entry
-                record_id = self._claim_one()
-                if record_id is None:
-                    self._stop.wait(CURATOR_POLL_INTERVAL)
-                    continue
-
-                # Count remaining
-                with _get_conn() as conn:
-                    row = conn.execute(
-                        "SELECT COUNT(*) AS c FROM curator_queue WHERE claimed_at IS NULL"
-                    ).fetchone()
-                    remaining = dict(row).get("c", 0) if row else 0
-                self._print(f"processing {record_id} ({remaining} remaining)")
-
-                # Step 3: Process
-                try:
-                    self._process(record_id)
-                except Exception as exc:
-                    log.write(
-                        "curator", "--", "warning",
-                        f"processing failed for {record_id}: {exc}",
-                    )
-                    # Handled exception — delete entry, don't retry logic errors
-
-                # Step 4: Delete entry
-                self._delete_entry(record_id)
-                record_id = None
-
-            except Exception:
-                # Unhandled exception in claim/delete path
-                traceback.print_exc()
-                if record_id:
-                    try:
-                        self._release_claim(record_id)
-                    except Exception:
-                        pass
-                    record_id = None
-
-            self._stop.wait(CURATOR_POLL_INTERVAL)
-
-    def start(self) -> None:
-        """Start the curator in a background daemon thread."""
-        self._thread = threading.Thread(
-            target=self._loop, name="curator", daemon=True
-        )
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=5)
-
-    def run_foreground(self) -> None:
-        """Run the curator loop in the foreground (blocking)."""
-        try:
-            self._loop()
-        except KeyboardInterrupt:
-            pass

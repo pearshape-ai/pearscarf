@@ -127,13 +127,13 @@
   <text x="470" y="528" text-anchor="middle" font-size="14" font-weight="600" fill="#1a1a2e">Background Workers</text>
 
   <rect x="130" y="544" width="270" height="84" rx="8" fill="#fff8e1" stroke="#ffd54f" stroke-width="1.2" filter="url(#shadow)"/>
-  <text x="265" y="568" text-anchor="middle" font-weight="600" fill="#f57f17">Indexer</text>
+  <text x="265" y="568" text-anchor="middle" font-weight="600" fill="#f57f17">Extraction</text>
   <text x="265" y="585" text-anchor="middle" font-size="10" fill="#f9a825">LLM extraction - entity resolution</text>
   <text x="265" y="599" text-anchor="middle" font-size="10" fill="#f9a825">fact-edge writes - Qdrant embedding</text>
   <text x="265" y="613" text-anchor="middle" font-size="10" fill="#f9a825">enqueues to curator_queue</text>
 
   <rect x="540" y="544" width="270" height="84" rx="8" fill="#fce4ec" stroke="#f48fb1" stroke-width="1.2" filter="url(#shadow)"/>
-  <text x="675" y="568" text-anchor="middle" font-weight="600" fill="#c62828">Curator</text>
+  <text x="675" y="568" text-anchor="middle" font-weight="600" fill="#c62828">Curation</text>
   <text x="675" y="585" text-anchor="middle" font-size="10" fill="#e53935">AFFILIATED + ASSERTED dedup</text>
   <text x="675" y="599" text-anchor="middle" font-size="10" fill="#e53935">expired commitment detection</text>
   <text x="675" y="613" text-anchor="middle" font-size="10" fill="#e53935">confidence upgrades</text>
@@ -144,7 +144,7 @@
   <line x1="675" y1="544" x2="675" y2="490" stroke="#c62828" stroke-width="1.2" marker-end="url(#aRed)"/>
   <text x="685" y="520" font-size="9" fill="#c62828">writes</text>
 
-  <!-- Indexer → Curator -->
+  <!-- Extraction → Curation -->
   <line x1="400" y1="586" x2="540" y2="586" stroke="#9e9e9e" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#aGray)"/>
   <text x="470" y="578" text-anchor="middle" font-size="9" fill="#757575">curator_queue</text>
 
@@ -159,9 +159,9 @@
   <rect x="325" y="682" width="12" height="12" rx="3" fill="#f3e5f5" stroke="#ba68c8"/>
   <text x="343" y="693" font-size="10" fill="#616161">MCP</text>
   <rect x="395" y="682" width="12" height="12" rx="3" fill="#fff8e1" stroke="#ffd54f"/>
-  <text x="413" y="693" font-size="10" fill="#616161">Indexer</text>
+  <text x="413" y="693" font-size="10" fill="#616161">Extraction</text>
   <rect x="475" y="682" width="12" height="12" rx="3" fill="#fce4ec" stroke="#f48fb1"/>
-  <text x="493" y="693" font-size="10" fill="#616161">Curator</text>
+  <text x="493" y="693" font-size="10" fill="#616161">Curation</text>
   <rect x="555" y="682" width="12" height="12" rx="3" fill="#eceff1" stroke="#90a4ae"/>
   <text x="573" y="693" font-size="10" fill="#616161">Storage</text>
   <rect x="635" y="682" width="12" height="12" rx="3" fill="#ede7f6" stroke="#9575cd"/>

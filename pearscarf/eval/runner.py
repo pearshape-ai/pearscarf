@@ -661,7 +661,7 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
 
     # Start extraction + curator
     from pearscarf.extraction.extraction import Extraction
-    from pearscarf.curation.curator import Curator
+    from pearscarf.curation.curation import Curation
 
     if debug_dir:
         from datetime import datetime, timezone
@@ -675,8 +675,8 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
     extraction = Extraction(debug_dir=debug_dir)
     extraction.start()
 
-    curator = Curator()
-    curator.start()
+    curation = Curation()
+    curation.start()
 
     # Ingest all records
     print(f"Ingesting {len(sequence)} record(s)...")
@@ -694,14 +694,14 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
     # Wait for extraction
     _wait_for_extraction()
 
-    # Wait for curator to drain the queue
-    print("Waiting for curator...")
+    # Wait for curation to drain the queue
+    print("Waiting for curation...")
     while True:
         with _get_conn() as conn:
             row = conn.execute("SELECT COUNT(*) AS c FROM curator_queue").fetchone()
             count = dict(row).get("c", 0) if row else 0
         if count == 0:
-            print("Curator finished.")
+            print("Curation finished.")
             break
         print(f"  {count} record(s) in queue...")
         time.sleep(2)
@@ -709,7 +709,7 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
     # Collect token usage
     token_usage = extraction.token_usage
     extraction.stop()
-    curator.stop()
+    curation.stop()
 
     # Score facts
     graph_facts = _get_all_graph_facts()

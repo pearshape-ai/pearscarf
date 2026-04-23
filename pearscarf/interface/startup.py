@@ -2,7 +2,7 @@
 and the decomposed Discord service (psc discord start).
 
 start_system() does everything each caller needs: credential check, expert
-loading, bus-agent wiring, and — unless bot_only=True — extraction, curator,
+loading, bus-agent wiring, and — unless bot_only=True — extraction, curation,
 triage, and MCP. Returns a SystemComponents dataclass the caller uses for
 shutdown. The caller provides the frontend (REPL or Discord bot).
 """
@@ -21,7 +21,7 @@ class SystemComponents:
     bus: Any
     runners: list = field(default_factory=list)
     extraction: Any = None
-    curator: Any = None
+    curation: Any = None
     triage: Any = None
     mcp_server: Any = None
 
@@ -34,7 +34,7 @@ def start_system(
     """Boot the full PearScarf system. Returns running components.
 
     poll: start expert ingester threads (background polling).
-    bot_only: skip extraction, curator, triage, and MCP. Intended for the
+    bot_only: skip extraction, curation, triage, and MCP. Intended for the
         decomposed production runtime where those run in their own
         containers; the bot container only needs the bus and the
         bus-coupled agents (expert agents, retriever, worker).
@@ -132,7 +132,7 @@ def start_system(
     log_fn("Worker agent started.")
 
     if bot_only:
-        log_fn("bot_only=True — skipping extraction, curator, triage, and MCP.")
+        log_fn("bot_only=True — skipping extraction, curation, triage, and MCP.")
         return components
 
     # --- Start extraction ---
@@ -147,12 +147,12 @@ def start_system(
     components.extraction = extraction
     log_fn("Extraction started.")
 
-    # --- Start curator ---
-    from pearscarf.curation.curator import Curator
-    curator = Curator(log_fn=log_fn)
-    curator.start()
-    components.curator = curator
-    log_fn("Curator started.")
+    # --- Start curation ---
+    from pearscarf.curation.curation import Curation
+    curation = Curation()
+    curation.start()
+    components.curation = curation
+    log_fn("Curation started.")
 
     # --- Start triage ---
     from pearscarf.triage.triage import Triage
@@ -176,8 +176,8 @@ def stop_system(components: SystemComponents) -> None:
         components.mcp_server.stop()
     if components.triage:
         components.triage.stop()
-    if components.curator:
-        components.curator.stop()
+    if components.curation:
+        components.curation.stop()
     if components.extraction:
         components.extraction.stop()
     for runner in components.runners:

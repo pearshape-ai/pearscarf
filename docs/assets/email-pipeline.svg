@@ -52,13 +52,13 @@
   <line x1="530" y1="248" x2="530" y2="290" stroke="#bdbdbd" stroke-width="1.2" marker-end="url(#aGray)"/>
   <text x="555" y="274" font-size="9" fill="#757575">if relevant</text>
 
-  <!-- Indexer -->
+  <!-- Extraction -->
   <rect x="380" y="290" width="300" height="72" rx="8" fill="#fff8e1" stroke="#ffd54f" stroke-width="1.2" filter="url(#shadow)"/>
-  <text x="530" y="314" text-anchor="middle" font-weight="600" fill="#f57f17">Indexer</text>
+  <text x="530" y="314" text-anchor="middle" font-weight="600" fill="#f57f17">Extraction</text>
   <text x="530" y="330" text-anchor="middle" font-size="10" fill="#f9a825">compose_prompt(record) → LLM extraction</text>
   <text x="530" y="346" text-anchor="middle" font-size="10" fill="#f9a825">entity resolution → fact-edges → embed</text>
 
-  <!-- Indexer outputs -->
+  <!-- Extraction outputs -->
   <line x1="430" y1="362" x2="250" y2="406" stroke="#f57f17" stroke-width="1.2" marker-end="url(#aOrange)"/>
   <line x1="530" y1="362" x2="530" y2="406" stroke="#f57f17" stroke-width="1.2" marker-end="url(#aOrange)"/>
   <line x1="630" y1="362" x2="630" y2="406" stroke="#f57f17" stroke-width="1.2" marker-end="url(#aOrange)"/>
@@ -73,7 +73,7 @@
   <text x="480" y="441" text-anchor="middle" font-size="10" fill="#607d8b">embedding</text>
 
   <rect x="560" y="406" width="120" height="44" rx="6" fill="#fff" stroke="#78909c" stroke-width="1" filter="url(#shadow)"/>
-  <text x="620" y="425" text-anchor="middle" font-weight="500" fill="#37474f">Curator queue</text>
+  <text x="620" y="425" text-anchor="middle" font-weight="500" fill="#37474f">Curation queue</text>
   <text x="620" y="441" text-anchor="middle" font-size="10" fill="#607d8b">post-processing</text>
 
   <!-- mark indexed -->

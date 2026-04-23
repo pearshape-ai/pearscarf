@@ -523,23 +523,23 @@ def extraction_start() -> None:
 
 @cli.group(invoke_without_command=True)
 @click.pass_context
-def curator(ctx) -> None:
-    """Curator agent — processes indexed records for graph quality."""
+def curation(ctx) -> None:
+    """Curation — processes indexed records for graph quality."""
     if ctx.invoked_subcommand is None:
-        click.echo("Use 'psc curator start' to run or 'psc curator status' to inspect.")
+        click.echo("Use 'psc curation start' to run or 'psc curation status' to inspect.")
 
 
-@curator.command("start")
-def curator_start() -> None:
-    """Start the curator in the foreground."""
-    from pearscarf.curation.curator import Curator
-    click.echo("Curator starting...")
-    c = Curator()
+@curation.command("start")
+def curation_start() -> None:
+    """Start the curation consumer in the foreground."""
+    from pearscarf.curation.curation import Curation
+    click.echo("Curation starting...")
+    c = Curation()
     c.run_foreground()
 
 
-@curator.command("status")
-def curator_status() -> None:
+@curation.command("status")
+def curation_status() -> None:
     """Show curator queue status."""
     from pearscarf.storage.db import _get_conn, init_db
     from pearscarf.config import CURATOR_CLAIM_TIMEOUT

@@ -38,7 +38,8 @@ EXPERTS_DIR = os.getenv(
     str(_Path(__file__).resolve().parent.parent / "experts"),
 )
 
-# Curator
+# Curation (env var names keep the CURATOR_ prefix so infra env files don't break;
+# the Postgres queue table is also `curator_queue`, which stays put).
 CURATOR_POLL_INTERVAL = int(os.getenv("CURATOR_POLL_INTERVAL", "30"))
 CURATOR_CLAIM_TIMEOUT = int(os.getenv("CURATOR_CLAIM_TIMEOUT", "600"))
 
