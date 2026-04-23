@@ -274,17 +274,11 @@ class Extraction(Consumer):
     def _run_extractor_agent(self, record: dict, content: str) -> dict | None:
         """Run the extractor agent on a record. Returns extraction result or None."""
         from pearscarf.tools import ToolRegistry
-        from pearscarf.graph_access_tools import (
-            FindEntityTool, SearchEntitiesTool, CheckAliasTool,
-            GetEntityContextTool,
-        )
+        from pearscarf.graph_access_tools import ResolveEntityTool
 
         registry = ToolRegistry()
         save_tool = SaveExtractionTool()
-        registry.register(FindEntityTool())
-        registry.register(SearchEntitiesTool())
-        registry.register(CheckAliasTool())
-        registry.register(GetEntityContextTool())
+        registry.register(ResolveEntityTool())
         registry.register(save_tool)
 
         system_prompt = self._build_extraction_prompt(record)
