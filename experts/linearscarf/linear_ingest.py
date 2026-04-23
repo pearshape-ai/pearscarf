@@ -1,93 +1,119 @@
-"""Linear background ingestion loop.
+"""Linear background ingestion — `LinearIngest` consumer.
 
-Polls Linear for new issues and changes, saves each as a record via
-ctx.storage.save_record(). Records land with classification=pending_triage;
-the triage agent picks them up via queue polling. This ingester does
-not touch the bus.
+Polls Linear for new issues and history changes and saves each as a
+record via `ctx.storage.save_record()`. Records land with
+`classification=pending_triage`; Triage picks them up via queue
+polling. This ingester does not touch the bus.
+
+Polls run in two modes: an initial bulk load (first cycle) and
+incremental sync (each subsequent cycle, filtered by `synced_at`).
 """
 
 from __future__ import annotations
 
-import threading
-import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+from pearscarf.consumer import Consumer
 
 if TYPE_CHECKING:
     from pearscarf.expert_context import ExpertContext
 
 
-def start(ctx: ExpertContext) -> None:
-    """Start the Linear ingestion loop as a daemon thread."""
-    from linearscarf.linear_connect import LinearConnect
+class LinearIngest(Consumer):
+    """Consumer that polls Linear and saves issues + history changes as records."""
 
-    connect = LinearConnect(ctx)
-    interval = int(ctx.config.get("LINEAR_POLL_INTERVAL", "300"))
+    name = "linearscarf"
+    default_poll_interval = 300.0
 
-    state = {"synced_at": None}
+    def __init__(self, ctx: "ExpertContext", poll_interval: float | None = None) -> None:
+        from linearscarf.linear_connect import LinearConnect
 
-    def _loop() -> None:
-        while True:
-            try:
-                if state["synced_at"] is None:
-                    _initial_sync(connect, ctx)
-                else:
-                    _incremental_sync(connect, ctx, state["synced_at"])
-                state["synced_at"] = datetime.now(timezone.utc).isoformat()
-            except Exception as exc:
-                ctx.log.write(ctx.expert_name, "error", f"Linear poll failed: {exc}")
-            time.sleep(interval)
+        if poll_interval is None:
+            poll_interval = float(ctx.config.get("LINEAR_POLL_INTERVAL", self.default_poll_interval))
+        super().__init__(poll_interval=poll_interval)
 
-    thread = threading.Thread(target=_loop, daemon=True, name="linearscarf-ingest")
-    thread.start()
-    ctx.log.write(ctx.expert_name, "action", f"Linear ingestion started (interval={interval}s)")
+        self._ctx = ctx
+        self._connect = LinearConnect(ctx)
+        self._synced_at: str | None = None
+        self._pending: list = []  # list of issue dicts to process
 
+    def _next(self):
+        if self._pending:
+            return self._pending.pop(0)
 
-def _initial_sync(connect, ctx: ExpertContext) -> None:
-    """Bulk-load all issues and save as records."""
-    issues = connect.list_issues()
-    saved = 0
-    for issue in issues:
-        rid = connect.ingest_record(issue)
-        if rid:
-            saved += 1
+        # No buffered work — run the next sync cycle.
+        cycle_started_at = datetime.now(timezone.utc).isoformat()
+        try:
+            if self._synced_at is None:
+                issues = self._connect.list_issues()
+                initial = True
+            else:
+                issues = self._connect.list_updated_since(self._synced_at)
+                initial = False
+        except Exception:
+            # Let base-class error handling take over in _next.
+            raise
 
-    if saved:
-        ctx.log.write(
-            ctx.expert_name, "action",
-            f"Initial sync: {saved} new issues saved as records",
-        )
+        if initial and issues:
+            saved = 0
+            for issue in issues:
+                rid = self._connect.ingest_record(issue)
+                if rid:
+                    saved += 1
+            if saved:
+                self._ctx.log.write(
+                    self._ctx.expert_name, "action",
+                    f"Initial sync: {saved} new issues saved as records",
+                )
+            # Initial sync processed inline — no per-item _handle pass needed.
+            self._synced_at = cycle_started_at
+            return None
 
+        if not initial:
+            self._pending = list(issues)
+        self._synced_at = cycle_started_at
+        return self._pending.pop(0) if self._pending else None
 
-def _incremental_sync(connect, ctx: ExpertContext, synced_at: str) -> None:
-    """Fetch updated issues and sync history changes; save both as records."""
-    issues = connect.list_updated_since(synced_at)
-    for issue in issues:
-        rid = connect.ingest_record(issue)
+    def _handle(self, issue) -> None:
+        """Incremental-cycle per-issue work: ingest + history sync."""
+        rid = self._connect.ingest_record(issue)
         is_new = rid is not None
 
-        # Sync history changes
+        # Sync history changes for this issue, using the previous cycle's
+        # synced_at as the lower bound (captured before this cycle ran).
         try:
-            changes = connect.get_issue_history(issue["id"], since=synced_at)
+            changes = self._connect.get_issue_history(issue["id"], since=self._synced_at)
             issue_record_id = rid or f"issue_{issue.get('identifier', 'unknown')}"
             saved = 0
             for change in changes:
-                crid = connect.ingest_change(change, issue_record_id)
+                crid = self._connect.ingest_change(change, issue_record_id)
                 if crid:
                     saved += 1
             if saved:
-                ctx.log.write(
-                    ctx.expert_name, "action",
+                self._ctx.log.write(
+                    self._ctx.expert_name, "action",
                     f"Poll: {saved} change(s) for {issue.get('identifier', '')}",
                 )
         except Exception as exc:
-            ctx.log.write(
-                ctx.expert_name, "error",
+            self._ctx.log.write(
+                self._ctx.expert_name, "error",
                 f"History fetch failed for {issue.get('identifier', '')}: {exc}",
             )
 
         if is_new:
-            ctx.log.write(
-                ctx.expert_name, "action",
+            self._ctx.log.write(
+                self._ctx.expert_name, "action",
                 f"Ingested {rid}: {issue.get('identifier', '')} — {issue.get('title', '')}",
             )
+
+
+def start(ctx: "ExpertContext"):
+    """Entry point called by the expert registry. Returns the polling thread."""
+    consumer = LinearIngest(ctx)
+    consumer.start()
+    ctx.log.write(
+        ctx.expert_name, "action",
+        f"Linear ingestion started (interval={int(consumer._poll_interval)}s)",
+    )
+    return consumer._thread

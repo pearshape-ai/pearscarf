@@ -1,46 +1,63 @@
-"""Gmail background ingestion loop.
+"""Gmail background ingestion — `GmailIngest` consumer.
 
 Polls Gmail for new unread emails and saves each as a record via
-ctx.storage.save_record(). Records land with classification=pending_triage;
-the triage agent picks them up via queue polling. This ingester does
-not touch the bus.
+`ctx.storage.save_record()`. Records land with
+`classification=pending_triage`; Triage picks them up via queue polling.
+This ingester does not touch the bus.
 """
 
 from __future__ import annotations
 
-import threading
-import time
 from typing import TYPE_CHECKING
+
+from pearscarf.consumer import Consumer
 
 if TYPE_CHECKING:
     from pearscarf.expert_context import ExpertContext
 
 
-def start(ctx: ExpertContext) -> None:
-    """Start the Gmail ingestion loop as a daemon thread."""
-    from gmailscarf.gmail_connect import GmailConnect
+class GmailIngest(Consumer):
+    """Consumer that polls Gmail and saves new emails as records."""
 
-    connect = GmailConnect(ctx)
-    interval = int(ctx.config.get("GMAIL_POLL_INTERVAL", "300"))
+    name = "gmailscarf"
+    default_poll_interval = 300.0
 
-    def _loop() -> None:
-        while True:
-            try:
-                _poll_once(connect, ctx)
-            except Exception as exc:
-                ctx.log.write(ctx.expert_name, "error", f"Gmail poll failed: {exc}")
-            time.sleep(interval)
+    def __init__(self, ctx: "ExpertContext", poll_interval: float | None = None) -> None:
+        from gmailscarf.gmail_connect import GmailConnect
 
-    thread = threading.Thread(target=_loop, daemon=True, name="gmailscarf-ingest")
-    thread.start()
-    ctx.log.write(ctx.expert_name, "action", f"Gmail ingestion started (interval={interval}s)")
+        if poll_interval is None:
+            poll_interval = float(ctx.config.get("GMAIL_POLL_INTERVAL", self.default_poll_interval))
+        super().__init__(poll_interval=poll_interval)
 
+        self._ctx = ctx
+        self._connect = GmailConnect(ctx)
+        self._pending: list = []
 
-def _poll_once(connect, ctx: ExpertContext) -> None:
-    """Fetch unread emails and save new ones as records."""
-    emails = connect.fetch_new()
-    for email in emails:
-        rid = connect.ingest_record(email)
+    def _next(self):
+        if self._pending:
+            return self._pending.pop(0)
+        emails = self._connect.fetch_new()
+        if not emails:
+            return None
+        self._pending = list(emails)
+        return self._pending.pop(0) if self._pending else None
+
+    def _handle(self, email) -> None:
+        rid = self._connect.ingest_record(email)
         if not rid:
-            continue
-        ctx.log.write(ctx.expert_name, "action", f"Ingested {rid} from {email['sender']}")
+            return
+        self._ctx.log.write(
+            self._ctx.expert_name, "action",
+            f"Ingested {rid} from {email['sender']}",
+        )
+
+
+def start(ctx: "ExpertContext"):
+    """Entry point called by the expert registry. Returns the polling thread."""
+    consumer = GmailIngest(ctx)
+    consumer.start()
+    ctx.log.write(
+        ctx.expert_name, "action",
+        f"Gmail ingestion started (interval={int(consumer._poll_interval)}s)",
+    )
+    return consumer._thread
