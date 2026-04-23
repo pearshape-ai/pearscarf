@@ -3,11 +3,11 @@
 * `load(name)` — read a single named prompt. If the entry declares an
   override env var and it is set, read from that path instead of the
   shipped default. Used by agents for their own system prompts and by
-  the indexer for the extraction prompt.
+  the Extraction consumer for the extractor agent's prompt.
 * `load_onboarding_block()` — onboarding content wrapped in its header
   block, cached. Onboards PearScarf to the world it operates in.
 
-Extraction prompt composition lives in `pearscarf.indexing.registry` —
+Extraction prompt composition lives in `pearscarf.extraction.registry` —
 it owns Layer 1 (`core_prompt`), Layer 2 (`schema_fragment`), and the
 per-record `compose_prompt(record)` that joins them with Layer 3.
 """
@@ -26,7 +26,7 @@ _KNOWLEDGE_MAP: dict[str, tuple[str, str | None]] = {
     "worker":           ("worker/agent.md",             None),
     "retriever":        ("retriever/agent.md",          None),
     "ingest":           ("ingest/agent.md",             None),
-    "extraction_agent": ("indexer/extraction_agent.md", None),
+    "extractor_agent":  ("extractor/extractor_agent.md", None),
     "seed_guidance":    ("ingest/seed_guidance.md",     None),
     "triage_agent":     ("triage/agent.md",             None),
     "onboarding":       ("onboarding.md",               "ONBOARDING_PROMPT_PATH"),
@@ -98,7 +98,7 @@ def load_relevancy_guidance(expert_name: str) -> str | None:
     The triage agent loads this per-record to get source-specific cues
     about what looks like noise vs signal for that particular expert.
     """
-    from pearscarf.indexing.registry import get_registry
+    from pearscarf.extraction.registry import get_registry
 
     expert = get_registry().get_by_name(expert_name)
     if expert is None:

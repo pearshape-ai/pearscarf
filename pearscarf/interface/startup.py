@@ -2,7 +2,7 @@
 and the decomposed Discord service (psc discord start).
 
 start_system() does everything each caller needs: credential check, expert
-loading, bus-agent wiring, and — unless bot_only=True — indexer, curator,
+loading, bus-agent wiring, and — unless bot_only=True — extraction, curator,
 triage, and MCP. Returns a SystemComponents dataclass the caller uses for
 shutdown. The caller provides the frontend (REPL or Discord bot).
 """
@@ -20,7 +20,7 @@ class SystemComponents:
     """Running components returned by start_system(). Caller shuts them down."""
     bus: Any
     runners: list = field(default_factory=list)
-    indexer: Any = None
+    extraction: Any = None
     curator: Any = None
     triage: Any = None
     mcp_server: Any = None
@@ -34,7 +34,7 @@ def start_system(
     """Boot the full PearScarf system. Returns running components.
 
     poll: start expert ingester threads (background polling).
-    bot_only: skip indexer, curator, triage, and MCP. Intended for the
+    bot_only: skip extraction, curator, triage, and MCP. Intended for the
         decomposed production runtime where those run in their own
         containers; the bot container only needs the bus and the
         bus-coupled agents (expert agents, retriever, worker).
@@ -46,8 +46,8 @@ def start_system(
     from pearscarf.config import MCP_PORT
     from pearscarf.expert_context import build_context
     from pearscarf.experts.retriever import create_retriever_for_runner
-    from pearscarf.indexing.indexer import Indexer
-    from pearscarf.indexing.registry import get_registry
+    from pearscarf.extraction.extraction import Extraction
+    from pearscarf.extraction.registry import get_registry
     from pearscarf.interface.install import enforce_credentials_or_exit
     from pearscarf.mcp.mcp_server import MCPServer
 
@@ -132,20 +132,20 @@ def start_system(
     log_fn("Worker agent started.")
 
     if bot_only:
-        log_fn("bot_only=True — skipping indexer, curator, triage, and MCP.")
+        log_fn("bot_only=True — skipping extraction, curator, triage, and MCP.")
         return components
 
-    # --- Start indexer ---
+    # --- Start extraction ---
     from pearscarf.knowledge import onboarding_summary
     onb_source, onb_chars = onboarding_summary()
     log_fn(f"Onboarding: {onb_chars} chars ({onb_source}).")
     if onb_chars > 8000:
         log_fn(f"Onboarding: {onb_chars} chars exceeds soft budget (~6000 chars / ~1500 tokens).")
 
-    indexer = Indexer()
-    indexer.start()
-    components.indexer = indexer
-    log_fn("Indexer started.")
+    extraction = Extraction()
+    extraction.start()
+    components.extraction = extraction
+    log_fn("Extraction started.")
 
     # --- Start curator ---
     from pearscarf.curation.curator import Curator
@@ -178,7 +178,7 @@ def stop_system(components: SystemComponents) -> None:
         components.triage.stop()
     if components.curator:
         components.curator.stop()
-    if components.indexer:
-        components.indexer.stop()
+    if components.extraction:
+        components.extraction.stop()
     for runner in components.runners:
         runner.stop()

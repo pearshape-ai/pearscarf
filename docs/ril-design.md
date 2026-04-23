@@ -361,11 +361,11 @@ A record rarely has multiple triage_uncertain items (triage is one decision per 
 
 1. **Mark queue row `resolved`.** Store resolution JSON.
 2. **Flip classification on the record:**
-   - `relevant` → indexer picks it up on next poll; extraction runs normally (may produce new HIL items via er_ambiguity at that point — separate elicitation later).
+   - `relevant` → Extraction picks it up on next poll; extraction runs normally (may produce new HIL items via er_ambiguity at that point — separate elicitation later).
    - `noise` → terminal state; record stays in the SOR but is never extracted.
 3. **Pop from pending vector collection.**
 
-No lineage sweep (nothing in the graph yet). No re-extraction (indexer handles extraction normally when classification flips to relevant).
+No lineage sweep (nothing in the graph yet). No re-extraction (Extraction handles extraction normally when classification flips to relevant).
 
 ### Fallback — SLA expiry
 
@@ -405,7 +405,7 @@ HIL items from later stages never share an elicitation with earlier-stage items 
 **Covers:**
 - Triage agent's `uncertain` verdict becomes an actionable queue item
 - Simple binary resolution (relevant / noise)
-- Handler just flips classification; natural indexer pickup if relevant
+- Handler just flips classification; natural Extraction pickup if relevant
 - Safe default to `noise` on SLA expiry — conservative, preserves graph integrity
 
 **Doesn't cover (v1 deliberately):**
@@ -456,7 +456,7 @@ HIL items from later stages never share an elicitation with earlier-stage items 
 
 ### Cross-stage interactions
 
-- **Indexer behaviour on triage_uncertain → relevant** — implied (indexer just picks up new `relevant` records). State explicitly.
+- **Extraction behaviour on triage_uncertain → relevant** — implied (Extraction just picks up new `relevant` records). State explicitly.
 - **Lineage sweep on later reclassification** — the case where a previously `relevant` record is later overturned to `noise` (e.g., by curator). Broader RIL concern; named as out-of-scope-for-v1 here but not treated.
 
 ### Maybe-overkill — worth flagging anyway

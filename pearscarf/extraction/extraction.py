@@ -1,36 +1,109 @@
-"""Indexer — background agent that processes records into the knowledge graph.
+"""Extraction — Consumer that extracts entities and facts from relevant records.
 
-Polls for unindexed records and runs LLM extraction → entity resolution →
-Neo4j graph population → Qdrant embedding.
+Polls `records WHERE classification='relevant' AND indexed=FALSE`. Per
+record, spawns an `ExtractorAgent` (BaseAgent subclass) that uses graph-
+context tools to resolve entities and output an `{entities, facts}`
+structure, validates the output, commits to Neo4j, embeds the record
+content in Qdrant, then enqueues for curation.
 """
 
 from __future__ import annotations
 
 import json
-import threading
-import traceback
+import os
 from datetime import datetime, timezone
 
+from pearscarf.agents.base import BaseAgent
+from pearscarf.consumer import Consumer
 from pearscarf.storage import graph, vectorstore
 from pearscarf import log
 from pearscarf.storage.db import _get_conn, init_db
-from pearscarf.indexing.registry import compose_prompt
+from pearscarf.extraction.registry import compose_prompt
 from pearscarf.knowledge import load as load_prompt, load_onboarding_block
-from pearscarf.tracing import trace_span
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class Indexer:
-    """Background agent that indexes records via LLM extraction."""
+class ExtractorAgent(BaseAgent):
+    """LLM agent spawned per record by `Extraction` to extract entities + facts.
 
-    def __init__(self, debug_dir: str | None = None) -> None:
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+    Thin named subclass of `BaseAgent` — same run loop, fixed agent_name
+    so the call site doesn't have to pass the magic string.
+    """
+
+    def __init__(
+        self,
+        tool_registry,
+        system_prompt: str = "",
+        on_tool_call=None,
+        on_text=None,
+        on_tool_result=None,
+    ) -> None:
+        super().__init__(
+            tool_registry=tool_registry,
+            system_prompt=system_prompt,
+            agent_name="extractor_agent",
+            on_tool_call=on_tool_call,
+            on_text=on_text,
+            on_tool_result=on_tool_result,
+        )
+
+
+class Extraction(Consumer):
+    """Consumer that indexes relevant records into the knowledge graph."""
+
+    name = "extraction"
+    default_poll_interval = 5.0
+
+    def __init__(
+        self,
+        debug_dir: str | None = None,
+        poll_interval: float | None = None,
+    ) -> None:
+        super().__init__(poll_interval=poll_interval)
         self._debug_dir = debug_dir
         self.token_usage: dict[str, dict[str, int]] = {}  # record_id → {input, output}
+        self._pending: list[dict] = []
+
+    # --- Consumer hooks ---
+
+    def _setup(self) -> None:
+        init_db()
+        graph.ensure_constraints()
+
+    def _next(self) -> dict | None:
+        if self._pending:
+            return self._pending.pop(0)
+
+        from pearscarf.storage import store
+
+        with _get_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, type, source, created_at, raw, content, "
+                "metadata, human_context "
+                "FROM records "
+                "WHERE indexed = FALSE AND classification = %s "
+                "ORDER BY created_at",
+                (store.RELEVANT,),
+            ).fetchall()
+
+        if not rows:
+            return None
+
+        self._pending = [dict(r) for r in rows]
+        log.write(
+            self.name, "--", "action",
+            f"found {len(rows)} unindexed record(s): "
+            + ", ".join(r["id"] for r in rows),
+        )
+        return self._pending.pop(0)
+
+    def _handle(self, record: dict) -> None:
+        self._process_record(record)
+
+    # --- Debug output ---
 
     def _debug_folder_name(self, record_id: str) -> str:
         """Resolve record_id to a human-readable folder name for debug output."""
@@ -48,7 +121,6 @@ class Indexer:
 
     def _debug_write(self, record_id: str, name: str, content: str) -> None:
         """Write a single debug file."""
-        import os
         folder = self._debug_folder_name(record_id)
         record_dir = os.path.join(self._debug_dir, folder)
         os.makedirs(record_dir, exist_ok=True)
@@ -84,7 +156,7 @@ class Indexer:
         if existing:
             graph.append_source_record(existing, record_id, confidence)
             log.write(
-                "indexer", "--", "action",
+                self.name, "--", "action",
                 f"dup merged: {record_id} already in edge {existing}",
             )
             return
@@ -112,22 +184,21 @@ class Indexer:
         try:
             vectorstore.add_record(record_id, content, metadata)
         except Exception as exc:
-            log.write("indexer", "--", "error", f"Qdrant embed failed for {record_id}: {exc}")
+            log.write(self.name, "--", "error", f"Qdrant embed failed for {record_id}: {exc}")
 
-    # --- Extraction agent ---
+    # --- Extractor agent ---
 
     def _build_extraction_prompt(self, record: dict) -> str:
-        """Build the system prompt for the extraction agent."""
-        agent_instructions = load_prompt("extraction_agent")
+        """Build the system prompt for the extractor agent."""
+        agent_instructions = load_prompt("extractor_agent")
         onboarding = load_onboarding_block()
         base_prompt = compose_prompt(record)
         return agent_instructions + "\n\n" + onboarding + base_prompt
 
-    def _run_extraction_agent(self, record: dict, content: str) -> dict | None:
-        """Run the extraction agent on a record. Returns extraction result or None."""
-        from pearscarf.agents.base import BaseAgent
+    def _run_extractor_agent(self, record: dict, content: str) -> dict | None:
+        """Run the extractor agent on a record. Returns extraction result or None."""
         from pearscarf.tools import ToolRegistry
-        from pearscarf.indexing.extraction_tools import (
+        from pearscarf.extraction.extraction_tools import (
             FindEntityTool, SearchEntitiesTool, CheckAliasTool,
             GetEntityContextTool, SaveExtractionTool,
         )
@@ -145,10 +216,9 @@ class Indexer:
         record_type = record["type"]
         user_message = f"Record ({record_id}, {record_type}):\n\n{content}"
 
-        agent = BaseAgent(
+        agent = ExtractorAgent(
             tool_registry=registry,
             system_prompt=system_prompt,
-            agent_name="extraction_agent",
         )
 
         error = None
@@ -156,7 +226,7 @@ class Indexer:
             agent.run(user_message)
         except Exception as exc:
             error = str(exc)
-            log.write("indexer", "--", "error", f"Extraction agent failed for {record_id}: {exc}")
+            log.write(self.name, "--", "error", f"Extractor agent failed for {record_id}: {exc}")
 
         result = save_tool.result
         if result is not None:
@@ -170,7 +240,7 @@ class Indexer:
         if error:
             return None
         if result is None:
-            log.write("indexer", "--", "warning", f"Extraction agent didn't call save_extraction for {record_id}")
+            log.write(self.name, "--", "warning", f"Extractor agent didn't call save_extraction for {record_id}")
             return None
 
         return result
@@ -179,7 +249,6 @@ class Indexer:
         """Dump agent conversation to debug dir if active."""
         if not self._debug_dir:
             return
-        import os
         folder = self._debug_folder_name(record_id)
         debug_path = os.path.join(self._debug_dir, folder)
         os.makedirs(debug_path, exist_ok=True)
@@ -272,7 +341,7 @@ class Indexer:
                     graph.create_identified_as_edge(
                         resolved_to, name, record_id, record_type,
                         confidence="inferred",
-                        reasoning=f"Extraction agent resolved '{name}' to '{canonical_name}'",
+                        reasoning=f"Extractor agent resolved '{name}' to '{canonical_name}'",
                     )
 
         return entity_id_map
@@ -375,16 +444,16 @@ class Indexer:
         self._current_record_id = record_id
         self._current_record_type = record_type
 
-        log.write("indexer", "--", "action", f"processing {record_id}")
+        log.write(self.name, "--", "action", f"processing {record_id}")
 
         content = self._build_content(record)
         if record.get("human_context"):
             content += f"\n\nAdditional context from human:\n{record['human_context']}"
 
-        # Step 1: Run extraction agent
-        extraction = self._run_extraction_agent(record, content)
+        # Step 1: Run extractor agent
+        extraction = self._run_extractor_agent(record, content)
         if not extraction:
-            log.write("indexer", "--", "action", f"no extraction result for {record_id}")
+            log.write(self.name, "--", "action", f"no extraction result for {record_id}")
             self._mark_indexed(record_id)
             return
 
@@ -397,7 +466,7 @@ class Indexer:
         errors = self._validate_extraction(record, extraction)
         if errors:
             for err in errors:
-                log.write("indexer", "--", "warning", f"{record_id}: {err}")
+                log.write(self.name, "--", "warning", f"{record_id}: {err}")
 
         # Step 3: Commit to graph
         entity_id_map = self._commit_extraction(record, extraction)
@@ -408,7 +477,7 @@ class Indexer:
         entity_count = len(entity_id_map)
         fact_count = len(extraction.get("facts", []))
         log.write(
-            "indexer", "--", "action",
+            self.name, "--", "action",
             f"indexed {record_id}: {entity_count} entities, {fact_count} facts",
         )
 
@@ -418,7 +487,7 @@ class Indexer:
             enqueue_for_curation(record_id)
         except Exception as exc:
             log.write(
-                "indexer", "--", "warning",
+                self.name, "--", "warning",
                 f"failed to enqueue {record_id} for curation: {exc}",
             )
 
@@ -428,53 +497,3 @@ class Indexer:
                 "UPDATE records SET indexed = TRUE WHERE id = %s", (record_id,)
             )
             conn.commit()
-
-    def _loop(self) -> None:
-        from pearscarf.storage import store
-
-        init_db()
-        graph.ensure_constraints()
-        while not self._stop.is_set():
-            try:
-                with _get_conn() as conn:
-                    rows = conn.execute(
-                        "SELECT id, type, source, created_at, raw, content, "
-                        "metadata, human_context "
-                        "FROM records "
-                        "WHERE indexed = FALSE AND classification = %s "
-                        "ORDER BY created_at",
-                        (store.RELEVANT,),
-                    ).fetchall()
-
-                if rows:
-                    log.write(
-                        "indexer", "--", "action",
-                        f"found {len(rows)} unindexed record(s): "
-                        + ", ".join(r["id"] for r in rows),
-                    )
-                    for row in rows:
-                        if self._stop.is_set():
-                            break
-                        self._process_record(dict(row))
-            except Exception:
-                traceback.print_exc()
-
-            self._stop.wait(5)
-
-    def start(self) -> None:
-        self._thread = threading.Thread(
-            target=self._loop, name="indexer", daemon=True
-        )
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=5)
-
-    def run_foreground(self) -> None:
-        """Run the indexer loop in the foreground (blocking)."""
-        try:
-            self._loop()
-        except KeyboardInterrupt:
-            pass

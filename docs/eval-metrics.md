@@ -13,7 +13,7 @@ Metrics are computed against a ground truth dataset of synthetic records with fu
 
 These metrics cover **extraction quality** — the accuracy of the LLM extraction prompt in producing correct entities and facts from a single record. They are evaluated offline against a synthetic ground truth dataset via `psc eval --dataset <path>`.
 
-**Not covered (future work):** end-to-end graph quality metrics including graph-level entity resolution (merge/split correctness across the full Neo4j graph), temporal edge integrity after indexer processing, and retriever answer quality. These require a running system and are tracked separately.
+**Not covered (future work):** end-to-end graph quality metrics including graph-level entity resolution (merge/split correctness across the full Neo4j graph), temporal edge integrity after Extraction processing, and retriever answer quality. These require a running system and are tracked separately.
 
 ---
 

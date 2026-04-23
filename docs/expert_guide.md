@@ -149,7 +149,7 @@ The context is everything the expert receives. No pearscarf internals.
 
 - **`ctx.storage.save_record(type, raw, content, metadata, dedup_key)`** — save a record. `raw` = original data, `content` = LLM-ready string, `metadata` = structured fields as dict.
 - **`ctx.storage.get_record(id)`** — look up a record
-- **`ctx.storage.mark_relevant(id)`** — mark a record for indexing
+- **`ctx.storage.mark_relevant(id)`** — mark a record for extraction
 - **`ctx.bus.send(session_id, to_agent, content)`** — send a message
 - **`ctx.bus.create_session(summary)`** — create a new session
 - **`ctx.log.write(agent, event_type, message)`** — log an event
@@ -235,7 +235,7 @@ are only logged internally.
 
 ### `knowledge/extraction.md`
 
-Source-specific extraction guidance — tells the indexer what to extract from this source's records and what to ignore. PearScarf automatically combines this with its universal extraction rules and entity type definitions when processing your records:
+Source-specific extraction guidance — tells the Extraction consumer what to extract from this source's records and what to ignore. PearScarf automatically combines this with its universal extraction rules and entity type definitions when processing your records:
 
 ```markdown
 ## GitHub extraction guidance
@@ -336,7 +336,7 @@ psc run --poll
 1. **Startup** — `start_system()` calls `get_tools(ctx)` on your connect module. The returned connect instance is cached by record type. If `agent.md` exists, an `AgentRunner` starts for your expert.
 2. **Polling** — if `--poll`, `start(ctx)` is called on your ingester module. Your polling loop runs as a daemon thread.
 3. **Messages** — when the worker sends a message to your expert (by name), the `AgentRunner` dispatches it to your LLM agent with your tools.
-4. **Ingestion** — your `ingest_record()` writes to the generic `records` table + your typed table. The worker triages the record (relevant/noise). The indexer picks up relevant records and extracts entities/facts using your `extraction.md`.
+4. **Ingestion** — your `ingest_record()` writes to the generic `records` table + your typed table. The worker triages the record (relevant/noise). The Extraction consumer picks up relevant records and extracts entities/facts using your `extraction.md`.
 
 ## See also
 

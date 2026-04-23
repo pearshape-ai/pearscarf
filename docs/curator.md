@@ -16,7 +16,7 @@ Semantic dedup (AFFILIATED and ASSERTED) used to live here. It was removed when 
 
 ## How it runs
 
-Follows the same worker loop pattern as the indexer: poll `curator_queue`, claim one entry, process inline, delete entry, repeat. One entry at a time — no concurrency.
+Follows the same consumer pattern as Extraction: poll `curator_queue`, claim one entry, process inline, delete entry, repeat. One entry at a time — no concurrency.
 
 Per cycle:
 1. Expired commitment scan (global)
@@ -24,7 +24,7 @@ Per cycle:
 
 ## Triggering
 
-The indexer enqueues `record_id` in `curator_queue` after `_mark_indexed` succeeds. The Curator never touches records where `indexed=false`.
+Extraction enqueues `record_id` in `curator_queue` after `_mark_indexed` succeeds. The Curator never touches records where `indexed=false`.
 
 ## Crash recovery
 
