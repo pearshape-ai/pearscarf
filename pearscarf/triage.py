@@ -30,6 +30,7 @@ from pearscarf.knowledge import (
 from pearscarf.storage import store
 from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.tools import BaseTool, ToolRegistry
+from pearscarf.tracked_call import _record_id_var
 
 
 class ClassifyTriageTool(BaseTool):
@@ -110,12 +111,15 @@ class Triage(Consumer):
         return self._claim_one()
 
     def _handle(self, record: dict) -> None:
+        token = _record_id_var.set(record["id"])
         try:
             self._process(record)
         except Exception:
             # Release the claim so the record retries on the next loop.
             self._release_claim(record["id"])
             raise  # Consumer base logs + continues.
+        finally:
+            _record_id_var.reset(token)
 
     # --- Triage-specific logic ---
 

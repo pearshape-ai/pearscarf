@@ -17,6 +17,7 @@ from typing import Any
 from pearscarf.agents.base import BaseAgent
 from pearscarf.consumer import Consumer
 from pearscarf.storage import graph, vectorstore
+from pearscarf.tracked_call import _record_id_var
 from pearscarf import log
 from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.registry import compose_prompt
@@ -169,7 +170,11 @@ class Extraction(Consumer):
         return self._pending.pop(0)
 
     def _handle(self, record: dict) -> None:
-        self._process_record(record)
+        token = _record_id_var.set(record["id"])
+        try:
+            self._process_record(record)
+        finally:
+            _record_id_var.reset(token)
 
     # --- Debug output ---
 

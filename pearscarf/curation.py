@@ -14,6 +14,7 @@ from pearscarf.consumer import Consumer
 from pearscarf.config import CURATOR_CLAIM_TIMEOUT, CURATOR_POLL_INTERVAL
 from pearscarf.storage import graph
 from pearscarf.storage.db import _get_conn, init_db
+from pearscarf.tracked_call import _record_id_var
 
 
 def _now() -> str:
@@ -45,6 +46,7 @@ class Curation(Consumer):
 
     def _handle(self, record_id: str) -> None:
         self._current_record_id = record_id
+        token = _record_id_var.set(record_id)
         try:
             self._process(record_id)
             self._delete_entry(record_id)
@@ -56,6 +58,7 @@ class Curation(Consumer):
             raise  # Consumer base logs + continues
         finally:
             self._current_record_id = None
+            _record_id_var.reset(token)
 
     # --- Queue operations ---
 
