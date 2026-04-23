@@ -19,7 +19,6 @@ dependencies = [
     "httpx",
     "langsmith",
     "neo4j",
-    "playwright",
     "psycopg[binary]",
     "psycopg-pool",
     "qdrant-client",
