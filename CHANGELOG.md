@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.26.13
+- Fix `NameError` in `pearscarf/eval/runner.py`: `_pending_record_count` referenced `store.RELEVANT` but the module only imported `graph` from `pearscarf.storage`. Added `store` to the same import. Surfaced while running `psc eval er --dataset …` against a fresh graph.
+
 ## 1.26.12
 - Per-Consumer turn ceiling. Each consumer that spawns an agent declares a `max_turns` class attribute; the agent's per-run for-loop uses it instead of the global `MAX_TURNS=30`. Defaults post-refactor: `Triage=3`, `Extraction=10`, `Assistant=15`, `ExpertBot=15`. Curation spawns no agent, no ceiling. `BaseAgent.__init__` grows an optional `max_turns` kwarg that overrides the global when set; the named agent subclasses (`ExtractorAgent`, `TriageAgent`, `AssistantAgent`, `ExpertAgent`) pass it through. When a run exhausts the ceiling, `mark_run_hit_ceiling(run_id)` updates the final turn's `stop_reason` to `turn_ceiling` so dashboards can filter / count ceiling hits directly; `BaseAgent.run()` also returns the string `"Turn ceiling reached."` instead of the old `"Max turns reached."`. Framed as a tuning knob, not a safety rail: tighter per-consumer bounds reflect each role's natural shape, not a cost-cap mechanism. Daily token budgets + bus access control remain parked until dashboards have produced enough signal to pick informed values.
 

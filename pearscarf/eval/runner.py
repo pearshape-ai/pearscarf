@@ -24,7 +24,7 @@ import yaml
 
 from pearscarf import __version__ as pearscarf_version
 from pearscarf.config import EXTRACTION_MODEL, EXTRACTION_TEMPERATURE, EXTRACTION_MAX_TOKENS
-from pearscarf.storage import graph
+from pearscarf.storage import graph, store
 from pearscarf.storage.db import _get_conn, init_db
 
 
