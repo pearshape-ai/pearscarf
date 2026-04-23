@@ -143,7 +143,7 @@ pearscarf/
 ├── curation/
 │   └── curator.py           # Background graph quality (expiry, confidence)
 ├── triage/
-│   └── triage_agent.py      # Classifies pending_triage records via LLM
+│   └── triage.py            # Triage consumer + TriageAgent — classifies pending records
 ├── query/
 │   └── context_query.py     # Read-only data access layer for retriever + MCP
 ├── mcp/
@@ -251,7 +251,7 @@ relevancy_check: skip | required
 (ingest) → noise | pending_triage → triaging → relevant | noise | uncertain
 ```
 
-The triage agent (`pearscarf/triage/triage_agent.py`) polls `classification='pending_triage'`, claims atomically via `UPDATE-RETURNING` to `triaging`, and runs an LLM check with onboarding + the expert's `knowledge/relevancy.md` + read-only graph tools (`find_entity`, `search_entities`, `check_alias`, `get_entity_context`). The read-only constraint preserves the extractor/triage boundary — triage can use the graph to judge relevance but never writes facts. Uncertain results sit in an HIL queue pending the human-facing path.
+The Triage consumer (`pearscarf/triage/triage.py`) polls `classification='pending_triage'`, claims atomically via `UPDATE-RETURNING` to `triaging`, and runs `TriageAgent` with onboarding + the expert's `knowledge/relevancy.md` + read-only graph tools (`find_entity`, `search_entities`, `check_alias`, `get_entity_context`). The read-only constraint preserves the extractor/triage boundary — triage can use the graph to judge relevance but never writes facts. Uncertain results sit in an RIL queue pending the human-facing path.
 
 If an expert passes any classification value directly, the framework stores it verbatim — no policy override.
 

@@ -1,21 +1,21 @@
-"""Triage agent — polls pending_triage records and resolves their classification.
+"""Triage — Consumer that classifies pending records as relevant / noise / uncertain.
 
-Structure mirrors Indexer/Curator: threaded polling loop, atomic claim
-via UPDATE-RETURNING (`pending_triage` → `triaging`), LLM check, final
-classification written via store.set_classification.
+Polls `records WHERE classification='pending_triage'`, atomically claims
+one via `UPDATE-RETURNING` (`pending_triage` → `triaging`), runs
+`TriageAgent` with read-only graph tools, and writes the final
+classification through `store.set_classification`.
 
-Crash recovery: on startup any records stuck in `triaging` (previous run
+Crash recovery: on `_setup` any records stuck in `triaging` (previous run
 died mid-process) are reset to `pending_triage` so they retry.
 """
 
 from __future__ import annotations
 
-import threading
-import traceback
 from typing import Any
 
 from pearscarf import log
 from pearscarf.agents.base import BaseAgent
+from pearscarf.consumer import Consumer
 from pearscarf.extraction.extraction_tools import (
     CheckAliasTool,
     FindEntityTool,
@@ -30,9 +30,6 @@ from pearscarf.knowledge import (
 from pearscarf.storage import store
 from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.tools import BaseTool, ToolRegistry
-
-
-TRIAGE_POLL_INTERVAL = 5
 
 
 class ClassifyTriageTool(BaseTool):
@@ -70,24 +67,63 @@ class ClassifyTriageTool(BaseTool):
         return f"classification recorded: {kwargs['classification']}"
 
 
-class TriageAgent:
-    """Background agent that drains the pending_triage queue."""
+class TriageAgent(BaseAgent):
+    """LLM agent spawned per record by `Triage` to classify relevance.
 
-    def __init__(self, log_fn=None) -> None:
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._log_fn = log_fn
+    Thin named subclass of `BaseAgent` — same run loop, fixed agent_name.
+    """
 
-    def _print(self, msg: str) -> None:
-        if self._log_fn:
-            self._log_fn(f"[triage] {msg}")
+    def __init__(
+        self,
+        tool_registry,
+        system_prompt: str = "",
+        on_tool_call=None,
+        on_text=None,
+        on_tool_result=None,
+    ) -> None:
+        super().__init__(
+            tool_registry=tool_registry,
+            system_prompt=system_prompt,
+            agent_name="triage_agent",
+            on_tool_call=on_tool_call,
+            on_text=on_text,
+            on_tool_result=on_tool_result,
+        )
+
+
+class Triage(Consumer):
+    """Consumer that drains the pending_triage queue."""
+
+    name = "triage"
+    default_poll_interval = 5.0
+
+    def __init__(self, poll_interval: float | None = None) -> None:
+        super().__init__(poll_interval=poll_interval)
+
+    # --- Consumer hooks ---
+
+    def _setup(self) -> None:
+        init_db()
+        self._reset_stale_triaging()
+
+    def _next(self) -> dict | None:
+        return self._claim_one()
+
+    def _handle(self, record: dict) -> None:
+        try:
+            self._process(record)
+        except Exception:
+            # Release the claim so the record retries on the next loop.
+            self._release_claim(record["id"])
+            raise  # Consumer base logs + continues.
+
+    # --- Triage-specific logic ---
 
     def _reset_stale_triaging(self) -> None:
         """Reset records stuck in `triaging` back to `pending_triage`.
 
-        Called on startup. A previous run may have claimed records and
-        died before writing the final classification — this lets them
-        retry.
+        A previous run may have claimed records and died before writing
+        the final classification — this lets them retry.
         """
         with _get_conn() as conn:
             rows = conn.execute(
@@ -97,7 +133,10 @@ class TriageAgent:
             ).fetchall()
             if rows:
                 conn.commit()
-                self._print(f"reset {len(rows)} stale triaging record(s)")
+                log.write(
+                    self.name, "--", "action",
+                    f"reset {len(rows)} stale triaging record(s)",
+                )
 
     def _claim_one(self) -> dict | None:
         """Atomically claim the oldest pending_triage record."""
@@ -131,7 +170,7 @@ class TriageAgent:
             )
         else:
             log.write(
-                "triage", "--", "warning",
+                self.name, "--", "warning",
                 f"no relevancy guidance for expert {expert_name!r} — "
                 "falling back to onboarding-only framing",
             )
@@ -160,16 +199,15 @@ class TriageAgent:
             f"{record.get('content') or '(no content)'}"
         )
 
-        agent = BaseAgent(
+        agent = TriageAgent(
             tool_registry=registry,
             system_prompt=system_prompt,
-            agent_name="triage_agent",
         )
         agent.run(user_message)
 
         if classify_tool.result is None:
             log.write(
-                "triage", "--", "warning",
+                self.name, "--", "warning",
                 f"triage didn't call classify for {record_id} — marking uncertain",
             )
             store.set_classification(record_id, store.UNCERTAIN)
@@ -178,39 +216,6 @@ class TriageAgent:
         result = classify_tool.result
         store.set_classification(record_id, result["classification"])
         log.write(
-            "triage", "--", "action",
+            self.name, "--", "action",
             f"{record_id} -> {result['classification']}: {result['reasoning'][:160]}",
         )
-        self._print(f"{record_id} -> {result['classification']}")
-
-    def _loop(self) -> None:
-        init_db()
-        self._reset_stale_triaging()
-        while not self._stop.is_set():
-            record = self._claim_one()
-            if record is None:
-                self._stop.wait(TRIAGE_POLL_INTERVAL)
-                continue
-            try:
-                self._process(record)
-            except Exception:
-                traceback.print_exc()
-                self._release_claim(record["id"])
-
-    def start(self) -> None:
-        self._thread = threading.Thread(
-            target=self._loop, name="triage", daemon=True
-        )
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=5)
-
-    def run_foreground(self) -> None:
-        """Run the triage loop in the foreground (blocking)."""
-        try:
-            self._loop()
-        except KeyboardInterrupt:
-            pass
