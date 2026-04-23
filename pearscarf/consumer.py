@@ -20,6 +20,11 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from pearscarf import log
+from pearscarf.tracked_call import (
+    _consumer_var,
+    _runtime_id_var,
+    register_runtime,
+)
 
 
 class Consumer(ABC):
@@ -54,6 +59,15 @@ class Consumer(ABC):
         """
 
     def _loop(self) -> None:
+        # Register one `runtimes` row for this Consumer boot and set the
+        # ContextVars that `tracked_call` reads. ContextVar scope is per-
+        # thread/async-task, so doing this inside _loop (which runs in the
+        # Consumer's own thread under start(), or the main thread under
+        # run_foreground()) is the right place.
+        self._runtime_id = register_runtime(self.name)
+        _runtime_id_var.set(self._runtime_id)
+        _consumer_var.set(self.name)
+
         try:
             self._setup()
         except Exception:

@@ -172,6 +172,63 @@ CREATE TABLE IF NOT EXISTS expert_record_schemas (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (expert_name, record_type, version)
 );
+
+-- Observability: one row per Consumer boot (see notion/design/observability-and-safety.md)
+CREATE TABLE IF NOT EXISTS runtimes (
+    id TEXT PRIMARY KEY,
+    consumer TEXT NOT NULL,
+    pearscarf_version TEXT NOT NULL,
+    expert_versions JSONB NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    hostname TEXT,
+    pid INT
+);
+
+-- Observability: deduped system prompts referenced by llm_calls
+CREATE TABLE IF NOT EXISTS llm_prompts (
+    hash TEXT PRIMARY KEY,
+    body TEXT NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Observability: one row per LLM API call (one turn of one agent run)
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    runtime_id TEXT NOT NULL REFERENCES runtimes(id),
+    consumer TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    pearscarf_version TEXT NOT NULL,
+
+    run_id TEXT NOT NULL,
+    turn_index INT NOT NULL,
+
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    prompt_hash TEXT NOT NULL REFERENCES llm_prompts(hash),
+    stop_reason TEXT NOT NULL,
+    tool_calls JSONB,
+
+    input_tokens INT NOT NULL,
+    output_tokens INT NOT NULL,
+    cache_creation_tokens INT NOT NULL DEFAULT 0,
+    cache_read_tokens INT NOT NULL DEFAULT 0,
+    latency_ms INT,
+
+    record_id TEXT,
+    session_id TEXT,
+
+    error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_calls_consumer_time ON llm_calls(consumer, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_run ON llm_calls(run_id);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_record ON llm_calls(record_id) WHERE record_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_llm_calls_session ON llm_calls(session_id) WHERE session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_llm_calls_version_time ON llm_calls(pearscarf_version, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_model_time ON llm_calls(provider, model, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_runtime ON llm_calls(runtime_id);
 """
 
 

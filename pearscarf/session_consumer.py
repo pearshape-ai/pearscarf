@@ -21,6 +21,7 @@ from pearscarf.bus import MessageBus
 from pearscarf.consumer import Consumer
 from pearscarf.expert_context import ExpertContext
 from pearscarf.tracing import trace_span
+from pearscarf.tracked_call import _session_id_var
 
 
 class SessionConsumer(Consumer):
@@ -65,6 +66,7 @@ class SessionConsumer(Consumer):
             f"from={from_agent}: {content[:200]}",
         )
 
+        session_token = _session_id_var.set(session_id)
         agent = self._get_agent(session_id)
         status.set_status(self.name, session_id, "working")
         try:
@@ -111,6 +113,7 @@ class SessionConsumer(Consumer):
                     span.end(outputs={"response": response[:500]})
         finally:
             status.clear_status(self.name, session_id)
+            _session_id_var.reset(session_token)
 
     # --- Per-session agent cache ---
 
