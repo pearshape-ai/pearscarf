@@ -33,9 +33,14 @@ load_dotenv(_ROOT / "env/.env")
 from pearscarf.storage.db import _get_conn  # noqa: E402
 
 
-# Rates in $/M tokens. Source: anthropic.com/pricing as of 2026-04-23.
+# Rates in $/M tokens. Rates as of 2026-04-23.
 # Keyed by the exact `model` string logged to `llm_calls.model`.
+# Anthropic: anthropic.com/pricing. OpenAI: openai.com/api/pricing.
+# OpenAI doesn't charge a separate "cache_write" rate — prompt-cache writes
+# are billed at the input rate, with cached reads discounted. We encode that
+# by setting cache_write = input.
 PRICES: dict[str, dict[str, float]] = {
+    # --- Anthropic ---
     "claude-sonnet-4-5-20250929": {
         "input": 3.00,
         "output": 15.00,
@@ -47,6 +52,43 @@ PRICES: dict[str, dict[str, float]] = {
         "output": 5.00,
         "cache_write": 1.25,
         "cache_read": 0.10,
+    },
+    # --- OpenAI ---
+    "gpt-4o-mini": {
+        "input": 0.15,
+        "output": 0.60,
+        "cache_write": 0.15,
+        "cache_read": 0.075,
+    },
+    "gpt-4.1-mini": {
+        "input": 0.40,
+        "output": 1.60,
+        "cache_write": 0.40,
+        "cache_read": 0.10,
+    },
+    "gpt-4o": {
+        "input": 2.50,
+        "output": 10.00,
+        "cache_write": 2.50,
+        "cache_read": 1.25,
+    },
+    "gpt-5": {
+        "input": 0.625,
+        "output": 5.00,
+        "cache_write": 0.625,
+        "cache_read": 0.125,
+    },
+    "gpt-5-mini": {
+        "input": 0.25,
+        "output": 2.00,
+        "cache_write": 0.25,
+        "cache_read": 0.025,
+    },
+    "gpt-5-nano": {
+        "input": 0.05,
+        "output": 0.40,
+        "cache_write": 0.05,
+        "cache_read": 0.005,
     },
 }
 

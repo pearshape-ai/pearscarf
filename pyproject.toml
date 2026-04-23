@@ -12,6 +12,7 @@ classifiers = [
 ]
 dependencies = [
     "anthropic",
+    "openai",
     "click",
     "discord.py",
     "google-api-python-client",

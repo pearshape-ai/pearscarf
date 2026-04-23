@@ -8,7 +8,11 @@ _ENV_DIR = _Path(__file__).resolve().parent.parent / "env"
 load_dotenv(_ENV_DIR / ".env")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 MODEL = os.getenv("MODEL", "claude-sonnet-4-5-20250929")
+# Override provider detection (usually inferred from MODEL prefix).
+# Values: "anthropic" | "openai" | "" (infer). See agents/llm_client.py.
+PROVIDER = os.getenv("PROVIDER", "").lower()
 MAX_TURNS = int(os.getenv("MAX_TURNS", "30"))
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 

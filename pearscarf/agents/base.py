@@ -4,15 +4,14 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-import anthropic
-
-from pearscarf.config import ANTHROPIC_API_KEY, MAX_TURNS, MODEL
+from pearscarf.agents.llm_client import get_llm_client
+from pearscarf.config import MAX_TURNS, MODEL
 from pearscarf.tools import ToolRegistry
 from pearscarf.tracked_call import (
     _run_id_var,
     _turn_index_var,
     mark_run_hit_ceiling,
-    tracked_anthropic_call,
+    tracked_call,
 )
 from pearscarf.tracing import trace_child, trace_span
 
@@ -28,10 +27,7 @@ class BaseAgent:
         on_tool_result: Callable[[str, str], None] | None = None,
         max_turns: int | None = None,
     ) -> None:
-        self._client = anthropic.Anthropic(
-            api_key=ANTHROPIC_API_KEY or None,
-            max_retries=3,
-        )
+        self._client = get_llm_client(MODEL)
         self._registry = tool_registry
         self._messages: list[dict] = []
         self._system_prompt = system_prompt
@@ -47,28 +43,13 @@ class BaseAgent:
     def run(self, user_message: str) -> str:
         self._messages.append({"role": "user", "content": user_message})
 
-        kwargs: dict[str, Any] = {
+        invoke_kwargs: dict[str, Any] = {
+            "system": self._system_prompt,
+            "messages": self._messages,
+            "tool_schemas": self._registry.all_schemas(),
             "model": MODEL,
             "max_tokens": 4096,
-            "messages": self._messages,
         }
-        tool_schemas = self._registry.all_schemas()
-        if tool_schemas:
-            # Cache tools + everything before them (including the system prompt).
-            tool_schemas[-1] = {
-                **tool_schemas[-1],
-                "cache_control": {"type": "ephemeral"},
-            }
-            kwargs["tools"] = tool_schemas
-        if self._system_prompt:
-            # Stable per-agent; per-record user messages stay uncached.
-            kwargs["system"] = [
-                {
-                    "type": "text",
-                    "text": self._system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
 
         run_id = str(uuid.uuid4())
         run_token = _run_id_var.set(run_id)
@@ -89,8 +70,8 @@ class BaseAgent:
                             metadata={"agent": self._agent_name, "turn": turn},
                             inputs={"model": MODEL, "message_count": len(self._messages)},
                         ) as llm_span:
-                            response = tracked_anthropic_call(
-                                self._client, self._agent_name, **kwargs,
+                            response = tracked_call(
+                                self._client, self._agent_name, **invoke_kwargs,
                             )
                             self.total_input_tokens += response.usage.input_tokens
                             self.total_output_tokens += response.usage.output_tokens
@@ -103,60 +84,49 @@ class BaseAgent:
                     finally:
                         _turn_index_var.reset(turn_token)
 
-                    self._messages.append(
-                        {"role": "assistant", "content": response.content}
-                    )
+                    # Append assistant message in provider-native shape.
+                    self._messages.append(self._client.build_assistant_message(response))
 
-                    # Emit any text blocks as they come
-                    for block in response.content:
-                        if block.type == "text" and self._on_text:
-                            self._on_text(block.text)
+                    # Emit any text as it comes.
+                    if response.text and self._on_text:
+                        self._on_text(response.text)
 
                     if response.stop_reason == "end_turn":
-                        result = self._extract_text(response)
                         if parent:
-                            parent.end(outputs={"result": result[:500]})
-                        return result
+                            parent.end(outputs={"result": response.text[:500]})
+                        return response.text
 
                     if response.stop_reason == "tool_use":
-                        tool_results = []
-                        for block in response.content:
-                            if block.type != "tool_use":
-                                continue
+                        tool_outputs: list[tuple[str, str]] = []
+                        for tc in response.tool_calls:
                             if self._on_tool_call:
-                                self._on_tool_call(block.name, block.input)
+                                self._on_tool_call(tc.name, tc.input)
 
                             with trace_child(
                                 parent,
-                                f"tool:{block.name}",
+                                f"tool:{tc.name}",
                                 run_type="tool",
-                                metadata={"agent": self._agent_name, "tool": block.name},
-                                inputs=block.input,
+                                metadata={"agent": self._agent_name, "tool": tc.name},
+                                inputs=tc.input,
                             ) as tool_span:
                                 try:
-                                    result = self._registry.get(block.name).execute(
-                                        **block.input
-                                    )
+                                    result = self._registry.get(tc.name).execute(**tc.input)
                                 except Exception as exc:
                                     result = f"Tool error: {exc}"
                                 if tool_span:
                                     tool_span.end(outputs={"result": result[:500]})
 
                             if self._on_tool_result:
-                                self._on_tool_result(block.name, result)
-                            tool_results.append(
-                                {
-                                    "type": "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content": result,
-                                }
-                            )
-                        self._messages.append({"role": "user", "content": tool_results})
+                                self._on_tool_result(tc.name, result)
+                            tool_outputs.append((tc.id, result))
+
+                        self._messages.extend(
+                            self._client.format_tool_results(tool_outputs)
+                        )
                     else:
-                        result = self._extract_text(response)
                         if parent:
-                            parent.end(outputs={"result": result[:500]})
-                        return result
+                            parent.end(outputs={"result": response.text[:500]})
+                        return response.text
 
                 # Ceiling hit — flag the last logged turn so dashboards see it.
                 mark_run_hit_ceiling(run_id)
@@ -165,8 +135,3 @@ class BaseAgent:
                 return "Turn ceiling reached."
         finally:
             _run_id_var.reset(run_token)
-
-    @staticmethod
-    def _extract_text(response: anthropic.types.Message) -> str:
-        parts = [b.text for b in response.content if b.type == "text"]
-        return "\n".join(parts)

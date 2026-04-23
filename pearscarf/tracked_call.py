@@ -4,9 +4,10 @@ Every LLM call writes one row to `llm_calls`, with its system prompt
 deduped into `llm_prompts` and a runtime-snapshot row in `runtimes`.
 See `notion/design/observability-and-safety.md`.
 
-Today the only wrapper is Anthropic-specific (`tracked_anthropic_call`);
-the schema carries `provider` so adding a second provider later is an
-additive adapter, no migration.
+`tracked_call` wraps an `LLMClient` (Anthropic or OpenAI, via the
+`pearscarf.agents.llm_client` layer) and logs a normalized `LLMResponse`.
+The `provider` column on `llm_calls` is populated from the client, so
+the observability shape is provider-agnostic end-to-end.
 """
 
 from __future__ import annotations
@@ -103,40 +104,25 @@ def mark_run_hit_ceiling(run_id: str) -> None:
         traceback.print_exc()
 
 
-def _stringify_system(system: Any) -> str:
-    """Flatten Anthropic's system-field shapes (string or list of content blocks)."""
-    if not system:
-        return ""
-    if isinstance(system, str):
-        return system
-    if isinstance(system, list):
-        parts = []
-        for block in system:
-            if isinstance(block, dict) and block.get("type") == "text":
-                parts.append(block.get("text", ""))
-            elif isinstance(block, str):
-                parts.append(block)
-        return "".join(parts)
-    return str(system)
+def tracked_call(client: Any, agent_name: str, **invoke_kwargs: Any) -> Any:
+    """Invoke `client.invoke(**invoke_kwargs)` and log one row to llm_calls.
 
-
-def tracked_anthropic_call(client: Any, agent_name: str, **kwargs: Any) -> Any:
-    """Wrap anthropic.messages.create. Log one row to llm_calls.
-
-    Any failure in the logging path is swallowed — observability is
-    never allowed to break the main flow.
+    Accepts any LLMClient (`AnthropicClient`, `OpenAIClient`, …). Observability
+    failures are swallowed — logging must never break the main flow.
     """
-    system_prompt = _stringify_system(kwargs.get("system"))
+    system_prompt = invoke_kwargs.get("system") or ""
     prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
-    model = kwargs.get("model", "")
+    model = invoke_kwargs.get("model", "")
+    provider = getattr(client, "provider_name", "unknown")
 
     start = time.monotonic()
     try:
-        response = client.messages.create(**kwargs)
+        response = client.invoke(**invoke_kwargs)
     except Exception as exc:
         latency_ms = int((time.monotonic() - start) * 1000)
         _safe_log(
             agent_name=agent_name,
+            provider=provider,
             model=model,
             system_prompt=system_prompt,
             prompt_hash=prompt_hash,
@@ -149,6 +135,7 @@ def tracked_anthropic_call(client: Any, agent_name: str, **kwargs: Any) -> Any:
     latency_ms = int((time.monotonic() - start) * 1000)
     _safe_log(
         agent_name=agent_name,
+        provider=provider,
         model=model,
         system_prompt=system_prompt,
         prompt_hash=prompt_hash,
@@ -169,6 +156,7 @@ def _safe_log(**kwargs: Any) -> None:
 
 def _log_call(
     agent_name: str,
+    provider: str,
     model: str,
     system_prompt: str,
     prompt_hash: str,
@@ -191,12 +179,10 @@ def _log_call(
         usage = response.usage
         input_tokens = usage.input_tokens
         output_tokens = usage.output_tokens
-        cache_creation = getattr(usage, "cache_creation_input_tokens", None) or 0
-        cache_read = getattr(usage, "cache_read_input_tokens", None) or 0
+        cache_creation = usage.cache_creation_tokens
+        cache_read = usage.cache_read_tokens
         stop_reason = response.stop_reason or "unknown"
-        tool_names = [
-            block.name for block in response.content if getattr(block, "type", "") == "tool_use"
-        ]
+        tool_names = [tc.name for tc in response.tool_calls]
         tool_calls = tool_names if tool_names else None
     else:
         input_tokens = 0
@@ -227,7 +213,7 @@ def _log_call(
                 pearscarf.__version__,
                 run_id,
                 turn_index,
-                "anthropic",
+                provider,
                 model,
                 prompt_hash,
                 stop_reason,
