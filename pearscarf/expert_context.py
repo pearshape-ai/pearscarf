@@ -6,7 +6,7 @@ existing pearscarf internals. Experts import only from this module — no
 reaching into pearscarf's storage, bus, or log packages directly.
 
 The same context is used by default expert agents (gmailscarf,
-linearscarf) AND internal agents (worker, retriever, ingest).
+linearscarf) AND internal agents (assistant, retriever, ingest).
 """
 
 from __future__ import annotations

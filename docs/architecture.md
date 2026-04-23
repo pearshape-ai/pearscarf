@@ -14,7 +14,7 @@
 └────────────┬──────────────────────────┬─────────────────┘
              │ Postgres messages         │ context_query.py
 ┌────────────▼──────────────────────────┐│
-│            Worker Agent                ││
+│            Assistant                   ││
 │   (reasoning, routing, human surface)  ││
 └──┬──────┬──────┬──────┬───────────────┘│
    │      │      │      │               │
@@ -91,7 +91,7 @@ Experts do not import pearscarf internals. The context is the contract.
    b. Load tools module              — get_tools(ctx) → connect instance, cached by record_type
    c. Start LLM agent                — if tools + knowledge/agent.md exist → AgentRunner
    d. Start ingester                 — if --poll and ingester_module exists → start(ctx)
-3. Start internal agents             — retriever, worker
+3. Start internal agents             — retriever, assistant
 4. Start extraction consumer
 5. Start MCP server
 ```
@@ -148,10 +148,10 @@ pearscarf/
 │   └── context_query.py     # Read-only data access layer for retriever + MCP
 ├── mcp/
 │   └── mcp_server.py        # FastMCP over HTTP/SSE, 10 tools
+├── assistant.py             # Assistant(Consumer) + AssistantAgent — human + expert messages
 ├── agents/
 │   ├── base.py              # BaseAgent — agentic loop on Anthropic SDK
 │   ├── expert.py            # ExpertAgent — domain-specialized, receives ExpertContext
-│   ├── worker.py            # Worker — routing, human interface
 │   └── runner.py            # AgentRunner — polls bus, dispatches to agents, caches per session
 ├── experts/
 │   ├── ingest.py            # Ingest expert — file-based data entry (seed + JSON records)
@@ -169,7 +169,7 @@ pearscarf/
 │   ├── ingest/              # Ingest expert prompts
 │   ├── extractor/           # Extractor agent system prompt
 │   ├── retriever/           # Retriever agent prompt
-│   └── worker/              # Worker agent prompt
+│   └── assistant/           # Assistant system prompt
 ├── eval/
 │   ├── runner.py            # Eval pipeline (ER + facts)
 │   ├── report.py            # Report formatter
@@ -185,7 +185,7 @@ pearscarf/
 
 All agent-to-agent communication goes through Postgres. No direct function calling between agents. Each agent runs in its own thread, polling for unread messages.
 
-- **Worker** uses `send_message` to send to humans or experts (by package name: `gmailscarf`, `linearscarf`, `githubscarf`)
+- **Assistant** uses `send_message` to send to humans or experts (by package name: `gmailscarf`, `linearscarf`, `githubscarf`)
 - **Experts** use `reply` to send results back to whoever requested work
 - The runner never auto-replies — all outbound routing is the agent's decision
 
@@ -194,7 +194,7 @@ All agent-to-agent communication goes through Postgres. No direct function calli
 Every conversation is a **session** (`ses_001`, `ses_002`, ...). Messages are tagged with a session ID. The AgentRunner caches one agent instance per session and rebuilds message history from the DB before each LLM call.
 
 - **Human-initiated**: human types in REPL or Discord → new session
-- **Expert-initiated**: expert detects an event → creates session, notifies worker
+- **Expert-initiated**: expert detects an event → creates session, notifies assistant
 - **Discord**: threads map to sessions via `discord_threads` table
 
 ## Database Schema

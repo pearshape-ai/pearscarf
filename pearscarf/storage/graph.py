@@ -1,6 +1,7 @@
 """Knowledge graph CRUD — entities, edges, facts.
 
-The Indexer writes to the graph (Neo4j). The worker and other agents read from it.
+Extraction and Curation write to the graph (Neo4j). The assistant and other
+agents read from it.
 """
 
 from __future__ import annotations

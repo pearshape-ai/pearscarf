@@ -31,4 +31,4 @@ IMPORTANT: You MUST use the reply tool to send your results back. Your text resp
 
 ## Errors
 
-- If a tool returns an error, immediately reply with that error message so the worker can inform the human. Do not try to recover or retry.
+- If a tool returns an error, immediately reply with that error message so the assistant can inform the human. Do not try to recover or retry.

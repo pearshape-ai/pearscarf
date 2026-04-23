@@ -1,7 +1,7 @@
 """System of Record — persistent structured storage for domain data.
 
 Each expert agent owns writing to its domain tables.
-The worker reads from storage for context.
+The assistant reads from storage for context.
 """
 
 from __future__ import annotations
@@ -417,24 +417,6 @@ def list_issues(limit: int = 20) -> list[dict]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
-
-
-def classify_record(
-    record_id: str,
-    classification: str,
-    reason: str = "",
-    human_context: str = "",
-) -> bool:
-    """Set classification on a record. Returns True if updated."""
-    init_db()
-    with _get_conn() as conn:
-        cur = conn.execute(
-            "UPDATE records SET classification = %s, classification_reason = %s, human_context = %s "
-            "WHERE id = %s",
-            (classification, reason, human_context, record_id),
-        )
-        conn.commit()
-        return cur.rowcount > 0
 
 
 def get_pending_records(limit: int = 10) -> list[dict]:

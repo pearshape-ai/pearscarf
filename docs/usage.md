@@ -4,7 +4,7 @@
 
 | Command | Description |
 |---|---|
-| `psc run` | Worker + experts + extraction + MCP server + session REPL |
+| `psc run` | Assistant + experts + extraction + MCP server + session REPL |
 | `psc run --poll` | Full system + expert ingesters (background polling) |
 | `psc dev` | Local-dev monolith: Discord frontend + all services in one process |
 | `psc dev --poll` | Monolith + expert ingesters |
@@ -76,16 +76,16 @@ The REPL shows the active session in the prompt:
 
 ### Message Flow
 
-1. Your message → **worker agent** via Postgres
-2. Worker reasons → may delegate to an **expert** (gmailscarf, linearscarf, githubscarf)
+1. Your message → **assistant** via Postgres
+2. Assistant reasons → may delegate to an **expert** (gmailscarf, linearscarf, githubscarf)
 3. Expert processes the request using its tools
-4. Result flows back: expert → worker → you
+4. Result flows back: expert → assistant → you
 
 ### Notifications
 
 Expert-initiated sessions (e.g. new email detected during polling):
 ```
---- NEW MESSAGE ses_003: worker — New email from investor@acme.com ---
+--- NEW MESSAGE ses_003: assistant — New email from investor@acme.com ---
 ```
 
 Use `/switch ses_003` to interact.

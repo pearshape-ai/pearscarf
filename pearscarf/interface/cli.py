@@ -29,7 +29,7 @@ def cli() -> None:
 @click.option("--poll", is_flag=True, default=False,
               help="Start all enabled expert connectors (each requires its own credentials)")
 def run(poll: bool) -> None:
-    """Start the full system: worker + experts + REPL."""
+    """Start the full system: assistant + experts + REPL."""
     from pearscarf.interface.repl import SessionRepl
     from pearscarf.interface.startup import start_system, stop_system
 
@@ -72,7 +72,7 @@ def discord() -> None:
 def discord_start() -> None:
     """Start the Discord frontend in the foreground (decomposed runtime).
 
-    Runs bot + bus-coupled agents (worker, retriever, expert agents) only.
+    Runs bot + bus-coupled agents (assistant, retriever, expert agents) only.
     Extraction / curator / triage / MCP run in their own containers under the
     decomposed compose. For local monolithic dev, use `psc dev`.
     """
@@ -82,7 +82,7 @@ def discord_start() -> None:
 
 @cli.command()
 def chat() -> None:
-    """Start a direct chat with the worker agent (no session bus)."""
+    """Start a direct chat with the assistant (no session bus)."""
     from pearscarf.agents.base import BaseAgent
     from pearscarf.tools import registry
 
@@ -518,6 +518,26 @@ def extraction_start() -> None:
     from pearscarf.extraction import Extraction
     click.echo("Extraction starting...")
     Extraction().run_foreground()
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def assistant(ctx) -> None:
+    """Assistant — handles human + expert messages on the bus."""
+    if ctx.invoked_subcommand is None:
+        click.echo("Use 'psc assistant start' to run.")
+
+
+@assistant.command("start")
+def assistant_start() -> None:
+    """Start the assistant consumer in the foreground."""
+    from pearscarf.assistant import Assistant
+    from pearscarf.bus import MessageBus
+    from pearscarf.expert_context import build_context
+    bus = MessageBus()
+    ctx = build_context("assistant", bus)
+    click.echo("Assistant starting...")
+    Assistant(ctx=ctx, bus=bus).run_foreground()
 
 
 @cli.group(invoke_without_command=True)

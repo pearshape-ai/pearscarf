@@ -98,7 +98,7 @@ psc dev --poll                 # Local-dev monolith: Discord frontend + all serv
 
 | Command | Description |
 |---|---|
-| `psc run` | Worker + experts + session REPL |
+| `psc run` | Assistant + experts + session REPL |
 | `psc run --poll` | Full system + expert ingesters |
 | `psc dev` | Local-dev monolith: Discord + all services in one process |
 | `psc dev --poll` | Monolith + expert ingesters |
