@@ -148,11 +148,13 @@ pearscarf/
 │   └── context_query.py     # Read-only data access layer for retriever + MCP
 ├── mcp/
 │   └── mcp_server.py        # FastMCP over HTTP/SSE, 10 tools
-├── assistant.py             # Assistant(Consumer) + AssistantAgent — human + expert messages
+├── session_consumer.py      # SessionConsumer — poll bus target, cache per-session agents
+├── assistant.py             # Assistant(SessionConsumer) + AssistantAgent
+├── expert_bot.py            # ExpertBot(SessionConsumer) — one instance per enabled expert
 ├── agents/
 │   ├── base.py              # BaseAgent — agentic loop on Anthropic SDK
 │   ├── expert.py            # ExpertAgent — domain-specialized, receives ExpertContext
-│   └── runner.py            # AgentRunner — polls bus, dispatches to agents, caches per session
+│   └── runner.py            # AgentRunner — retained only for the retriever (dies with 1.26.10)
 ├── experts/
 │   ├── ingest.py            # Ingest expert — file-based data entry (seed + JSON records)
 │   └── retriever.py         # Retriever expert — context queries via context_query.py
@@ -191,7 +193,7 @@ All agent-to-agent communication goes through Postgres. No direct function calli
 
 ## Sessions
 
-Every conversation is a **session** (`ses_001`, `ses_002`, ...). Messages are tagged with a session ID. The AgentRunner caches one agent instance per session and rebuilds message history from the DB before each LLM call.
+Every conversation is a **session** (`ses_001`, `ses_002`, ...). Messages are tagged with a session ID. `SessionConsumer` (the base under Assistant + ExpertBot) caches one agent instance per session and rebuilds message history from the DB before each LLM call.
 
 - **Human-initiated**: human types in REPL or Discord → new session
 - **Expert-initiated**: expert detects an event → creates session, notifies assistant
