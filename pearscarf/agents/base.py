@@ -52,10 +52,23 @@ class BaseAgent:
             "max_tokens": 4096,
             "messages": self._messages,
         }
-        if self._registry.all_schemas():
-            kwargs["tools"] = self._registry.all_schemas()
+        tool_schemas = self._registry.all_schemas()
+        if tool_schemas:
+            # Cache tools + everything before them (including the system prompt).
+            tool_schemas[-1] = {
+                **tool_schemas[-1],
+                "cache_control": {"type": "ephemeral"},
+            }
+            kwargs["tools"] = tool_schemas
         if self._system_prompt:
-            kwargs["system"] = self._system_prompt
+            # Stable per-agent; per-record user messages stay uncached.
+            kwargs["system"] = [
+                {
+                    "type": "text",
+                    "text": self._system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
 
         run_id = str(uuid.uuid4())
         run_token = _run_id_var.set(run_id)

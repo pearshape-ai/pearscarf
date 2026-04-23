@@ -103,13 +103,30 @@ def mark_run_hit_ceiling(run_id: str) -> None:
         traceback.print_exc()
 
 
+def _stringify_system(system: Any) -> str:
+    """Flatten Anthropic's system-field shapes (string or list of content blocks)."""
+    if not system:
+        return ""
+    if isinstance(system, str):
+        return system
+    if isinstance(system, list):
+        parts = []
+        for block in system:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return str(system)
+
+
 def tracked_anthropic_call(client: Any, agent_name: str, **kwargs: Any) -> Any:
     """Wrap anthropic.messages.create. Log one row to llm_calls.
 
     Any failure in the logging path is swallowed — observability is
     never allowed to break the main flow.
     """
-    system_prompt = kwargs.get("system", "") or ""
+    system_prompt = _stringify_system(kwargs.get("system"))
     prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
     model = kwargs.get("model", "")
 
