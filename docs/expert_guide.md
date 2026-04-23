@@ -183,39 +183,54 @@ class GitHubListIssuesTool(BaseTool):
 
 ## Step 4: Ingester module
 
-The ingester runs as a daemon thread when `--poll` is active. It must expose `start(ctx)`.
+The ingester subclasses `pearscarf.consumer.Consumer`. The consumer base owns the poll loop + thread lifecycle; the module exposes `start(ctx)` as a thin entry point the expert registry calls.
+
+Each ingested record lands with `classification='pending_triage'` (via `connect.ingest_record(...)`), which the Triage consumer picks up automatically — the ingester does not touch the bus.
 
 ```python
 from __future__ import annotations
-import threading, time
 from typing import TYPE_CHECKING
+
+from pearscarf.consumer import Consumer
 
 if TYPE_CHECKING:
     from pearscarf.expert_context import ExpertContext
 
 
-def start(ctx: ExpertContext) -> None:
-    from githubscarf.github_connect import GitHubConnect
+class GithubIngest(Consumer):
+    name = "githubscarf"
+    default_poll_interval = 300.0
 
-    connect = GitHubConnect(ctx)
-    interval = int(ctx.config.get("GITHUB_POLL_INTERVAL", "300"))
+    def __init__(self, ctx, poll_interval=None):
+        from githubscarf.github_connect import GitHubConnect
 
-    def _loop():
-        while True:
-            try:
-                issues = connect.list_issues()
-                for issue in issues:
-                    rid = connect.ingest_record(issue)
-                    if rid:
-                        session_id = ctx.bus.create_session(f"New issue #{issue['number']}")
-                        ctx.bus.send(session_id=session_id, to_agent="worker",
-                                     content=f"New issue: {issue['title']}\nRecord: {rid}")
-            except Exception as exc:
-                ctx.log.write(ctx.expert_name, "error", f"Poll failed: {exc}")
-            time.sleep(interval)
+        if poll_interval is None:
+            poll_interval = float(ctx.config.get("GITHUB_POLL_INTERVAL", self.default_poll_interval))
+        super().__init__(poll_interval=poll_interval)
 
-    thread = threading.Thread(target=_loop, daemon=True, name="githubscarf-ingest")
-    thread.start()
+        self._ctx = ctx
+        self._connect = GitHubConnect(ctx)
+        self._pending = []
+
+    def _next(self):
+        if self._pending:
+            return self._pending.pop(0)
+        issues = self._connect.list_issues()
+        if not issues:
+            return None
+        self._pending = list(issues)
+        return self._pending.pop(0) if self._pending else None
+
+    def _handle(self, issue):
+        rid = self._connect.ingest_record(issue)
+        if rid:
+            self._ctx.log.write(self._ctx.expert_name, "action", f"Ingested {rid}")
+
+
+def start(ctx: "ExpertContext"):
+    consumer = GithubIngest(ctx)
+    consumer.start()
+    return consumer._thread
 ```
 
 ## Step 5: Knowledge files
@@ -335,8 +350,8 @@ psc run --poll
 
 1. **Startup** — `start_system()` calls `get_tools(ctx)` on your connect module. The returned connect instance is cached by record type. If `agent.md` exists, an `AgentRunner` starts for your expert.
 2. **Polling** — if `--poll`, `start(ctx)` is called on your ingester module. Your polling loop runs as a daemon thread.
-3. **Messages** — when the worker sends a message to your expert (by name), the `AgentRunner` dispatches it to your LLM agent with your tools.
-4. **Ingestion** — your `ingest_record()` writes to the generic `records` table + your typed table. The worker triages the record (relevant/noise). The Extraction consumer picks up relevant records and extracts entities/facts using your `extraction.md`.
+3. **Messages** — when the assistant sends a message to your expert (by name), the `AgentRunner` dispatches it to your LLM agent with your tools.
+4. **Ingestion** — your `ingest_record()` writes to the generic `records` table + your typed table. Triage classifies the record (relevant/noise); Extraction picks up relevant records and extracts entities/facts using your `extraction.md`.
 
 ## See also
 

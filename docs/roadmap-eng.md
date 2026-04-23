@@ -52,7 +52,7 @@ The goal: a shared memory layer for multi-agent systems that improves itself ove
 
 **Verification and augmentation agent** — async agent outside the write path. Resolves equal-`source_at` conflicts (two current facts for the same slot). Upgrades `inferred` → `verified` via external corroboration (LinkedIn, web search). Enriches entity records with missing data. Flags irresolvable cases for HIL. This is the self-improvement loop.
 
-**Graph correction loop** — natural language correction ("that's wrong") → worker invalidates edge, records correction, verification agent learns from it. Requires audit log of every graph mutation.
+**Graph correction loop** — natural language correction ("that's wrong") → assistant invalidates edge, records correction, verification agent learns from it. Requires audit log of every graph mutation.
 
 **Ontology agent** — HIL for uncertain entity types and fact categories. Updates extraction prompts from feedback. Runs evals to verify no regression. The system learns what matters in a given deployment.
 

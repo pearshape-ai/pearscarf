@@ -88,23 +88,23 @@ class PearscarfBot(discord.Client):
             )
             db.save_thread_mapping(session_id, thread.id, message.channel.id)
 
-            # Send to worker via bus
-            log.write("human", session_id, "message_sent", f"to=worker: {content[:200]}")
+            # Send to assistant via bus
+            log.write("human", session_id, "message_sent", f"to=assistant: {content[:200]}")
             self._bus.send(
                 session_id=session_id,
                 from_agent="human",
-                to_agent="worker",
+                to_agent="assistant",
                 content=content,
                 reasoning="Human message from Discord",
             )
             return
 
-        # In a thread — send to worker
-        log.write("human", session_id, "message_sent", f"to=worker: {content[:200]}")
+        # In a thread — send to assistant
+        log.write("human", session_id, "message_sent", f"to=assistant: {content[:200]}")
         self._bus.send(
             session_id=session_id,
             from_agent="human",
-            to_agent="worker",
+            to_agent="assistant",
             content=content,
             reasoning="Human message from Discord thread",
         )

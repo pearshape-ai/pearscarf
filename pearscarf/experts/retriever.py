@@ -1,6 +1,6 @@
 """Retriever expert agent — searches the knowledge graph and vector store for context.
 
-The worker delegates context queries here. Entity search, facts lookup, and
+The assistant delegates context queries here. Entity search, facts lookup, and
 graph traversal query Neo4j. Vector search queries Qdrant.
 """
 

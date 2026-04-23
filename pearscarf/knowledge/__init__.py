@@ -23,7 +23,7 @@ KNOWLEDGE_DIR = Path(__file__).parent
 
 # prompt name → (relative path under pearscarf/knowledge/, override env var)
 _KNOWLEDGE_MAP: dict[str, tuple[str, str | None]] = {
-    "worker":           ("worker/agent.md",             None),
+    "assistant":        ("assistant/agent.md",          None),
     "retriever":        ("retriever/agent.md",          None),
     "ingest":           ("ingest/agent.md",             None),
     "extractor_agent":  ("extractor/extractor_agent.md", None),

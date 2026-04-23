@@ -254,13 +254,13 @@ class SessionRepl:
                     if self._handle_command(text):
                         continue
 
-                # Send message to worker
+                # Send message to assistant
                 session = self._ensure_session()
-                log.write("human", session, "message_sent", f"to=worker: {text[:200]}")
+                log.write("human", session, "message_sent", f"to=assistant: {text[:200]}")
                 self._bus.send(
                     session_id=session,
                     from_agent="human",
-                    to_agent="worker",
+                    to_agent="assistant",
                     content=text,
                     reasoning="Human input from REPL",
                 )

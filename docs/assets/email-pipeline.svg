@@ -34,9 +34,9 @@
   <line x1="420" y1="160" x2="520" y2="196" stroke="#1565c0" stroke-width="1.2" marker-end="url(#aBlue)"/>
   <text x="480" y="180" font-size="9" fill="#1565c0">saved</text>
 
-  <!-- Worker triage -->
+  <!-- Triage -->
   <rect x="80" y="196" width="220" height="52" rx="7" fill="#fff3e0" stroke="#ffb74d" stroke-width="1.2" filter="url(#shadow)"/>
-  <text x="190" y="218" text-anchor="middle" font-weight="600" fill="#e65100">Worker (triage)</text>
+  <text x="190" y="218" text-anchor="middle" font-weight="600" fill="#e65100">Triage</text>
   <text x="190" y="236" text-anchor="middle" font-size="10" fill="#ef6c00">noise? relevant? ask human?</text>
 
   <!-- Storage box -->

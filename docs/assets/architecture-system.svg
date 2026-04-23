@@ -39,7 +39,7 @@
   <text x="795" y="72" text-anchor="middle" font-weight="600" fill="#6a1b9a">MCP Server</text>
   <text x="795" y="88" text-anchor="middle" font-size="10" fill="#8e24aa">HTTP/SSE - 10 tools</text>
 
-  <!-- Arrows: Discord/REPL → Worker -->
+  <!-- Arrows: Discord/REPL → Assistant -->
   <line x1="140" y1="98" x2="260" y2="138" stroke="#7986cb" stroke-width="1.2" marker-end="url(#aGray)"/>
   <line x1="350" y1="98" x2="340" y2="138" stroke="#7986cb" stroke-width="1.2" marker-end="url(#aGray)"/>
   <text x="195" y="122" font-size="9" fill="#757575">Postgres messages</text>
@@ -50,7 +50,7 @@
 
   <!-- WORKER -->
   <rect x="160" y="138" width="360" height="50" rx="8" fill="#fff3e0" stroke="#ffb74d" stroke-width="1.2" filter="url(#shadow)"/>
-  <text x="340" y="160" text-anchor="middle" font-weight="600" fill="#e65100">Worker Agent</text>
+  <text x="340" y="160" text-anchor="middle" font-weight="600" fill="#e65100">Assistant</text>
   <text x="340" y="176" text-anchor="middle" font-size="10" fill="#ef6c00">reasoning - routing - triage</text>
 
   <!-- EXPERT AGENTS -->
@@ -74,7 +74,7 @@
   <text x="630" y="238" text-anchor="middle" font-weight="500" fill="#2e7d32">Retriever</text>
   <text x="630" y="254" text-anchor="middle" font-size="10" fill="#43a047">context_query</text>
 
-  <!-- Arrows: Worker → Experts -->
+  <!-- Arrows: Assistant → Experts -->
   <line x1="200" y1="188" x2="90" y2="218" stroke="#bdbdbd" stroke-width="1"/>
   <line x1="260" y1="188" x2="225" y2="218" stroke="#bdbdbd" stroke-width="1"/>
   <line x1="340" y1="188" x2="360" y2="218" stroke="#bdbdbd" stroke-width="1"/>

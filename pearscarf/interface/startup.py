@@ -23,6 +23,7 @@ class SystemComponents:
     extraction: Any = None
     curation: Any = None
     triage: Any = None
+    assistant: Any = None
     mcp_server: Any = None
 
 
@@ -37,11 +38,11 @@ def start_system(
     bot_only: skip extraction, curation, triage, and MCP. Intended for the
         decomposed production runtime where those run in their own
         containers; the bot container only needs the bus and the
-        bus-coupled agents (expert agents, retriever, worker).
+        bus-coupled agents (expert agents, retriever, assistant).
     log_fn: callable(str) for status messages (defaults to sys.stdout).
     """
     from pearscarf.agents.runner import AgentRunner
-    from pearscarf.agents.worker import create_worker_agent
+    from pearscarf.assistant import Assistant
     from pearscarf.bus import MessageBus
     from pearscarf.config import MCP_PORT
     from pearscarf.expert_context import build_context
@@ -121,15 +122,11 @@ def start_system(
     components.runners.append(retriever_runner)
     log_fn("Retriever started.")
 
-    worker_ctx = build_context("worker", bus)
-
-    def worker_factory(session_id: str):
-        return create_worker_agent(ctx=worker_ctx, session_id=session_id)
-
-    worker_runner = AgentRunner("worker", worker_factory, bus)
-    worker_runner.start()
-    components.runners.append(worker_runner)
-    log_fn("Worker agent started.")
+    assistant_ctx = build_context("assistant", bus)
+    assistant = Assistant(ctx=assistant_ctx, bus=bus)
+    assistant.start()
+    components.assistant = assistant
+    log_fn("Assistant started.")
 
     if bot_only:
         log_fn("bot_only=True — skipping extraction, curation, triage, and MCP.")
@@ -180,5 +177,7 @@ def stop_system(components: SystemComponents) -> None:
         components.curation.stop()
     if components.extraction:
         components.extraction.stop()
+    if components.assistant:
+        components.assistant.stop()
     for runner in components.runners:
         runner.stop()
