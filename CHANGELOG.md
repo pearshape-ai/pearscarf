@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.27.0
+- Drop the unused `playwright` dependency. It was left over from the pre-1.17.5 browser-based Gmail auth path that was deleted when experts moved to OAuth-only; the dep was never removed. No imports reference it anywhere in `pearscarf/` or `experts/`. Removed from `pyproject.toml`; `uv.lock` regenerated (drops `playwright`, `greenlet`, `pyee` — 165 packages total, down from 168). First of two commits slimming the Docker image (closes PEA-123; advances PEA-134 where the bulk of the weight lives — CUDA / torch).
+
 ## 1.26.13
 - Fix `NameError` in `pearscarf/eval/runner.py`: `_pending_record_count` referenced `store.RELEVANT` but the module only imported `graph` from `pearscarf.storage`. Added `store` to the same import. Surfaced while running `psc eval er --dataset …` against a fresh graph.
 
