@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.27.2
+- Multi-stage Docker build. `Dockerfile` now has a `builder` stage on `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` that resolves and installs deps into `/app/.venv`, and a separate runtime stage on `python:3.12-slim-bookworm` that copies only `/app` + `tini`. Drops uv itself, its package cache, and intermediate build layers from the shipped image. Pushed content size: 358 MB → **333 MB** (−25 MB); local disk usage: 1.82 GB → 1.72 GB. Smoke-tested end-to-end: `psc --version`, `sentence_transformers` import, `torch 2.11.0+cpu`, Consumer and `tracked_call` imports all clean.
+
 ## 1.27.1
 - Pin `torch` to the CPU-only wheel on linux. `sentence-transformers` pulled `torch` transitively; on linux x86_64 the default PyPI wheel is the CUDA build, dragging in ~4 GB of NVIDIA runtime libraries (cuDNN, cuBLAS, NCCL, cuSparseLt, Triton, …) that never run — the dogfood VM and laptops have no GPU. Two `pyproject.toml` changes: (1) promote `torch` from a transitive to a direct dependency so `[tool.uv.sources]` actually applies to it, (2) declare a CPU-only wheel index scoped to `sys_platform == 'linux'`. macOS is unaffected — its default torch wheel is already CPU-only. `uv lock` diff: `+torch 2.11.0+cpu` on linux; dropped `nvidia-curand`, `nvidia-cusolver`, `nvidia-cusparse`, `nvidia-cusparselt-cu13`, `nvidia-nccl-cu13`, `nvidia-nvjitlink`, `nvidia-nvshmem-cu13`, `nvidia-nvtx`, `triton`. Closes PEA-134 pending a rebuild + size-verification.
 
