@@ -86,7 +86,6 @@ def chat() -> None:
     from pearscarf.agents.base import BaseAgent
     from pearscarf.tools import registry
 
-    registry.discover()
     agent = BaseAgent(
         tool_registry=registry,
         on_tool_call=lambda name, args: click.echo(f"  -> {name}({args})"),
@@ -131,7 +130,7 @@ expert.add_command(expert_uninstall_command)
 
 def _resolve_expert(expert_name: str):
     """Look up an enabled expert by name; raise a clean Click error if missing."""
-    from pearscarf.extraction.registry import get_registry
+    from pearscarf.registry import get_registry
 
     expert_def = get_registry().get_by_name(expert_name)
     if expert_def is None or not expert_def.enabled:
@@ -219,7 +218,7 @@ def ingest(seed: str | None, record: str | None, record_type: str | None) -> Non
 
     import importlib
 
-    from pearscarf.extraction.registry import get_registry
+    from pearscarf.registry import get_registry
 
     bus = MessageBus()
     registry = get_registry()
@@ -500,7 +499,7 @@ def triage(ctx) -> None:
 @triage.command("start")
 def triage_start() -> None:
     """Start the triage agent in the foreground."""
-    from pearscarf.triage.triage import Triage
+    from pearscarf.triage import Triage
     click.echo("Triage starting...")
     Triage().run_foreground()
 
@@ -516,7 +515,7 @@ def extraction(ctx) -> None:
 @extraction.command("start")
 def extraction_start() -> None:
     """Start the extraction consumer in the foreground."""
-    from pearscarf.extraction.extraction import Extraction
+    from pearscarf.extraction import Extraction
     click.echo("Extraction starting...")
     Extraction().run_foreground()
 
@@ -532,7 +531,7 @@ def curation(ctx) -> None:
 @curation.command("start")
 def curation_start() -> None:
     """Start the curation consumer in the foreground."""
-    from pearscarf.curation.curation import Curation
+    from pearscarf.curation import Curation
     click.echo("Curation starting...")
     c = Curation()
     c.run_foreground()

@@ -106,7 +106,7 @@ The registry discovers installed experts from the `experts` DB table and builds 
 
 When the Extraction consumer processes a record, the extraction prompt is composed in this order:
 
-1. **Agent role** — `pearscarf/knowledge/extractor/extractor_agent.md`. Behavioural prompt for the extractor agent: how to reason, how to use its graph tools, match-or-new decisions.
+1. **Agent role** — `pearscarf/knowledge/extractor/extractor_agent.md`. Behavioural prompt for the extractor agent: how to reason, how to use its graph tools, match-or-new decisions. Prompt composition lives in `pearscarf.registry`.
 2. **Onboarding** — a single markdown file that onboards PearScarf to the world it will operate in (the team, the kinds of interactions, the vocabulary, what matters, what to ignore). Defaults to `pearscarf/knowledge/onboarding.md` (neutral framing shipped with the repo). Operators override by setting `ONBOARDING_PROMPT_PATH` to their own file (typically `env/onboarding.md`). See `docs/onboarding.example.md` for a template.
 3. **Universal rules** — how to extract entities and facts, edge labels, output format. Shared across all record types. Lives in `pearscarf/knowledge/core/`.
 4. **Entity types** — what kinds of things to look for (person, company, project, event, plus any types declared by experts like repository). Automatically includes new types when an expert is installed.
@@ -137,13 +137,13 @@ pearscarf/
 │   ├── graph.py            # Knowledge graph CRUD — entities, fact-edges, traversal
 │   ├── neo4j_client.py     # Neo4j connection manager
 │   └── vectorstore.py      # Qdrant vector storage — semantic search
-├── extraction/
-│   ├── extraction.py        # Extraction consumer + ExtractorAgent — LLM extraction into graph
-│   └── registry.py          # Expert registry — discovery, prompt composition, connect cache
-├── curation/
-│   └── curation.py          # Curation consumer — graph quality (expiry, confidence)
-├── triage/
-│   └── triage.py            # Triage consumer + TriageAgent — classifies pending records
+├── extraction.py            # Extraction(Consumer) + ExtractorAgent + SaveExtractionTool
+├── triage.py                # Triage(Consumer) + TriageAgent + ClassifyTriageTool
+├── curation.py              # Curation(Consumer) — graph quality (expiry, confidence)
+├── consumer.py              # Consumer base class — poll loop + lifecycle
+├── registry.py              # Expert registry — discovery, prompt composition, connect cache
+├── tools.py                 # BaseTool + ToolRegistry (framework)
+├── graph_access_tools.py    # Read-only graph tools — shared by Triage and Extraction
 ├── query/
 │   └── context_query.py     # Read-only data access layer for retriever + MCP
 ├── mcp/
@@ -157,10 +157,6 @@ pearscarf/
 │   ├── ingest.py            # Ingest expert — file-based data entry (seed + JSON records)
 │   └── retriever.py         # Retriever expert — context queries via context_query.py
 ├── expert_context.py        # ExpertContext + protocols (Storage, Bus, Log) + build_context()
-├── tools/
-│   ├── __init__.py          # BaseTool + ToolRegistry
-│   ├── math.py              # Safe math expression evaluator
-│   └── web_search.py        # DuckDuckGo web search
 ├── interface/
 │   ├── cli.py               # Click CLI
 │   ├── install.py           # Install command, validation pipeline, lifecycle commands

@@ -149,7 +149,6 @@ def create_worker_agent(
 ) -> BaseAgent:
     """Create a WorkerAgent configured for a specific session."""
     registry = ToolRegistry()
-    registry.discover()
     send_tool = SendMessageTool(ctx)
     send_tool._session_id = session_id
     registry.register(send_tool)

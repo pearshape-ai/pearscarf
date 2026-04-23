@@ -243,7 +243,7 @@ def build_context(
     Relevancy policy is resolved once from the registry and handed to
     the storage wrapper so it has no runtime dependency on orchestration.
     """
-    from pearscarf.extraction.registry import get_registry
+    from pearscarf.registry import get_registry
 
     if config is None:
         config = _load_expert_env(expert_name)
@@ -274,7 +274,7 @@ def load_expert(expert_def: Any, bus: Any) -> ExpertContext:
     """
     import importlib
 
-    from pearscarf.extraction.registry import get_registry
+    from pearscarf.registry import get_registry
 
     ctx = build_context(expert_def.name, bus, expert_version=expert_def.version)
     if expert_def.tools_module:

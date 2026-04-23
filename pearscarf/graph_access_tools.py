@@ -1,7 +1,10 @@
-"""Read-only graph tools for the extraction agent.
+"""Read-only graph access tools — shared by Triage and Extraction.
 
-These tools give the agent access to the knowledge graph during
-extraction. All are read-only — writes happen after validation.
+The record-side consumers (Triage, Extraction) need to read the
+knowledge graph during their LLM turn: look up known entities, search
+by name, check surface-form aliases, pull an entity's context. These
+are read-only. The Extraction-specific write tool (`SaveExtractionTool`)
+lives with the `Extraction` consumer in `pearscarf.extraction`.
 """
 
 from __future__ import annotations
@@ -169,62 +172,3 @@ class GetEntityContextTool(BaseTool):
             for c in connections[:10]:
                 parts.append(f"  {c.get('name', '')} ({c.get('type', '')})")
         return "\n".join(parts)
-
-
-class SaveExtractionTool(BaseTool):
-    name = "save_extraction"
-    description = (
-        "Save the final extraction result. Call this once at the end "
-        "after you have identified all entities and extracted all facts. "
-        "Every fact text MUST be cut directly from the record — never paraphrase."
-    )
-    input_schema = {
-        "type": "object",
-        "properties": {
-            "entities": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string", "description": "Entity name as it appears in the record"},
-                        "type": {"type": "string", "description": "person, company, project, event"},
-                        "metadata": {"type": "object", "description": "email, domain, role if known"},
-                        "resolved_to": {"type": "string", "description": "Node ID if matched to existing entity, or 'new' if new entity"},
-                        "canonical_name": {"type": "string", "description": "The canonical name of the matched entity, if resolved"},
-                    },
-                    "required": ["name", "type", "resolved_to"],
-                },
-            },
-            "facts": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "edge_label": {"type": "string", "description": "AFFILIATED, ASSERTED, or TRANSITIONED"},
-                        "fact_type": {"type": "string"},
-                        "fact": {"type": "string", "description": "Text cut directly from the record — never paraphrase"},
-                        "from_entity": {"type": "string", "description": "Name of the from entity"},
-                        "to_entity": {"type": "string", "description": "Name of the to entity, or null"},
-                        "confidence": {"type": "string", "description": "stated or inferred"},
-                        "valid_until": {"type": "string", "description": "ISO date if a deadline is stated, or null"},
-                    },
-                    "required": ["edge_label", "fact_type", "fact", "from_entity", "confidence"],
-                },
-            },
-        },
-        "required": ["entities", "facts"],
-    }
-
-    def __init__(self) -> None:
-        self._result: dict | None = None
-
-    def execute(self, **kwargs: Any) -> str:
-        self._result = {
-            "entities": kwargs.get("entities", []),
-            "facts": kwargs.get("facts", []),
-        }
-        return "Extraction saved."
-
-    @property
-    def result(self) -> dict | None:
-        return self._result

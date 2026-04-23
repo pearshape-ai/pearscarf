@@ -1,12 +1,14 @@
+"""Tool framework — `BaseTool` abstract class and `ToolRegistry`.
+
+Concrete tool implementations live in their own modules (e.g.
+`pearscarf/graph_access_tools.py` for graph-reading tools shared by
+Extraction and Triage, or alongside the consumer they belong to).
+"""
+
 from __future__ import annotations
 
-import importlib
-import inspect
-import pkgutil
 from abc import ABC, abstractmethod
 from typing import Any
-
-import pearscarf.tools as tools_package
 
 
 class BaseTool(ABC):
@@ -38,13 +40,6 @@ class ToolRegistry:
 
     def all_schemas(self) -> list[dict[str, Any]]:
         return [t.to_api_schema() for t in self._tools.values()]
-
-    def discover(self) -> None:
-        for _importer, mod_name, _ispkg in pkgutil.iter_modules(tools_package.__path__):
-            module = importlib.import_module(f"pearscarf.tools.{mod_name}")
-            for _name, obj in inspect.getmembers(module, inspect.isclass):
-                if issubclass(obj, BaseTool) and obj is not BaseTool and obj.name:
-                    self.register(obj())
 
 
 registry = ToolRegistry()
