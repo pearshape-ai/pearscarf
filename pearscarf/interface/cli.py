@@ -500,9 +500,9 @@ def triage(ctx) -> None:
 @triage.command("start")
 def triage_start() -> None:
     """Start the triage agent in the foreground."""
-    from pearscarf.triage.triage_agent import TriageAgent
+    from pearscarf.triage.triage import Triage
     click.echo("Triage starting...")
-    TriageAgent().run_foreground()
+    Triage().run_foreground()
 
 
 @cli.group(invoke_without_command=True)

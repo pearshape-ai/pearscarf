@@ -154,12 +154,12 @@ def start_system(
     components.curator = curator
     log_fn("Curator started.")
 
-    # --- Start triage agent ---
-    from pearscarf.triage.triage_agent import TriageAgent
-    triage = TriageAgent(log_fn=log_fn)
+    # --- Start triage ---
+    from pearscarf.triage.triage import Triage
+    triage = Triage()
     triage.start()
     components.triage = triage
-    log_fn("Triage agent started.")
+    log_fn("Triage started.")
 
     # --- Start MCP server ---
     mcp_srv = MCPServer()
