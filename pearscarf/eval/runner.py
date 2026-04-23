@@ -65,7 +65,7 @@ def _ensure_expert_connects():
     """Load expert connects so ingest tools can delegate."""
     from pearscarf.bus import MessageBus
     from pearscarf.expert_context import build_context
-    from pearscarf.extraction.registry import get_registry
+    from pearscarf.registry import get_registry
 
     bus = MessageBus()
     registry = get_registry()
@@ -84,7 +84,7 @@ def _ensure_expert_connects():
 
 def _ingest_record_file(dataset_path: str, file_rel: str, record_type: str) -> str | None:
     """Ingest a single file from the dataset. Returns record_id or None."""
-    from pearscarf.extraction.registry import get_registry
+    from pearscarf.registry import get_registry
     from pearscarf.storage import store
 
     file_path = os.path.join(dataset_path, file_rel)
@@ -447,7 +447,7 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     _ensure_expert_connects()
 
     # Start extraction
-    from pearscarf.extraction.extraction import Extraction
+    from pearscarf.extraction import Extraction
 
     if debug_dir:
         from datetime import datetime, timezone
@@ -660,8 +660,8 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
     _ensure_expert_connects()
 
     # Start extraction + curator
-    from pearscarf.extraction.extraction import Extraction
-    from pearscarf.curation.curation import Curation
+    from pearscarf.extraction import Extraction
+    from pearscarf.curation import Curation
 
     if debug_dir:
         from datetime import datetime, timezone

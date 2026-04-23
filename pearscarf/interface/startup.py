@@ -46,8 +46,8 @@ def start_system(
     from pearscarf.config import MCP_PORT
     from pearscarf.expert_context import build_context
     from pearscarf.experts.retriever import create_retriever_for_runner
-    from pearscarf.extraction.extraction import Extraction
-    from pearscarf.extraction.registry import get_registry
+    from pearscarf.extraction import Extraction
+    from pearscarf.registry import get_registry
     from pearscarf.interface.install import enforce_credentials_or_exit
     from pearscarf.mcp.mcp_server import MCPServer
 
@@ -148,14 +148,14 @@ def start_system(
     log_fn("Extraction started.")
 
     # --- Start curation ---
-    from pearscarf.curation.curation import Curation
+    from pearscarf.curation import Curation
     curation = Curation()
     curation.start()
     components.curation = curation
     log_fn("Curation started.")
 
     # --- Start triage ---
-    from pearscarf.triage.triage import Triage
+    from pearscarf.triage import Triage
     triage = Triage()
     triage.start()
     components.triage = triage

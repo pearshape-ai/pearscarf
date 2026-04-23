@@ -12,18 +12,86 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from pearscarf.agents.base import BaseAgent
 from pearscarf.consumer import Consumer
 from pearscarf.storage import graph, vectorstore
 from pearscarf import log
 from pearscarf.storage.db import _get_conn, init_db
-from pearscarf.extraction.registry import compose_prompt
+from pearscarf.registry import compose_prompt
+from pearscarf.tools import BaseTool
 from pearscarf.knowledge import load as load_prompt, load_onboarding_block
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+class SaveExtractionTool(BaseTool):
+    """The extractor agent calls this once at the end to commit its result.
+
+    Extraction-specific — the structured output is interpreted by the
+    `Extraction` consumer's validate + commit pipeline, not written
+    directly to the graph by this tool.
+    """
+
+    name = "save_extraction"
+    description = (
+        "Save the final extraction result. Call this once at the end "
+        "after you have identified all entities and extracted all facts. "
+        "Every fact text MUST be cut directly from the record — never paraphrase."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "entities": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Entity name as it appears in the record"},
+                        "type": {"type": "string", "description": "person, company, project, event"},
+                        "metadata": {"type": "object", "description": "email, domain, role if known"},
+                        "resolved_to": {"type": "string", "description": "Node ID if matched to existing entity, or 'new' if new entity"},
+                        "canonical_name": {"type": "string", "description": "The canonical name of the matched entity, if resolved"},
+                    },
+                    "required": ["name", "type", "resolved_to"],
+                },
+            },
+            "facts": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "edge_label": {"type": "string", "description": "AFFILIATED, ASSERTED, or TRANSITIONED"},
+                        "fact_type": {"type": "string"},
+                        "fact": {"type": "string", "description": "Text cut directly from the record — never paraphrase"},
+                        "from_entity": {"type": "string", "description": "Name of the from entity"},
+                        "to_entity": {"type": "string", "description": "Name of the to entity, or null"},
+                        "confidence": {"type": "string", "description": "stated or inferred"},
+                        "valid_until": {"type": "string", "description": "ISO date if a deadline is stated, or null"},
+                    },
+                    "required": ["edge_label", "fact_type", "fact", "from_entity", "confidence"],
+                },
+            },
+        },
+        "required": ["entities", "facts"],
+    }
+
+    def __init__(self) -> None:
+        self._result: dict | None = None
+
+    def execute(self, **kwargs: Any) -> str:
+        self._result = {
+            "entities": kwargs.get("entities", []),
+            "facts": kwargs.get("facts", []),
+        }
+        return "Extraction saved."
+
+    @property
+    def result(self) -> dict | None:
+        return self._result
 
 
 class ExtractorAgent(BaseAgent):
@@ -198,9 +266,9 @@ class Extraction(Consumer):
     def _run_extractor_agent(self, record: dict, content: str) -> dict | None:
         """Run the extractor agent on a record. Returns extraction result or None."""
         from pearscarf.tools import ToolRegistry
-        from pearscarf.extraction.extraction_tools import (
+        from pearscarf.graph_access_tools import (
             FindEntityTool, SearchEntitiesTool, CheckAliasTool,
-            GetEntityContextTool, SaveExtractionTool,
+            GetEntityContextTool,
         )
 
         registry = ToolRegistry()

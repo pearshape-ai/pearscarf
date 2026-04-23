@@ -16,7 +16,7 @@ from typing import Any
 from pearscarf import log
 from pearscarf.agents.base import BaseAgent
 from pearscarf.consumer import Consumer
-from pearscarf.extraction.extraction_tools import (
+from pearscarf.graph_access_tools import (
     CheckAliasTool,
     FindEntityTool,
     GetEntityContextTool,

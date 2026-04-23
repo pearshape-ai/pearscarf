@@ -119,7 +119,7 @@ class ParseRecordFileTool(BaseTool):
     }
 
     def execute(self, **kwargs: Any) -> str:
-        from pearscarf.extraction.registry import get_registry
+        from pearscarf.registry import get_registry
 
         file_path = kwargs["file_path"]
         record_type = kwargs["record_type"]

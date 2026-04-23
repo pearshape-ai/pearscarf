@@ -7,7 +7,7 @@
 * `load_onboarding_block()` — onboarding content wrapped in its header
   block, cached. Onboards PearScarf to the world it operates in.
 
-Extraction prompt composition lives in `pearscarf.extraction.registry` —
+Extraction prompt composition lives in `pearscarf.registry` —
 it owns Layer 1 (`core_prompt`), Layer 2 (`schema_fragment`), and the
 per-record `compose_prompt(record)` that joins them with Layer 3.
 """
@@ -98,7 +98,7 @@ def load_relevancy_guidance(expert_name: str) -> str | None:
     The triage agent loads this per-record to get source-specific cues
     about what looks like noise vs signal for that particular expert.
     """
-    from pearscarf.extraction.registry import get_registry
+    from pearscarf.registry import get_registry
 
     expert = get_registry().get_by_name(expert_name)
     if expert is None:
