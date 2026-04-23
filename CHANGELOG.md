@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.27.1
+- Pin `torch` to the CPU-only wheel on linux. `sentence-transformers` pulled `torch` transitively; on linux x86_64 the default PyPI wheel is the CUDA build, dragging in ~4 GB of NVIDIA runtime libraries (cuDNN, cuBLAS, NCCL, cuSparseLt, Triton, …) that never run — the dogfood VM and laptops have no GPU. Two `pyproject.toml` changes: (1) promote `torch` from a transitive to a direct dependency so `[tool.uv.sources]` actually applies to it, (2) declare a CPU-only wheel index scoped to `sys_platform == 'linux'`. macOS is unaffected — its default torch wheel is already CPU-only. `uv lock` diff: `+torch 2.11.0+cpu` on linux; dropped `nvidia-curand`, `nvidia-cusolver`, `nvidia-cusparse`, `nvidia-cusparselt-cu13`, `nvidia-nccl-cu13`, `nvidia-nvjitlink`, `nvidia-nvshmem-cu13`, `nvidia-nvtx`, `triton`. Closes PEA-134 pending a rebuild + size-verification.
+
 ## 1.27.0
 - Drop the unused `playwright` dependency. It was left over from the pre-1.17.5 browser-based Gmail auth path that was deleted when experts moved to OAuth-only; the dep was never removed. No imports reference it anywhere in `pearscarf/` or `experts/`. Removed from `pyproject.toml`; `uv.lock` regenerated (drops `playwright`, `greenlet`, `pyee` — 165 packages total, down from 168). First of two commits slimming the Docker image (closes PEA-123; advances PEA-134 where the bulk of the weight lives — CUDA / torch).
 
