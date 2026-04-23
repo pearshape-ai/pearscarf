@@ -8,7 +8,7 @@ Pipeline:
     1. Read dataset.yaml for config
     2. Read sequence.yaml — each entry has file path + record type
     3. Ingest records in sequence order
-    4. Wait for indexer after each record
+    4. Wait for extraction after each record
     5. Score against ground truth
     6. Print results
 """
@@ -65,7 +65,7 @@ def _ensure_expert_connects():
     """Load expert connects so ingest tools can delegate."""
     from pearscarf.bus import MessageBus
     from pearscarf.expert_context import build_context
-    from pearscarf.indexing.registry import get_registry
+    from pearscarf.extraction.registry import get_registry
 
     bus = MessageBus()
     registry = get_registry()
@@ -84,7 +84,7 @@ def _ensure_expert_connects():
 
 def _ingest_record_file(dataset_path: str, file_rel: str, record_type: str) -> str | None:
     """Ingest a single file from the dataset. Returns record_id or None."""
-    from pearscarf.indexing.registry import get_registry
+    from pearscarf.extraction.registry import get_registry
     from pearscarf.storage import store
 
     file_path = os.path.join(dataset_path, file_rel)
@@ -128,14 +128,14 @@ def _graph_is_empty() -> bool:
     return stats.get("total_entities", 0) == 0 and stats.get("day_nodes", 0) == 0
 
 
-def _wait_for_indexer():
+def _wait_for_extraction():
     """Block until all relevant records are indexed."""
-    print("Waiting for indexer...")
+    print("Waiting for extraction...")
     start = time.time()
     while True:
         pending = _pending_record_count()
         if pending == 0:
-            print("Indexer finished.")
+            print("Extraction finished.")
             break
         elapsed = int(time.time() - start)
         print(f"  {pending} record(s) remaining... ({elapsed}s)")
@@ -446,8 +446,8 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     # Load expert connects
     _ensure_expert_connects()
 
-    # Start indexer
-    from pearscarf.indexing.indexer import Indexer
+    # Start extraction
+    from pearscarf.extraction.extraction import Extraction
 
     if debug_dir:
         from datetime import datetime, timezone
@@ -458,8 +458,8 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
         os.makedirs(debug_dir, exist_ok=True)
         print(f"Debug output: {debug_dir}")
 
-    indexer = Indexer(debug_dir=debug_dir)
-    indexer.start()
+    extraction = Extraction(debug_dir=debug_dir)
+    extraction.start()
 
     # Ingest in sequence order
     timeslices = er_ground_truth.get("timeslices", [])
@@ -482,8 +482,8 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
             print(f"  {label}: skipped (duplicate or error)")
             continue
 
-        # Wait for indexer
-        _wait_for_indexer()
+        # Wait for extraction
+        _wait_for_extraction()
 
         # Score timeslice if ground truth exists for this record
         if label in timeslice_by_record:
@@ -500,9 +500,9 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     graph_entities = _get_all_graph_entities()
     global_scores = _score_er_global(er_ground_truth, graph_entities)
 
-    # Collect token usage from indexer
-    token_usage = indexer.token_usage
-    indexer.stop()
+    # Collect token usage from extraction
+    token_usage = extraction.token_usage
+    extraction.stop()
 
     # Build verbose diagnostics
     global_verbose = None
@@ -659,8 +659,8 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
     # Load expert connects
     _ensure_expert_connects()
 
-    # Start indexer + curator
-    from pearscarf.indexing.indexer import Indexer
+    # Start extraction + curator
+    from pearscarf.extraction.extraction import Extraction
     from pearscarf.curation.curator import Curator
 
     if debug_dir:
@@ -672,8 +672,8 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
         os.makedirs(debug_dir, exist_ok=True)
         print(f"Debug output: {debug_dir}")
 
-    indexer = Indexer(debug_dir=debug_dir)
-    indexer.start()
+    extraction = Extraction(debug_dir=debug_dir)
+    extraction.start()
 
     curator = Curator()
     curator.start()
@@ -691,8 +691,8 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
         else:
             print(f"  {label}: skipped (duplicate or error)")
 
-    # Wait for indexer
-    _wait_for_indexer()
+    # Wait for extraction
+    _wait_for_extraction()
 
     # Wait for curator to drain the queue
     print("Waiting for curator...")
@@ -707,8 +707,8 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
         time.sleep(2)
 
     # Collect token usage
-    token_usage = indexer.token_usage
-    indexer.stop()
+    token_usage = extraction.token_usage
+    extraction.stop()
     curator.stop()
 
     # Score facts

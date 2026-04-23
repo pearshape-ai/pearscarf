@@ -112,7 +112,7 @@ psc dev --poll                 # Local-dev monolith: Discord frontend + all serv
 | `psc expert ingest --seed <file>` | Ingest a seed file |
 | `psc expert ingest --record <file> --type <type>` | Ingest JSON records |
 | `psc eval --dataset <path>` | Run eval against a dataset |
-| `psc indexer start` | Run the indexer standalone |
+| `psc extraction start` | Run the extraction consumer standalone |
 | `psc triage start` | Run the triage agent standalone |
 | `psc mcp start` | Run MCP server standalone |
 | `psc erase-all` | Wipe all system state |

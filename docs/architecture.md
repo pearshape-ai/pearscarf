@@ -37,9 +37,9 @@
 └──────────────────────────────────────────────┘
         ↑ writes              ↑ writes          ↑ writes
 ┌───────┴──────┐     ┌───────┴──────┐   ┌──────┴──────┐
-│   Triage     │────→│   Indexer    │──→│   Curator   │
-│ (classify    │     │ (extraction) │   │ (dedup,     │
-│  pending)    │     │              │   │  expiry,    │
+│   Triage     │────→│  Extraction  │──→│   Curator   │
+│ (classify    │     │ (entities,   │   │ (dedup,     │
+│  pending)    │     │  facts)      │   │  expiry,    │
 │              │     │              │   │  confidence)│
 └──────────────┘     └──────────────┘   └─────────────┘
 ```
@@ -92,7 +92,7 @@ Experts do not import pearscarf internals. The context is the contract.
    c. Start LLM agent                — if tools + knowledge/agent.md exist → AgentRunner
    d. Start ingester                 — if --poll and ingester_module exists → start(ctx)
 3. Start internal agents             — retriever, worker
-4. Start indexer
+4. Start extraction consumer
 5. Start MCP server
 ```
 
@@ -104,9 +104,9 @@ The registry discovers installed experts from the `experts` DB table and builds 
 
 ### Extraction prompts
 
-When the indexer processes a record, the extraction prompt is composed in this order:
+When the Extraction consumer processes a record, the extraction prompt is composed in this order:
 
-1. **Agent role** — `pearscarf/knowledge/indexer/extraction_agent.md`. Behavioural prompt for the extraction agent: how to reason, how to use its graph tools, match-or-new decisions.
+1. **Agent role** — `pearscarf/knowledge/extractor/extractor_agent.md`. Behavioural prompt for the extractor agent: how to reason, how to use its graph tools, match-or-new decisions.
 2. **Onboarding** — a single markdown file that onboards PearScarf to the world it will operate in (the team, the kinds of interactions, the vocabulary, what matters, what to ignore). Defaults to `pearscarf/knowledge/onboarding.md` (neutral framing shipped with the repo). Operators override by setting `ONBOARDING_PROMPT_PATH` to their own file (typically `env/onboarding.md`). See `docs/onboarding.example.md` for a template.
 3. **Universal rules** — how to extract entities and facts, edge labels, output format. Shared across all record types. Lives in `pearscarf/knowledge/core/`.
 4. **Entity types** — what kinds of things to look for (person, company, project, event, plus any types declared by experts like repository). Automatically includes new types when an expert is installed.
@@ -137,8 +137,8 @@ pearscarf/
 │   ├── graph.py            # Knowledge graph CRUD — entities, fact-edges, traversal
 │   ├── neo4j_client.py     # Neo4j connection manager
 │   └── vectorstore.py      # Qdrant vector storage — semantic search
-├── indexing/
-│   ├── indexer.py           # Background LLM extraction into knowledge graph
+├── extraction/
+│   ├── extraction.py        # Extraction consumer + ExtractorAgent — LLM extraction into graph
 │   └── registry.py          # Expert registry — discovery, prompt composition, connect cache
 ├── curation/
 │   └── curator.py           # Background graph quality (expiry, confidence)
@@ -171,7 +171,7 @@ pearscarf/
 ├── knowledge/               # Layered prompts for extraction and agents
 │   ├── core/                # universal extraction rules + base entity types
 │   ├── ingest/              # Ingest expert prompts
-│   ├── indexer/             # Extraction agent system prompt
+│   ├── extractor/           # Extractor agent system prompt
 │   ├── retriever/           # Retriever agent prompt
 │   └── worker/              # Worker agent prompt
 ├── eval/
@@ -237,7 +237,7 @@ Record IDs use `{type}_{uuid4_short}` format (e.g. `email_3f2a1b4c`).
 
 ### Classification
 
-Every record carries a `classification`. The indexer only processes `classification = 'relevant'`. Policy is declared per expert in the manifest:
+Every record carries a `classification`. The Extraction consumer only processes `classification = 'relevant'`. Policy is declared per expert in the manifest:
 
 ```yaml
 relevancy_check: skip | required
@@ -278,18 +278,18 @@ Core config loads from `env/.env`. Expert credentials load from `env/.<name>.env
 
 ## Knowledge Graph
 
-The indexer processes records into a knowledge graph. All graph data lives in Neo4j.
+The Extraction consumer processes records into a knowledge graph. All graph data lives in Neo4j.
 
 - **Entities** — nodes with labels (Person, Company, Project, Event, Repository). Merged on name + metadata. Aliases tracked via IDENTIFIED_AS self-edges.
 - **Fact-edges** — AFFILIATED (organizational), ASSERTED (claims/commitments), TRANSITIONED (state changes). Each carries `fact_type`, `source_at`, `recorded_at`, `stale`, `confidence`, `valid_until`.
 
-### Indexer
+### Extraction
 
-Background daemon polling `records WHERE indexed = FALSE AND classification = 'relevant'`. For each record:
+Consumer subscribed to `records WHERE indexed = FALSE AND classification = 'relevant'`. For each record:
 
 1. Build content from `records.content` column
 2. Compose the extraction prompt — agent system prompt + universal rules + entity types + source guidance
-3. Run the extraction agent with read-only graph tools (`find_entity`, `search_entities`, `check_alias`, `get_entity_context`, `save_extraction`). The agent looks up candidates in the graph and decides match-or-new inline — there is no separate resolution pass.
+3. Run `ExtractorAgent` with read-only graph tools (`find_entity`, `search_entities`, `check_alias`, `get_entity_context`, `save_extraction`). The agent looks up candidates in the graph and decides match-or-new inline — there is no separate resolution pass.
 4. Validate the extraction output and commit entities + fact-edges to Neo4j
 5. Embed content in Qdrant
 6. Mark indexed, enqueue for curator
@@ -298,7 +298,7 @@ Background daemon polling `records WHERE indexed = FALSE AND classification = 'r
 
 <p align="center"><img src="assets/write-path.svg" alt="Write Path — Records to Graph" width="640"></p>
 
-`context_query.py` is the single read layer. Both the retriever and MCP server call through it. The indexer and curator own all writes.
+`context_query.py` is the single read layer. Both the retriever and MCP server call through it. Extraction and the curator own all writes.
 
 ## MCP Server
 
@@ -315,7 +315,7 @@ Read-only query surface via FastMCP over HTTP/SSE. 10 tools: 5 primitive + 5 con
 ### Decomposed services
 
 - **`psc discord start`** — Discord frontend + bus agents only
-- **`psc indexer start`** / **`psc curator start`** / **`psc triage start`** — queue workers
+- **`psc extraction start`** / **`psc curator start`** / **`psc triage start`** — queue workers
 - **`psc mcp start`** — MCP query endpoint
 - **`psc expert start-ingestion <name>`** — per-expert live-poll ingester
 

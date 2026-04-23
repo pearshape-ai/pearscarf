@@ -50,8 +50,8 @@ The `confidence` field describes how well-supported a fact is and who establishe
 
 | Value | Meaning | Set by |
 |---|---|---|
-| `inferred` | Concluded from context — email domain implies employment, first name implies person | Indexer on write |
-| `stated` | Explicitly said in a record — someone wrote or said this directly | Indexer on write |
+| `inferred` | Concluded from context — email domain implies employment, first name implies person | Extraction on write |
+| `stated` | Explicitly said in a record — someone wrote or said this directly | Extraction on write |
 | `verified` | Confirmed by an authoritative external source (LinkedIn, official record, human HIL confirmation) | Verification agent or HIL |
 | `retracted` | Recorded but subsequently found to be incorrect or explicitly withdrawn | Verification agent or HIL |
 
@@ -190,15 +190,15 @@ fact: "Marcus committed to deliver contract markup by March 16"
 
 ## Write loop
 
-The indexer's write loop is structurally focused: it checks for **literal duplicates** before writing.
+Extraction's write loop is structurally focused: it checks for **literal duplicates** before writing.
 
-Before every `create_fact_edge` call, the indexer queries for an existing edge matching all of: `(from, to, edge_label, fact_type, source_record, fact)`. If found, the source record is appended to the edge's `source_records` list — no new edge is created. If not found, a new edge is created.
+Before every `create_fact_edge` call, Extraction queries for an existing edge matching all of: `(from, to, edge_label, fact_type, source_record, fact)`. If found, the source record is appended to the edge's `source_records` list — no new edge is created. If not found, a new edge is created.
 
-This check prevents duplicate edges from re-indexing the same record. It does not perform semantic deduplication, supersession, or staleness checks — those are the responsibility of the Curator.
+This check prevents duplicate edges from re-processing the same record. It does not perform semantic deduplication, supersession, or staleness checks — those are the responsibility of the Curator.
 
 ## Staleness and supersession
 
-The `stale` and `replaced_by` fields are set by the **verification & augmentation agent**, not the indexer.
+The `stale` and `replaced_by` fields are set by the **verification & augmentation agent**, not Extraction.
 
 Between writes and the Curator running, the graph may contain redundant or semantically equivalent facts. This is by design — the graph is eventually consistent. Structurally correct at write time, semantically correct after the Curator runs. See [Curator](curator.md) for details.
 

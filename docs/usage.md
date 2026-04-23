@@ -4,7 +4,7 @@
 
 | Command | Description |
 |---|---|
-| `psc run` | Worker + experts + indexer + MCP server + session REPL |
+| `psc run` | Worker + experts + extraction + MCP server + session REPL |
 | `psc run --poll` | Full system + expert ingesters (background polling) |
 | `psc dev` | Local-dev monolith: Discord frontend + all services in one process |
 | `psc dev --poll` | Monolith + expert ingesters |
@@ -28,7 +28,7 @@
 | `psc queue` | Curator queue summary |
 | `psc queue list` | List up to 20 queue entries |
 | `psc queue clear --confirm` | Clear unclaimed queue entries |
-| `psc indexer start` | Start the indexer in the foreground |
+| `psc extraction start` | Start the extraction consumer in the foreground |
 | `psc triage start` | Start the triage agent in the foreground |
 | `psc curator start` | Start the curator in the foreground |
 | `psc curator status` | Show curator queue status |
@@ -113,7 +113,7 @@ Same commands available in the REPL via `/memory`.
 
 | Script | Description |
 |---|---|
-| `python scripts/reindex_all.py` | Reset indexed flags — indexer re-extracts on next poll |
+| `python scripts/reindex_all.py` | Reset indexed flags — extraction re-extracts on next poll |
 | `python scripts/erase_all.py` | Wipe all system state |
 | `python scripts/extract_test.py [ids...]` | Run extraction prompt against records (no writes) |
 

@@ -21,7 +21,7 @@ from typing import Any, Callable
 import click
 import yaml
 
-from pearscarf.indexing.registry import base_entity_types
+from pearscarf.extraction.registry import base_entity_types
 from pearscarf.storage import store
 
 
@@ -537,7 +537,7 @@ def check_expert_credentials(expert) -> list[CredentialError]:
 
 def check_credentials_for_enabled_experts() -> list[CredentialError]:
     """Run credential checks against every currently enabled expert."""
-    from pearscarf.indexing.registry import get_registry
+    from pearscarf.extraction.registry import get_registry
 
     errors: list[CredentialError] = []
     for expert in get_registry().enabled_experts():
@@ -757,7 +757,7 @@ def expert_inspect_command(name: str) -> None:
 
 def _reset_runtime_registry() -> None:
     """Drop the cached registry so the next process call sees fresh DB state."""
-    from pearscarf.indexing.registry import reset_registry
+    from pearscarf.extraction.registry import reset_registry
     reset_registry()
 
 

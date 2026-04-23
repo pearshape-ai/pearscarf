@@ -54,9 +54,9 @@ def run(poll: bool) -> None:
 def dev(poll: bool) -> None:
     """Local-dev monolith: full system with Discord frontend, all in one process.
 
-    Boots bot, bus agents, indexer, curator, triage, MCP, and (with --poll)
+    Boots bot, bus agents, extraction, curator, triage, MCP, and (with --poll)
     expert ingesters together. For the decomposed runtime, start each service
-    independently via `psc discord start`, `psc indexer start`, etc.
+    independently via `psc discord start`, `psc extraction start`, etc.
     """
     from pearscarf.interface.discord_bot import run_bot
 
@@ -73,7 +73,7 @@ def discord_start() -> None:
     """Start the Discord frontend in the foreground (decomposed runtime).
 
     Runs bot + bus-coupled agents (worker, retriever, expert agents) only.
-    Indexer / curator / triage / MCP run in their own containers under the
+    Extraction / curator / triage / MCP run in their own containers under the
     decomposed compose. For local monolithic dev, use `psc dev`.
     """
     from pearscarf.interface.discord_bot import run_bot
@@ -131,7 +131,7 @@ expert.add_command(expert_uninstall_command)
 
 def _resolve_expert(expert_name: str):
     """Look up an enabled expert by name; raise a clean Click error if missing."""
-    from pearscarf.indexing.registry import get_registry
+    from pearscarf.extraction.registry import get_registry
 
     expert_def = get_registry().get_by_name(expert_name)
     if expert_def is None or not expert_def.enabled:
@@ -219,7 +219,7 @@ def ingest(seed: str | None, record: str | None, record_type: str | None) -> Non
 
     import importlib
 
-    from pearscarf.indexing.registry import get_registry
+    from pearscarf.extraction.registry import get_registry
 
     bus = MessageBus()
     registry = get_registry()
@@ -507,18 +507,18 @@ def triage_start() -> None:
 
 @cli.group(invoke_without_command=True)
 @click.pass_context
-def indexer(ctx) -> None:
-    """Indexer — extracts entities and facts from records into the knowledge graph."""
+def extraction(ctx) -> None:
+    """Extraction — extracts entities and facts from records into the knowledge graph."""
     if ctx.invoked_subcommand is None:
-        click.echo("Use 'psc indexer start' to run.")
+        click.echo("Use 'psc extraction start' to run.")
 
 
-@indexer.command("start")
-def indexer_start() -> None:
-    """Start the indexer in the foreground."""
-    from pearscarf.indexing.indexer import Indexer
-    click.echo("Indexer starting...")
-    Indexer().run_foreground()
+@extraction.command("start")
+def extraction_start() -> None:
+    """Start the extraction consumer in the foreground."""
+    from pearscarf.extraction.extraction import Extraction
+    click.echo("Extraction starting...")
+    Extraction().run_foreground()
 
 
 @cli.group(invoke_without_command=True)
