@@ -81,6 +81,7 @@ class TriageAgent(BaseAgent):
         on_tool_call=None,
         on_text=None,
         on_tool_result=None,
+        max_turns: int | None = None,
     ) -> None:
         super().__init__(
             tool_registry=tool_registry,
@@ -89,6 +90,7 @@ class TriageAgent(BaseAgent):
             on_tool_call=on_tool_call,
             on_text=on_text,
             on_tool_result=on_tool_result,
+            max_turns=max_turns,
         )
 
 
@@ -97,6 +99,7 @@ class Triage(Consumer):
 
     name = "triage"
     default_poll_interval = 5.0
+    max_turns = 3
 
     def __init__(self, poll_interval: float | None = None) -> None:
         super().__init__(poll_interval=poll_interval)
@@ -206,6 +209,7 @@ class Triage(Consumer):
         agent = TriageAgent(
             tool_registry=registry,
             system_prompt=system_prompt,
+            max_turns=self.max_turns,
         )
         agent.run(user_message)
 

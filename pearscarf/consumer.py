@@ -37,6 +37,10 @@ class Consumer(ABC):
     # Subclasses set this to the channel name used for logging.
     name: str = "consumer"
 
+    # Per-consumer LLM-run turn ceiling. None = fall back to the global
+    # MAX_TURNS (30 by default). Subclasses override to tighten.
+    max_turns: int | None = None
+
     def __init__(self, poll_interval: float | None = None) -> None:
         self._poll_interval = (
             poll_interval if poll_interval is not None else self.default_poll_interval

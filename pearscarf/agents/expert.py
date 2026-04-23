@@ -59,6 +59,7 @@ class ExpertAgent(BaseAgent):
         on_tool_call: Callable[[str, dict[str, Any]], None] | None = None,
         on_text: Callable[[str], None] | None = None,
         on_tool_result: Callable[[str, str], None] | None = None,
+        max_turns: int | None = None,
     ) -> None:
         self._reply_tool = ReplyTool(ctx)
         tool_registry.register(self._reply_tool)
@@ -70,4 +71,5 @@ class ExpertAgent(BaseAgent):
             on_tool_call=on_tool_call,
             on_text=on_text,
             on_tool_result=on_tool_result,
+            max_turns=max_turns,
         )

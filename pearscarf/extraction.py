@@ -109,6 +109,7 @@ class ExtractorAgent(BaseAgent):
         on_tool_call=None,
         on_text=None,
         on_tool_result=None,
+        max_turns: int | None = None,
     ) -> None:
         super().__init__(
             tool_registry=tool_registry,
@@ -117,6 +118,7 @@ class ExtractorAgent(BaseAgent):
             on_tool_call=on_tool_call,
             on_text=on_text,
             on_tool_result=on_tool_result,
+            max_turns=max_turns,
         )
 
 
@@ -125,6 +127,7 @@ class Extraction(Consumer):
 
     name = "extraction"
     default_poll_interval = 5.0
+    max_turns = 10
 
     def __init__(
         self,
@@ -292,6 +295,7 @@ class Extraction(Consumer):
         agent = ExtractorAgent(
             tool_registry=registry,
             system_prompt=system_prompt,
+            max_turns=self.max_turns,
         )
 
         error = None

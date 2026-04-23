@@ -11,6 +11,7 @@ from pearscarf.tools import ToolRegistry
 from pearscarf.tracked_call import (
     _run_id_var,
     _turn_index_var,
+    mark_run_hit_ceiling,
     tracked_anthropic_call,
 )
 from pearscarf.tracing import trace_child, trace_span
@@ -25,6 +26,7 @@ class BaseAgent:
         on_tool_call: Callable[[str, dict[str, Any]], None] | None = None,
         on_text: Callable[[str], None] | None = None,
         on_tool_result: Callable[[str, str], None] | None = None,
+        max_turns: int | None = None,
     ) -> None:
         self._client = anthropic.Anthropic(
             api_key=ANTHROPIC_API_KEY or None,
@@ -37,6 +39,8 @@ class BaseAgent:
         self._on_tool_call = on_tool_call
         self._on_text = on_text
         self._on_tool_result = on_tool_result
+        # Per-consumer turn ceiling; falls back to global MAX_TURNS when unset.
+        self._max_turns = max_turns if max_turns is not None else MAX_TURNS
         self.total_input_tokens = 0
         self.total_output_tokens = 0
 
@@ -53,7 +57,8 @@ class BaseAgent:
         if self._system_prompt:
             kwargs["system"] = self._system_prompt
 
-        run_token = _run_id_var.set(str(uuid.uuid4()))
+        run_id = str(uuid.uuid4())
+        run_token = _run_id_var.set(run_id)
         try:
             with trace_span(
                 f"{self._agent_name}.run",
@@ -61,7 +66,7 @@ class BaseAgent:
                 metadata={"agent": self._agent_name, "model": MODEL},
                 inputs={"user_message": user_message[:500]},
             ) as parent:
-                for turn in range(MAX_TURNS):
+                for turn in range(self._max_turns):
                     turn_token = _turn_index_var.set(turn)
                     try:
                         with trace_child(
@@ -140,9 +145,11 @@ class BaseAgent:
                             parent.end(outputs={"result": result[:500]})
                         return result
 
+                # Ceiling hit — flag the last logged turn so dashboards see it.
+                mark_run_hit_ceiling(run_id)
                 if parent:
-                    parent.end(outputs={"result": "Max turns reached."})
-                return "Max turns reached."
+                    parent.end(outputs={"result": "Turn ceiling reached."})
+                return "Turn ceiling reached."
         finally:
             _run_id_var.reset(run_token)
 
