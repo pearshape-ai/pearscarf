@@ -82,6 +82,27 @@ def _collect_expert_versions() -> dict[str, str]:
         return {}
 
 
+def mark_run_hit_ceiling(run_id: str) -> None:
+    """Flag the most recent turn of a run as having hit the turn ceiling.
+
+    Called by `BaseAgent.run()` when the for-loop exhausts the per-run turn
+    budget. The final turn's `stop_reason` is overwritten to `turn_ceiling`
+    so dashboards can filter / count ceiling hits directly.
+    """
+    try:
+        with _get_conn() as conn:
+            conn.execute(
+                "UPDATE llm_calls SET stop_reason = 'turn_ceiling' "
+                "WHERE id = (SELECT id FROM llm_calls WHERE run_id = %s "
+                "ORDER BY turn_index DESC LIMIT 1)",
+                (run_id,),
+            )
+            conn.commit()
+    except Exception:
+        log.write("tracked_call", "--", "warning", "mark_run_hit_ceiling failed")
+        traceback.print_exc()
+
+
 def tracked_anthropic_call(client: Any, agent_name: str, **kwargs: Any) -> Any:
     """Wrap anthropic.messages.create. Log one row to llm_calls.
 

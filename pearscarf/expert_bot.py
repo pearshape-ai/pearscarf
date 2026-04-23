@@ -24,6 +24,8 @@ from pearscarf.tools import BaseTool, ToolRegistry
 class ExpertBot(SessionConsumer):
     """Bus consumer for one expert. Polls `to_agent=<expert_name>` on the bus."""
 
+    max_turns = 15
+
     def __init__(
         self,
         ctx: ExpertContext,
@@ -53,4 +55,5 @@ class ExpertBot(SessionConsumer):
             on_tool_call=on_tool_call,
             on_text=on_text,
             on_tool_result=on_tool_result,
+            max_turns=self.max_turns,
         )

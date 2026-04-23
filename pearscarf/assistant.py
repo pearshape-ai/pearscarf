@@ -83,6 +83,7 @@ class AssistantAgent(BaseAgent):
         on_tool_call=None,
         on_text=None,
         on_tool_result=None,
+        max_turns: int | None = None,
     ) -> None:
         super().__init__(
             tool_registry=tool_registry,
@@ -91,6 +92,7 @@ class AssistantAgent(BaseAgent):
             on_tool_call=on_tool_call,
             on_text=on_text,
             on_tool_result=on_tool_result,
+            max_turns=max_turns,
         )
 
 
@@ -98,6 +100,7 @@ class Assistant(SessionConsumer):
     """Consumer that handles bus messages addressed to the assistant."""
 
     name = "assistant"
+    max_turns = 15
 
     def _build_agent(self, session_id: str) -> AssistantAgent:
         registry = ToolRegistry()
@@ -118,6 +121,7 @@ class Assistant(SessionConsumer):
             on_tool_call=on_tool_call,
             on_text=on_text,
             on_tool_result=on_tool_result,
+            max_turns=self.max_turns,
         )
         agent._send_tool = send_tool
         return agent
