@@ -1,18 +1,16 @@
 # Context Query — Data Access Layer
 
-<p align="center"><img src="assets/retriever-query-flow.svg" alt="Retriever Query Flow" width="640"></p>
-
-`pearscarf/query/context_query.py` is the single read-only data access layer for all context queries. Both the internal retriever agent and the external MCP server call through it. No other module should call `graph.py` or `store.py` read functions directly for context-building purposes.
+`pearscarf/query/context_query.py` is the single read-only data access layer for all context queries. Both the Assistant's graph query tools (`pearscarf/graph_query_tools.py`) and the external MCP server call through it. No other module should call `graph.py` or `store.py` read functions directly for context-building purposes.
 
 ## Why it exists
 
-Before `context_query.py`, the retriever called `graph.py` directly and the MCP server would have needed its own parallel query path. Two diverging retrieval surfaces means inconsistent results and duplicated logic. `context_query.py` is the single source of truth for "how do I get context from PearScarf."
+A single source of truth for "how do I get context from PearScarf." Internal tools and the external MCP surface read through the same functions, so results stay consistent and logic is not duplicated per consumer.
 
 ## Design principles
 
 - **Read-only** — never writes to any storage
 - **Storage-agnostic** — callers don't know whether data comes from Neo4j, Postgres, or Qdrant
-- **Two consumers** — `retriever.py` (internal agents) and `mcp_server.py` (external agents via MCP)
+- **Two consumers** — `graph_query_tools.py` (Assistant-facing tools) and `mcp_server.py` (external clients via MCP)
 
 ## Functions
 

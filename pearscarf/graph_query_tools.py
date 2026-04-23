@@ -1,28 +1,25 @@
-"""Retriever expert agent — searches the knowledge graph and vector store for context.
+"""Graph query tools — read-only, Assistant-facing.
 
-The assistant delegates context queries here. Entity search, facts lookup, and
-graph traversal query Neo4j. Vector search queries Qdrant.
+These tools give the Assistant rich read access to the knowledge graph +
+vector store when responding to human queries. They wrap
+`pearscarf.query.context_query` — the same read layer that the MCP
+server exposes to external clients.
+
+Distinct from `graph_access_tools.py`: those four tools are used by
+Extraction and Triage during their per-record LLM turn and return terse
+JSON for downstream parsing. The five tools here return formatted prose
+suitable for the Assistant to summarize back to a human.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from pearscarf.query import context_query
-from pearscarf.agents.expert import ExpertAgent
-from pearscarf.expert_context import ExpertContext
-from pearscarf.knowledge import load as load_prompt
-from pearscarf.tools import BaseTool, ToolRegistry
-
-# ---------------------------------------------------------------------------
-# Tools
-# ---------------------------------------------------------------------------
+from pearscarf.tools import BaseTool
 
 
 class SearchEntitiesTool(BaseTool):
-    """Search the knowledge graph for entities by name, email, or domain."""
-
     name = "search_entities"
     description = (
         "Search the knowledge graph for entities by name, email, or domain. "
@@ -61,8 +58,6 @@ class SearchEntitiesTool(BaseTool):
 
 
 class FactsLookupTool(BaseTool):
-    """Look up all known facts for an entity."""
-
     name = "facts_lookup"
     description = (
         "Get stored facts for a known entity. Returns fact-edges grouped by edge label. "
@@ -91,7 +86,6 @@ class FactsLookupTool(BaseTool):
         if not facts:
             return "No facts found for this entity."
 
-        # Group by edge_label
         by_label: dict[str, list] = {}
         for f in facts:
             by_label.setdefault(f["edge_label"], []).append(f)
@@ -113,8 +107,6 @@ class FactsLookupTool(BaseTool):
 
 
 class GraphTraverseTool(BaseTool):
-    """Traverse the knowledge graph from an entity to find connections via fact-edges."""
-
     name = "graph_traverse"
     description = (
         "Walk fact-edges from an entity to find connected entities and Day nodes. "
@@ -185,8 +177,6 @@ class GraphTraverseTool(BaseTool):
 
 
 class DayLookupTool(BaseTool):
-    """Look up all facts anchored to a specific date."""
-
     name = "day_lookup"
     description = (
         "Get all single-entity facts anchored to a specific Day node. "
@@ -221,8 +211,6 @@ class DayLookupTool(BaseTool):
 
 
 class VectorSearchTool(BaseTool):
-    """Semantic similarity search across stored records."""
-
     name = "vector_search"
     description = (
         "Search for records semantically similar to the query text. "
@@ -258,33 +246,3 @@ class VectorSearchTool(BaseTool):
             snippet = r.get("content", "")[:200]
             lines.append(f"- [{r['id']}]{header} (score: {r['score']:.3f})\n  {snippet}")
         return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
-
-
-def create_retriever_for_runner(
-    ctx: ExpertContext,
-) -> Callable:
-    """Create a factory function for the AgentRunner.
-
-    Returns agent_factory: Callable[[session_id], ExpertAgent].
-    """
-
-    def factory(session_id: str) -> ExpertAgent:
-        registry = ToolRegistry()
-        registry.register(SearchEntitiesTool())
-        registry.register(FactsLookupTool())
-        registry.register(GraphTraverseTool())
-        registry.register(DayLookupTool())
-        registry.register(VectorSearchTool())
-
-        return ExpertAgent(
-            ctx=ctx,
-            domain_prompt=load_prompt("retriever"),
-            tool_registry=registry,
-        )
-
-    return factory

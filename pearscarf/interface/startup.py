@@ -19,7 +19,6 @@ from typing import Any
 class SystemComponents:
     """Running components returned by start_system(). Caller shuts them down."""
     bus: Any
-    runners: list = field(default_factory=list)  # AgentRunner — retriever only (dies 1.26.10)
     expert_bots: list = field(default_factory=list)
     extraction: Any = None
     curation: Any = None
@@ -39,16 +38,14 @@ def start_system(
     bot_only: skip extraction, curation, triage, and MCP. Intended for the
         decomposed production runtime where those run in their own
         containers; the bot container only needs the bus and the
-        bus-coupled agents (expert agents, retriever, assistant).
+        bus-coupled agents (assistant + expert bots).
     log_fn: callable(str) for status messages (defaults to sys.stdout).
     """
-    from pearscarf.agents.runner import AgentRunner
     from pearscarf.assistant import Assistant
     from pearscarf.bus import MessageBus
     from pearscarf.config import MCP_PORT
     from pearscarf.expert_bot import ExpertBot
     from pearscarf.expert_context import build_context
-    from pearscarf.experts.retriever import create_retriever_for_runner
     from pearscarf.extraction import Extraction
     from pearscarf.registry import get_registry
     from pearscarf.interface.install import enforce_credentials_or_exit
@@ -112,14 +109,7 @@ def start_system(
             else:
                 log_fn(f"{expert.name} ingester started.")
 
-    # --- Start internal agents ---
-    retriever_ctx = build_context("retriever", bus)
-    retriever_factory = create_retriever_for_runner(ctx=retriever_ctx)
-    retriever_runner = AgentRunner("retriever", retriever_factory, bus)
-    retriever_runner.start()
-    components.runners.append(retriever_runner)
-    log_fn("Retriever started.")
-
+    # --- Start the assistant ---
     assistant_ctx = build_context("assistant", bus)
     assistant = Assistant(ctx=assistant_ctx, bus=bus)
     assistant.start()
@@ -179,5 +169,3 @@ def stop_system(components: SystemComponents) -> None:
         components.assistant.stop()
     for bot in components.expert_bots:
         bot.stop()
-    for runner in components.runners:
-        runner.stop()

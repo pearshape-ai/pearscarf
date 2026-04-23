@@ -72,7 +72,7 @@ def discord() -> None:
 def discord_start() -> None:
     """Start the Discord frontend in the foreground (decomposed runtime).
 
-    Runs bot + bus-coupled agents (assistant, retriever, expert agents) only.
+    Runs bot + bus-coupled agents (assistant, expert bots) only.
     Extraction / curator / triage / MCP run in their own containers under the
     decomposed compose. For local monolithic dev, use `psc dev`.
     """

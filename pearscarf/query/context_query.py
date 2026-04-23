@@ -1,7 +1,8 @@
 """Read-only data access layer for context queries.
 
-Single module through which both the retriever agent and the MCP server
-access graph, vector, and record data. All functions are read-only.
+Single module through which both the Assistant's graph query tools
+(`pearscarf/graph_query_tools.py`) and the MCP server access graph,
+vector, and record data. All functions are read-only.
 """
 
 from __future__ import annotations

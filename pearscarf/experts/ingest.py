@@ -190,23 +190,3 @@ def create_ingest_expert(
     )
 
 
-def create_ingest_expert_for_runner(
-    ctx: "ExpertContext",
-) -> Callable:
-    """Create a factory function for the AgentRunner.
-
-    Returns agent_factory: Callable[[session_id], ExpertAgent].
-    """
-
-    def factory(session_id: str) -> ExpertAgent:
-        registry = ToolRegistry()
-        registry.register(ParseSeedTool())
-        registry.register(ParseRecordFileTool())
-
-        return ExpertAgent(
-            ctx=ctx,
-            domain_prompt=load_prompt("ingest"),
-            tool_registry=registry,
-        )
-
-    return factory
