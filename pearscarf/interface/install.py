@@ -16,14 +16,12 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
 
 import click
 import yaml
 
 from pearscarf.registry import base_entity_types
 from pearscarf.storage import store
-
 
 # --- Source detection ---
 
@@ -42,8 +40,8 @@ def detect_source(source: str) -> InstallSource:
     # Reject non-local sources with a clear message
     if s.startswith("git+") or "github.com" in s:
         raise SystemExit(
-            f"Git URL installs are not supported in this version.\n"
-            f"Clone the repo into experts/ and use: pearscarf install ./experts/<name>"
+            "Git URL installs are not supported in this version.\n"
+            "Clone the repo into experts/ and use: pearscarf install ./experts/<name>"
         )
     if not (s.startswith("./") or s.startswith("../") or s.startswith("~/") or s.startswith("/")):
         raise SystemExit(
@@ -137,9 +135,7 @@ def stage_manifest(ctx: ValidationContext) -> StageResult:
 
     # name should match the directory name (local) or the dist name (pip)
     if name != ctx.package_name:
-        return _fail(
-            f"manifest name '{name}' does not match package name '{ctx.package_name}'"
-        )
+        return _fail(f"manifest name '{name}' does not match package name '{ctx.package_name}'")
 
     if not isinstance(record_types, list) or not record_types:
         return _fail("manifest record_types must be a non-empty list")
@@ -169,8 +165,10 @@ def stage_knowledge(ctx: ValidationContext) -> StageResult:
     assert ctx.package_dir is not None
     knowledge = ctx.package_dir / "knowledge"
 
-    for label, rel in [("knowledge/extraction.md", "extraction.md"),
-                        ("knowledge/agent.md", "agent.md")]:
+    for label, rel in [
+        ("knowledge/extraction.md", "extraction.md"),
+        ("knowledge/agent.md", "agent.md"),
+    ]:
         err = _check_file_nonempty(knowledge / rel, label)
         if err:
             return _fail(err)
@@ -245,9 +243,7 @@ def stage_conflicts(ctx: ValidationContext) -> StageResult:
 
     for e in others:
         if e["source_type"] == source_type:
-            return _fail(
-                f"source_type '{source_type}' already registered by '{e['name']}'"
-            )
+            return _fail(f"source_type '{source_type}' already registered by '{e['name']}'")
 
     # Build record_type → expert map for collision check.
     # Read each other expert's record_types from its on-disk manifest via importlib.
@@ -267,9 +263,7 @@ def stage_conflicts(ctx: ValidationContext) -> StageResult:
 
     for rt in record_types:
         if rt in rt_map:
-            return _fail(
-                f"record_type '{rt}' already claimed by '{rt_map[rt]}'"
-            )
+            return _fail(f"record_type '{rt}' already claimed by '{rt_map[rt]}'")
 
     # New entity type collisions: against base types and against installed entity types
     existing_entity_types: set[str] = set()
@@ -285,13 +279,9 @@ def stage_conflicts(ctx: ValidationContext) -> StageResult:
             continue
         lower = type_name.lower()
         if lower in base_types:
-            return _fail(
-                f"new_entity_type '{type_name}' collides with base entity type"
-            )
+            return _fail(f"new_entity_type '{type_name}' collides with base entity type")
         if lower in existing_entity_types:
-            return _fail(
-                f"new_entity_type '{type_name}' collides with an installed entity type"
-            )
+            return _fail(f"new_entity_type '{type_name}' collides with an installed entity type")
 
     return _ok("no conflicts")
 
@@ -385,18 +375,22 @@ def write_registration(ctx: ValidationContext) -> None:
         type_name = entry.get("name") if isinstance(entry, dict) else entry
         if not type_name:
             continue
-        entity_types.append({
-            "type_name": type_name,
-            "knowledge_path": f"knowledge/entities/{type_name.lower()}.md",
-        })
+        entity_types.append(
+            {
+                "type_name": type_name,
+                "knowledge_path": f"knowledge/entities/{type_name.lower()}.md",
+            }
+        )
 
     identifier_patterns: list[dict] = []
     for entry in ctx.manifest.get("identifier_patterns") or []:
-        identifier_patterns.append({
-            "pattern_or_field": entry.get("pattern") or entry.get("field") or "",
-            "entity_type": entry["entity_type"],
-            "scope": entry["scope"],
-        })
+        identifier_patterns.append(
+            {
+                "pattern_or_field": entry.get("pattern") or entry.get("field") or "",
+                "entity_type": entry["entity_type"],
+                "scope": entry["scope"],
+            }
+        )
 
     store.write_full_registration(
         name=ctx.manifest["name"],
@@ -423,19 +417,24 @@ def _create_schema_tables(ctx: ValidationContext) -> None:
     for record_type, schema_path in schemas.items():
         full_path = ctx.package_dir / schema_path
         if not full_path.is_file():
-            click.echo(click.style(
-                f"  warning: schema file missing for {record_type}: {schema_path}",
-                fg="yellow",
-            ))
+            click.echo(
+                click.style(
+                    f"  warning: schema file missing for {record_type}: {schema_path}",
+                    fg="yellow",
+                )
+            )
             continue
         try:
             import json as _json
+
             schema = _json.loads(full_path.read_text())
         except Exception as exc:
-            click.echo(click.style(
-                f"  warning: failed to read schema for {record_type}: {exc}",
-                fg="yellow",
-            ))
+            click.echo(
+                click.style(
+                    f"  warning: failed to read schema for {record_type}: {exc}",
+                    fg="yellow",
+                )
+            )
             continue
 
         table_name = store.create_typed_table(expert_name, record_type, version, schema)
@@ -501,12 +500,14 @@ def check_expert_credentials(expert) -> list[CredentialError]:
         for key, example_value in example_vars.items():
             if example_value:
                 continue
-            errors.append(CredentialError(
-                expert_name=expert.name,
-                var_name=key,
-                env_path=target_path,
-                reason="credentials file missing — copy .env.example and fill in",
-            ))
+            errors.append(
+                CredentialError(
+                    expert_name=expert.name,
+                    var_name=key,
+                    env_path=target_path,
+                    reason="credentials file missing — copy .env.example and fill in",
+                )
+            )
         return errors
 
     operator_vars = _parse_env_file(target_path)
@@ -517,20 +518,24 @@ def check_expert_credentials(expert) -> list[CredentialError]:
             continue
         operator_value = operator_vars.get(key)
         if operator_value is None:
-            errors.append(CredentialError(
-                expert_name=expert.name,
-                var_name=key,
-                env_path=target_path,
-                reason="missing from env file",
-            ))
+            errors.append(
+                CredentialError(
+                    expert_name=expert.name,
+                    var_name=key,
+                    env_path=target_path,
+                    reason="missing from env file",
+                )
+            )
             continue
         if not operator_value:
-            errors.append(CredentialError(
-                expert_name=expert.name,
-                var_name=key,
-                env_path=target_path,
-                reason="empty",
-            ))
+            errors.append(
+                CredentialError(
+                    expert_name=expert.name,
+                    var_name=key,
+                    env_path=target_path,
+                    reason="empty",
+                )
+            )
 
     return errors
 
@@ -554,10 +559,12 @@ def enforce_credentials_or_exit() -> None:
     if not errors:
         return
 
-    click.echo(click.style(
-        "Credential check failed. The following expert credentials are missing or unfilled:",
-        fg="red",
-    ))
+    click.echo(
+        click.style(
+            "Credential check failed. The following expert credentials are missing or unfilled:",
+            fg="red",
+        )
+    )
     click.echo()
 
     by_expert: dict[str, list[CredentialError]] = {}
@@ -600,13 +607,11 @@ def scaffold_credentials(ctx: ValidationContext) -> Path | None:
                 f.write("env/\n")
 
     click.echo(click.style(f"  credentials scaffolded → {target}", fg="green"))
-    click.echo(f"  edit this file before starting the expert.")
+    click.echo("  edit this file before starting the expert.")
     return target
 
 
-def prompt_entity_type_approval(
-    ctx: ValidationContext, assume_yes: bool
-) -> bool:
+def prompt_entity_type_approval(ctx: ValidationContext, assume_yes: bool) -> bool:
     """If the manifest declares new entity types, ask the operator to approve."""
     new_types = [
         (entry.get("name") if isinstance(entry, dict) else entry)
@@ -637,8 +642,14 @@ def prompt_entity_type_approval(
 
 @click.command("install")
 @click.argument("source")
-@click.option("-y", "--yes", "assume_yes", is_flag=True, default=False,
-              help="Skip the new entity types approval prompt (for non-interactive installs)")
+@click.option(
+    "-y",
+    "--yes",
+    "assume_yes",
+    is_flag=True,
+    default=False,
+    help="Skip the new entity types approval prompt (for non-interactive installs)",
+)
 def install_command(source: str, assume_yes: bool) -> None:
     """Install an expert from a local folder path."""
     src = detect_source(source)
@@ -660,13 +671,15 @@ def install_command(source: str, assume_yes: bool) -> None:
     except Exception as exc:
         click.echo()
         click.echo(click.style(f"DB write failed: {exc}", fg="red"))
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
     click.echo()
-    click.echo(click.style(
-        f"✓ {ctx.manifest['name']} v{ctx.manifest['version']} installed.",
-        fg="green",
-    ))
+    click.echo(
+        click.style(
+            f"✓ {ctx.manifest['name']} v{ctx.manifest['version']} installed.",
+            fg="green",
+        )
+    )
 
     scaffold_credentials(ctx)
 
@@ -740,9 +753,7 @@ def expert_inspect_command(name: str) -> None:
     click.echo()
     click.echo(f"Identifier patterns ({len(patterns)}):")
     for p in patterns:
-        click.echo(
-            f"  • [{p['scope']}] {p['entity_type']} ← {p['pattern_or_field']}"
-        )
+        click.echo(f"  • [{p['scope']}] {p['entity_type']} ← {p['pattern_or_field']}")
 
     cred_path = _ENV_DIR / f".{name}.env"
     click.echo()
@@ -758,6 +769,7 @@ def expert_inspect_command(name: str) -> None:
 def _reset_runtime_registry() -> None:
     """Drop the cached registry so the next process call sees fresh DB state."""
     from pearscarf.registry import reset_registry
+
     reset_registry()
 
 
@@ -772,10 +784,12 @@ def expert_disable_command(name: str) -> None:
 
     store.disable_enabled_expert(name)
     _reset_runtime_registry()
-    click.echo(click.style(
-        f"✓ {name} v{row['version']} disabled. Reversible via 'psc expert enable {name}'.",
-        fg="yellow",
-    ))
+    click.echo(
+        click.style(
+            f"✓ {name} v{row['version']} disabled. Reversible via 'psc expert enable {name}'.",
+            fg="yellow",
+        )
+    )
     click.echo("  (graph data is untouched.)")
 
 
@@ -793,15 +807,14 @@ def expert_enable_command(name: str) -> None:
         raise SystemExit(1)
 
     _reset_runtime_registry()
-    click.echo(click.style(
-        f"✓ {name} v{row['version']} enabled.", fg="green"
-    ))
+    click.echo(click.style(f"✓ {name} v{row['version']} enabled.", fg="green"))
 
 
 @click.command("uninstall")
 @click.argument("name")
-@click.option("-y", "--yes", "assume_yes", is_flag=True, default=False,
-              help="Skip the confirmation prompt")
+@click.option(
+    "-y", "--yes", "assume_yes", is_flag=True, default=False, help="Skip the confirmation prompt"
+)
 def expert_uninstall_command(name: str, assume_yes: bool) -> None:
     """Uninstall an expert. Removes all DB rows. Graph data is preserved."""
     rows = store.list_versions_of_expert(name)
@@ -812,8 +825,7 @@ def expert_uninstall_command(name: str, assume_yes: bool) -> None:
     enabled = next((r for r in rows if r["enabled"]), None)
     summary_version = (enabled or rows[0])["version"]
 
-    click.echo(f"This will uninstall '{name}' v{summary_version} "
-               f"and remove {len(rows)} DB row(s).")
+    click.echo(f"This will uninstall '{name}' v{summary_version} and remove {len(rows)} DB row(s).")
     click.echo("  Graph data (entities, fact edges) is preserved.")
 
     if not assume_yes and not click.confirm("Proceed?", default=False):
@@ -823,11 +835,12 @@ def expert_uninstall_command(name: str, assume_yes: bool) -> None:
     removed = store.delete_expert_cascade(name)
     _reset_runtime_registry()
 
-    click.echo(click.style(
-        f"✓ {name} uninstalled ({removed} row(s) removed). "
-        f"Graph data preserved.",
-        fg="green",
-    ))
+    click.echo(
+        click.style(
+            f"✓ {name} uninstalled ({removed} row(s) removed). Graph data preserved.",
+            fg="green",
+        )
+    )
 
 
 def _read_manifest_version(package_name: str) -> tuple[str | None, Path | None]:
@@ -855,8 +868,14 @@ def _read_manifest_version(package_name: str) -> tuple[str | None, Path | None]:
 
 @click.command("update")
 @click.argument("name")
-@click.option("-y", "--yes", "assume_yes", is_flag=True, default=False,
-              help="Skip the new entity types approval prompt")
+@click.option(
+    "-y",
+    "--yes",
+    "assume_yes",
+    is_flag=True,
+    default=False,
+    help="Skip the new entity types approval prompt",
+)
 def expert_update_command(name: str, assume_yes: bool) -> None:
     """Update an installed expert to the latest on-disk version."""
     current = store.get_enabled_expert(name)
@@ -869,10 +888,12 @@ def expert_update_command(name: str, assume_yes: bool) -> None:
     # Read the on-disk manifest version
     new_version, package_dir = _read_manifest_version(package_name)
     if new_version is None:
-        click.echo(click.style(
-            f"Could not read manifest version for {package_name}.",
-            fg="red",
-        ))
+        click.echo(
+            click.style(
+                f"Could not read manifest version for {package_name}.",
+                fg="red",
+            )
+        )
         raise SystemExit(1)
 
     if new_version == current["version"]:
@@ -883,8 +904,7 @@ def expert_update_command(name: str, assume_yes: bool) -> None:
 
     # Re-validate the package
     assert package_dir is not None
-    src = InstallSource(method="local", raw=str(package_dir),
-                        local_path=package_dir)
+    src = InstallSource(method="local", raw=str(package_dir), local_path=package_dir)
     ctx = run_validation(src)
     if ctx.failures:
         click.echo()
@@ -892,10 +912,12 @@ def expert_update_command(name: str, assume_yes: bool) -> None:
         raise SystemExit(1)
 
     if not prompt_entity_type_approval(ctx, assume_yes):
-        click.echo(click.style(
-            "Update cancelled — entity types not approved. Old version remains active.",
-            fg="red",
-        ))
+        click.echo(
+            click.style(
+                "Update cancelled — entity types not approved. Old version remains active.",
+                fg="red",
+            )
+        )
         raise SystemExit(1)
 
     # Step 4: write_full_registration handles "disable old enabled row, insert new"
@@ -903,15 +925,15 @@ def expert_update_command(name: str, assume_yes: bool) -> None:
     try:
         write_registration(ctx)
     except Exception as exc:
-        click.echo(click.style(
-            f"DB write failed: {exc}. Old version remains active.", fg="red"
-        ))
-        raise SystemExit(1)
+        click.echo(click.style(f"DB write failed: {exc}. Old version remains active.", fg="red"))
+        raise SystemExit(1) from exc
 
     _reset_runtime_registry()
     click.echo()
-    click.echo(click.style(
-        f"✓ {name} updated: v{current['version']} → v{new_version}.",
-        fg="green",
-    ))
-    click.echo(f"  Old row preserved as historical record (enabled=false).")
+    click.echo(
+        click.style(
+            f"✓ {name} updated: v{current['version']} → v{new_version}.",
+            fg="green",
+        )
+    )
+    click.echo("  Old row preserved as historical record (enabled=false).")

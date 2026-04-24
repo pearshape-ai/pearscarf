@@ -5,9 +5,9 @@ import asyncio
 import discord
 
 from pearscarf import log
-from pearscarf.storage import db
 from pearscarf.bus import MessageBus
 from pearscarf.config import DISCORD_BOT_TOKEN
+from pearscarf.storage import db
 
 
 class PearscarfBot(discord.Client):
@@ -33,8 +33,7 @@ class PearscarfBot(discord.Client):
         is_dm = isinstance(message.channel, discord.DMChannel)
         is_user_mention = self.user.mentioned_in(message)
         is_role_mention = any(
-            role.name.lower() == self.user.name.lower()
-            for role in message.role_mentions
+            role.name.lower() == self.user.name.lower() for role in message.role_mentions
         )
         is_mention = is_user_mention or is_role_mention
 
@@ -66,9 +65,7 @@ class PearscarfBot(discord.Client):
             except Exception:
                 pass
 
-    async def _handle_message(
-        self, message: discord.Message, content: str, is_dm: bool
-    ) -> None:
+    async def _handle_message(self, message: discord.Message, content: str, is_dm: bool) -> None:
         """Process a validated message. Separated for error handling."""
         # Determine session: if in a thread, look up existing session
         if isinstance(message.channel, discord.Thread):
@@ -83,9 +80,7 @@ class PearscarfBot(discord.Client):
             # New message in a main channel — create session + thread
             session_id = self._bus.create_session("human", content[:80])
 
-            thread = await message.create_thread(
-                name=content[:100], auto_archive_duration=1440
-            )
+            thread = await message.create_thread(name=content[:100], auto_archive_duration=1440)
             db.save_thread_mapping(session_id, thread.id, message.channel.id)
 
             # Send to assistant via bus
@@ -122,7 +117,9 @@ class PearscarfBot(discord.Client):
                     from_agent = msg["from_agent"]
 
                     log.write(
-                        "human", session_id, "message_received",
+                        "human",
+                        session_id,
+                        "message_received",
                         f"from={from_agent}: {content[:200]}",
                     )
 
@@ -145,9 +142,7 @@ class PearscarfBot(discord.Client):
                                         auto_archive_duration=1440,
                                         type=discord.ChannelType.public_thread,
                                     )
-                                    db.save_thread_mapping(
-                                        session_id, thread.id, channel.id
-                                    )
+                                    db.save_thread_mapping(session_id, thread.id, channel.id)
                                     text = f"**{from_agent}**: {content}"
                                     for i in range(0, len(text), 2000):
                                         await thread.send(text[i : i + 2000])

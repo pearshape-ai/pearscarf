@@ -21,9 +21,7 @@ class MessageBus:
         reasoning: str = "",
         data: dict[str, Any] | None = None,
     ) -> int:
-        return db.insert_message(
-            session_id, from_agent, to_agent, content, reasoning, data
-        )
+        return db.insert_message(session_id, from_agent, to_agent, content, reasoning, data)
 
     def poll(self, agent_name: str) -> list[dict]:
         messages = db.poll_unread(agent_name)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def print_report(
@@ -85,7 +85,7 @@ def write_results(
     payload = {
         "pearscarf_version": pearscarf_version,
         "dataset_version": dataset_version,
-        "run_at": datetime.now(timezone.utc).isoformat(),
+        "run_at": datetime.now(UTC).isoformat(),
         "aggregate": aggregate,
         "per_record": per_record_out,
     }

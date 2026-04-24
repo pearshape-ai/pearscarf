@@ -23,7 +23,6 @@ from openai import OpenAI
 
 from pearscarf.config import ANTHROPIC_API_KEY, OPENAI_API_KEY, PROVIDER
 
-
 # ------------ Normalized response shapes ------------
 
 
@@ -37,18 +36,18 @@ class LLMUsage:
 
 @dataclass
 class LLMToolCall:
-    id: str        # provider-native tool-call id (Anthropic's block.id, OpenAI's tool_call.id)
+    id: str  # provider-native tool-call id (Anthropic's block.id, OpenAI's tool_call.id)
     name: str
     input: dict[str, Any]
 
 
 @dataclass
 class LLMResponse:
-    text: str                                         # concatenated text content
+    text: str  # concatenated text content
     tool_calls: list[LLMToolCall] = field(default_factory=list)
-    stop_reason: str = ""                             # normalized: end_turn | tool_use | max_tokens | error
+    stop_reason: str = ""  # normalized: end_turn | tool_use | max_tokens | error
     usage: LLMUsage = field(default_factory=LLMUsage)
-    raw: Any = None                                   # provider-native response, for debugging
+    raw: Any = None  # provider-native response, for debugging
 
 
 # ------------ Client protocol ------------
@@ -222,7 +221,7 @@ class OpenAIClient:
         choice = resp.choices[0]
         msg = choice.message
         tool_calls: list[LLMToolCall] = []
-        for tc in (msg.tool_calls or []):
+        for tc in msg.tool_calls or []:
             try:
                 args = json.loads(tc.function.arguments or "{}")
             except json.JSONDecodeError:

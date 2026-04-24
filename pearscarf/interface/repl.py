@@ -8,6 +8,7 @@ from pearscarf import __version__, log, status
 from pearscarf.bus import MessageBus
 from pearscarf.interface.terminal import TerminalUI
 
+
 def _color(text: str, fg: str) -> str:
     """Apply click-style ANSI color without a trailing reset quirk."""
     return click.style(text, fg=fg)
@@ -139,9 +140,7 @@ class SessionRepl:
                     direction = _color(msg["from_agent"], "cyan")
                     arrow = " -> "
                     to = _color(msg["to_agent"], "green")
-                    self._ui.print_above(
-                        f"  {direction}{arrow}{to}: {msg['content'][:120]}"
-                    )
+                    self._ui.print_above(f"  {direction}{arrow}{to}: {msg['content'][:120]}")
             return True
 
         if cmd == "/memory":
@@ -225,14 +224,10 @@ class SessionRepl:
         self._ensure_session()
 
         # Start background threads
-        poll_thread = threading.Thread(
-            target=self._poll_responses, name="repl-poll", daemon=True
-        )
+        poll_thread = threading.Thread(target=self._poll_responses, name="repl-poll", daemon=True)
         poll_thread.start()
 
-        status_thread = threading.Thread(
-            target=self._poll_status, name="repl-status", daemon=True
-        )
+        status_thread = threading.Thread(target=self._poll_status, name="repl-status", daemon=True)
         status_thread.start()
 
         self._ui.println(f"PearScarf v{__version__} (type 'exit' or Ctrl+C to quit)")

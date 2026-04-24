@@ -1,0 +1,22 @@
+# Hooks that run before each git commit. Install with `uv run pre-commit install`.
+# Run manually across the whole repo with `uv run pre-commit run --all-files`.
+# The same checks run in CI on every pull request.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        # Typing only the pearscarf package — experts get separate treatment later,
+        # lab + scripts are tooling that we don't type-check in this phase.
+        files: ^pearscarf/
+        additional_dependencies:
+          - click
+          - httpx
+          - pydantic

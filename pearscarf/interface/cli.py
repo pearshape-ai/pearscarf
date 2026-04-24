@@ -20,14 +20,25 @@ def _print_version(ctx: click.Context, _param: click.Parameter, value: bool) -> 
 
 
 @click.group()
-@click.option("--version", is_flag=True, callback=_print_version, expose_value=False, is_eager=True, help="Show version and exit.")
+@click.option(
+    "--version",
+    is_flag=True,
+    callback=_print_version,
+    expose_value=False,
+    is_eager=True,
+    help="Show version and exit.",
+)
 def cli() -> None:
     """pearscarf: Operational infrastructure that grows itself."""
 
 
 @cli.command()
-@click.option("--poll", is_flag=True, default=False,
-              help="Start all enabled expert connectors (each requires its own credentials)")
+@click.option(
+    "--poll",
+    is_flag=True,
+    default=False,
+    help="Start all enabled expert connectors (each requires its own credentials)",
+)
 def run(poll: bool) -> None:
     """Start the full system: assistant + experts + REPL."""
     from pearscarf.interface.repl import SessionRepl
@@ -49,8 +60,12 @@ def run(poll: bool) -> None:
 
 
 @cli.command()
-@click.option("--poll", is_flag=True, default=False,
-              help="Start all enabled expert connectors (each requires its own credentials)")
+@click.option(
+    "--poll",
+    is_flag=True,
+    default=False,
+    help="Start all enabled expert connectors (each requires its own credentials)",
+)
 def dev(poll: bool) -> None:
     """Local-dev monolith: full system with Discord frontend, all in one process.
 
@@ -77,6 +92,7 @@ def discord_start() -> None:
     decomposed compose. For local monolithic dev, use `psc dev`.
     """
     from pearscarf.interface.discord_bot import run_bot
+
     run_bot(bot_only=True)
 
 
@@ -109,7 +125,10 @@ def expert() -> None:
 
 
 # Install + lifecycle commands live in interface/install.py — registered here.
-from pearscarf.interface.install import (
+# Late import avoids a circular reference at module load.
+from datetime import UTC  # noqa: E402
+
+from pearscarf.interface.install import (  # noqa: E402
     expert_disable_command,
     expert_enable_command,
     expert_inspect_command,
@@ -144,6 +163,7 @@ def _resolve_expert(expert_name: str):
 def _run_ingester(expert_name: str) -> None:
     """Start one expert's ingester in the foreground. Blocks until Ctrl+C."""
     import threading
+
     from pearscarf.bus import MessageBus
     from pearscarf.expert_context import load_expert
     from pearscarf.storage.db import init_db
@@ -198,8 +218,16 @@ def expert_start_ingestion(expert_name: str) -> None:
 
 @expert.command("ingest")
 @click.option("--seed", type=click.Path(exists=True), default=None, help="Ingest a seed file (.md)")
-@click.option("--record", type=click.Path(exists=True), default=None, help="Ingest a JSON record file")
-@click.option("--type", "record_type", type=str, default=None, help="Record type (e.g. 'email', 'linear_issue', 'github_pr')")
+@click.option(
+    "--record", type=click.Path(exists=True), default=None, help="Ingest a JSON record file"
+)
+@click.option(
+    "--type",
+    "record_type",
+    type=str,
+    default=None,
+    help="Record type (e.g. 'email', 'linear_issue', 'github_pr')",
+)
 def ingest(seed: str | None, record: str | None, record_type: str | None) -> None:
     """Ingest expert — file-based data entry. Standalone interactive mode without flags."""
     from pearscarf.bus import MessageBus
@@ -279,7 +307,9 @@ def ingest(seed: str | None, record: str | None, record_type: str | None) -> Non
 
 
 @cli.group("eval", invoke_without_command=True)
-@click.option("--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory")
+@click.option(
+    "--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory"
+)
 @click.pass_context
 def eval_cmd(ctx, dataset: str | None) -> None:
     """Run evaluation. Use subcommands (er, facts) or run all."""
@@ -289,11 +319,14 @@ def eval_cmd(ctx, dataset: str | None) -> None:
         if not dataset:
             raise click.UsageError("--dataset is required")
         from pearscarf.eval.runner import run_graph_eval
+
         run_graph_eval(dataset)
 
 
 @eval_cmd.command("er")
-@click.option("--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory")
+@click.option(
+    "--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory"
+)
 @click.option("--verbose", "-v", is_flag=True, help="Show per-entity surface form diagnostics")
 @click.option("--debug", "-d", is_flag=True, help="Dump LLM prompts/responses to data/debug/")
 @click.option("--debug-dir", type=click.Path(), default=None, help="Custom debug output folder")
@@ -304,12 +337,15 @@ def eval_er(ctx, dataset: str | None, verbose: bool, debug: bool, debug_dir: str
     if not ds:
         raise click.UsageError("--dataset is required")
     from pearscarf.eval.runner import run_er_eval
+
     d = debug_dir or ("data/debug" if debug else None)
     run_er_eval(ds, verbose=verbose, debug_dir=d)
 
 
 @eval_cmd.command("facts")
-@click.option("--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory")
+@click.option(
+    "--dataset", type=click.Path(exists=True), default=None, help="Path to eval dataset directory"
+)
 @click.option("--verbose", "-v", is_flag=True, help="Show missing and extra facts")
 @click.option("--debug", "-d", is_flag=True, help="Dump LLM prompts/responses to data/debug/")
 @click.option("--debug-dir", type=click.Path(), default=None, help="Custom debug output folder")
@@ -320,6 +356,7 @@ def eval_facts(ctx, dataset: str | None, verbose: bool, debug: bool, debug_dir: 
     if not ds:
         raise click.UsageError("--dataset is required")
     from pearscarf.eval.runner import run_facts_eval
+
     d = debug_dir or ("data/debug" if debug else None)
     run_facts_eval(ds, verbose=verbose, debug_dir=d)
 
@@ -336,6 +373,7 @@ def mcp(ctx):
 def mcp_start():
     """Run MCP server standalone in the foreground."""
     from pearscarf.mcp.mcp_server import MCPServer
+
     MCPServer().run_foreground()
 
 
@@ -343,13 +381,14 @@ def mcp_start():
 def mcp_status():
     """Show MCP server info."""
     from pearscarf.config import MCP_HOST, MCP_PORT
-    from pearscarf.storage.store import list_mcp_keys
     from pearscarf.storage.db import init_db
+    from pearscarf.storage.store import list_mcp_keys
+
     init_db()
     keys = list_mcp_keys()
     active = sum(1 for k in keys if not k["revoked"])
     click.echo(f"  Bind: {MCP_HOST}:{MCP_PORT}")
-    click.echo(f"  Tools: 10")
+    click.echo("  Tools: 10")
     click.echo(f"  Keys: {active} active, {len(keys)} total")
 
 
@@ -357,9 +396,9 @@ def mcp_status():
 @click.argument("entity_name")
 def mcp_test(entity_name: str):
     """Smoke test: call all three primitive tools against an entity name."""
-    import json
     from pearscarf.query import context_query
     from pearscarf.storage.db import init_db
+
     init_db()
 
     click.echo(f"Testing against: {entity_name}\n")
@@ -411,14 +450,18 @@ def mcp_test(entity_name: str):
 
     # get_current_state
     click.echo("\n--- get_current_state ---")
-    affiliations = context_query.get_facts(entity["id"], edge_label="AFFILIATED", include_stale=False)
+    affiliations = context_query.get_facts(
+        entity["id"], edge_label="AFFILIATED", include_stale=False
+    )
     click.echo(f"  {len(affiliations)} affiliation(s)")
     for a in affiliations[:5]:
         click.echo(f"  [{a.get('fact_type', '?')}] {a.get('fact', '')}")
 
     # get_open_commitments
     click.echo("\n--- get_open_commitments ---")
-    commitments = context_query.get_facts(entity["id"], edge_label="ASSERTED", fact_type="commitment", include_stale=False)
+    commitments = context_query.get_facts(
+        entity["id"], edge_label="ASSERTED", fact_type="commitment", include_stale=False
+    )
     commitments = [c for c in commitments if c.get("valid_until")]
     click.echo(f"  {len(commitments)} open commitment(s)")
     for c in commitments[:3]:
@@ -426,15 +469,18 @@ def mcp_test(entity_name: str):
 
     # get_open_blockers
     click.echo("\n--- get_open_blockers ---")
-    blockers = context_query.get_facts(entity["id"], edge_label="ASSERTED", fact_type="blocker", include_stale=False)
+    blockers = context_query.get_facts(
+        entity["id"], edge_label="ASSERTED", fact_type="blocker", include_stale=False
+    )
     click.echo(f"  {len(blockers)} blocker(s)")
     for b in blockers[:3]:
         click.echo(f"  {b.get('fact', '')}")
 
     # get_recent_activity
     click.echo("\n--- get_recent_activity (30 days) ---")
-    from datetime import datetime, timezone, timedelta
-    since_30d = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    from datetime import datetime, timedelta
+
+    since_30d = (datetime.now(UTC) - timedelta(days=30)).isoformat()
     transitions = context_query.get_facts(entity["id"], edge_label="TRANSITIONED", since=since_30d)
     comms = context_query.get_communications(entity["id"], since=since_30d)
     click.echo(f"  {len(transitions)} transition(s), {len(comms)} communication(s)")
@@ -448,8 +494,9 @@ def mcp_keys():
 @mcp_keys.command("list")
 def mcp_keys_list():
     """List all MCP API keys."""
-    from pearscarf.storage.store import list_mcp_keys
     from pearscarf.storage.db import init_db
+    from pearscarf.storage.store import list_mcp_keys
+
     init_db()
     keys = list_mcp_keys()
     if not keys:
@@ -458,15 +505,18 @@ def mcp_keys_list():
     for k in keys:
         status = "revoked" if k["revoked"] else "active"
         last = k["last_used_at"] or "never"
-        click.echo(f"  {k['id']}  {k['name']}  {status}  created: {k['created_at']}  last used: {last}")
+        click.echo(
+            f"  {k['id']}  {k['name']}  {status}  created: {k['created_at']}  last used: {last}"
+        )
 
 
 @mcp_keys.command("create")
 @click.option("--name", required=True, help="Human-readable key name")
 def mcp_keys_create(name):
     """Create a new MCP API key."""
-    from pearscarf.storage.store import create_mcp_key
     from pearscarf.storage.db import init_db
+    from pearscarf.storage.store import create_mcp_key
+
     init_db()
     result = create_mcp_key(name)
     click.echo(f"Key created: {result['id']}")
@@ -479,8 +529,9 @@ def mcp_keys_create(name):
 @click.argument("key_id")
 def mcp_keys_revoke(key_id):
     """Revoke an MCP API key."""
-    from pearscarf.storage.store import revoke_mcp_key
     from pearscarf.storage.db import init_db
+    from pearscarf.storage.store import revoke_mcp_key
+
     init_db()
     if revoke_mcp_key(key_id):
         click.echo(f"Key {key_id} revoked.")
@@ -500,6 +551,7 @@ def triage(ctx) -> None:
 def triage_start() -> None:
     """Start the triage agent in the foreground."""
     from pearscarf.triage import Triage
+
     click.echo("Triage starting...")
     Triage().run_foreground()
 
@@ -516,6 +568,7 @@ def extraction(ctx) -> None:
 def extraction_start() -> None:
     """Start the extraction consumer in the foreground."""
     from pearscarf.extraction import Extraction
+
     click.echo("Extraction starting...")
     Extraction().run_foreground()
 
@@ -534,6 +587,7 @@ def assistant_start() -> None:
     from pearscarf.assistant import Assistant
     from pearscarf.bus import MessageBus
     from pearscarf.expert_context import build_context
+
     bus = MessageBus()
     ctx = build_context("assistant", bus)
     click.echo("Assistant starting...")
@@ -552,6 +606,7 @@ def curation(ctx) -> None:
 def curation_start() -> None:
     """Start the curation consumer in the foreground."""
     from pearscarf.curation import Curation
+
     click.echo("Curation starting...")
     c = Curation()
     c.run_foreground()
@@ -560,8 +615,9 @@ def curation_start() -> None:
 @curation.command("status")
 def curation_status() -> None:
     """Show curator queue status."""
-    from pearscarf.storage.db import _get_conn, init_db
     from pearscarf.config import CURATOR_CLAIM_TIMEOUT
+    from pearscarf.storage.db import _get_conn, init_db
+
     init_db()
     with _get_conn() as conn:
         row = conn.execute(
@@ -593,10 +649,12 @@ def curation_status() -> None:
         click.echo(f"  Oldest:     {oldest}")
 
     # Graph-derived metrics
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from pearscarf.storage import graph
+
     eligible = len(graph.get_inferred_multi_source_edges())
-    today = graph.utc_to_local_date(datetime.now(timezone.utc).isoformat())
+    today = graph.utc_to_local_date(datetime.now(UTC).isoformat())
     expired = len(graph.get_expired_commitments(today))
     click.echo(f"  Upgrade eligible: {eligible}")
     click.echo(f"  Expired pending:  {expired}")
@@ -609,6 +667,7 @@ def queue(ctx) -> None:
     if ctx.invoked_subcommand is not None:
         return
     from pearscarf.storage.db import _get_conn, init_db
+
     init_db()
     with _get_conn() as conn:
         row = conn.execute(
@@ -635,11 +694,11 @@ def queue(ctx) -> None:
 def queue_list() -> None:
     """List curator queue entries (up to 20)."""
     from pearscarf.storage.db import _get_conn, init_db
+
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT record_id, queued_at, claimed_at FROM curator_queue "
-            "ORDER BY queued_at LIMIT 20"
+            "SELECT record_id, queued_at, claimed_at FROM curator_queue ORDER BY queued_at LIMIT 20"
         ).fetchall()
     if not rows:
         click.echo("Queue is empty.")
@@ -657,6 +716,7 @@ def queue_clear(confirm: bool) -> None:
         click.echo("Use --confirm to clear unclaimed queue entries.")
         return
     from pearscarf.storage.db import _get_conn, init_db
+
     init_db()
     with _get_conn() as conn:
         result = conn.execute("DELETE FROM curator_queue WHERE claimed_at IS NULL")
@@ -679,8 +739,10 @@ def queue_clear(confirm: bool) -> None:
 def query_cmd(tool_name, **kwargs):
     """Call a context_query tool directly. No MCP auth needed."""
     import json as json_mod
+
     from pearscarf.query import context_query
     from pearscarf.storage.db import init_db
+
     init_db()
 
     try:
@@ -708,7 +770,8 @@ def query_cmd(tool_name, **kwargs):
                 return
             labels = [kwargs["edge_label"]] if kwargs.get("edge_label") else None
             result = context_query.get_connections(
-                matches[0]["id"], include_stale=kwargs.get("include_stale", False),
+                matches[0]["id"],
+                include_stale=kwargs.get("include_stale", False),
                 edge_labels=labels,
             )
         elif tool_name == "get_relationship":
@@ -740,6 +803,7 @@ def integration_test():
     """Smoke test: call all context_query tools and validate response shapes."""
     from pearscarf.query import context_query
     from pearscarf.storage.db import init_db
+
     init_db()
 
     passed = 0
@@ -770,9 +834,11 @@ def integration_test():
         _check("get_conflicts", context_query.get_conflicts(), [])
         _check("get_communications", context_query.get_communications(eid), [])
 
+        from datetime import datetime
+
         from pearscarf.storage import graph
-        from datetime import datetime, timezone
-        today = graph.utc_to_local_date(datetime.now(timezone.utc).isoformat())
+
+        today = graph.utc_to_local_date(datetime.now(UTC).isoformat())
         _check("get_facts_for_day", context_query.get_facts_for_day(today), [])
         _check("vector_search", context_query.vector_search(ename), [])
         _check("get_path", context_query.get_path(eid, eid), ["path", "direct_facts"])
@@ -787,7 +853,8 @@ def erase_all() -> None:
     """Wipe all system state: Postgres records, Neo4j graph, Qdrant vectors."""
     from pearscarf.storage import vectorstore
     from pearscarf.storage.db import _get_conn, close_pool, init_db
-    from pearscarf.storage.neo4j_client import close as neo4j_close, get_session
+    from pearscarf.storage.neo4j_client import close as neo4j_close
+    from pearscarf.storage.neo4j_client import get_session
 
     init_db()
 
@@ -828,6 +895,7 @@ def erase_all() -> None:
     # Wipe Qdrant
     try:
         from qdrant_client.models import Distance, VectorParams
+
         vc = vectorstore._get_client()
         vc.delete_collection(vectorstore.COLLECTION_NAME)
         vc.create_collection(
@@ -841,8 +909,10 @@ def erase_all() -> None:
 
     # Wipe Postgres
     from pearscarf.storage.store import list_typed_tables
+
     typed_tables = list_typed_tables()
     import re
+
     with _get_conn() as conn:
         for t in typed_tables:
             if re.match(r"^[a-z0-9_]+$", t):
@@ -858,7 +928,7 @@ def erase_all() -> None:
     neo4j_close()
 
 
-import pearscarf.interface.cli_memory  # noqa: F401 — registers memory command group
+import pearscarf.interface.cli_memory  # noqa: E402,F401 — registers memory command group via import side-effect
 
 if __name__ == "__main__":
     cli()

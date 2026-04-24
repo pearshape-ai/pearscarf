@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable
 from typing import Any
 
 from pearscarf.agents.expert import ExpertAgent
@@ -170,7 +169,7 @@ class ParseRecordFileTool(BaseTool):
 
 
 def create_ingest_expert(
-    ctx: "ExpertContext",
+    ctx: ExpertContext,
     on_tool_call=None,
     on_text=None,
     on_tool_result=None,
@@ -188,5 +187,3 @@ def create_ingest_expert(
         on_text=on_text,
         on_tool_result=on_tool_result,
     )
-
-

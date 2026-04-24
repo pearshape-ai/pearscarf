@@ -18,6 +18,7 @@ from typing import Any
 @dataclass
 class SystemComponents:
     """Running components returned by start_system(). Caller shuts them down."""
+
     bus: Any
     expert_bots: list = field(default_factory=list)
     extraction: Any = None
@@ -47,11 +48,12 @@ def start_system(
     from pearscarf.expert_bot import ExpertBot
     from pearscarf.expert_context import build_context
     from pearscarf.extraction import Extraction
-    from pearscarf.registry import get_registry
     from pearscarf.interface.install import enforce_credentials_or_exit
     from pearscarf.mcp.mcp_server import MCPServer
+    from pearscarf.registry import get_registry
 
     if log_fn is None:
+
         def log_fn(msg: str) -> None:
             sys.stdout.write(msg + "\r\n")
             sys.stdout.flush()
@@ -122,6 +124,7 @@ def start_system(
 
     # --- Start extraction ---
     from pearscarf.knowledge import onboarding_summary
+
     onb_source, onb_chars = onboarding_summary()
     log_fn(f"Onboarding: {onb_chars} chars ({onb_source}).")
     if onb_chars > 8000:
@@ -134,6 +137,7 @@ def start_system(
 
     # --- Start curation ---
     from pearscarf.curation import Curation
+
     curation = Curation()
     curation.start()
     components.curation = curation
@@ -141,6 +145,7 @@ def start_system(
 
     # --- Start triage ---
     from pearscarf.triage import Triage
+
     triage = Triage()
     triage.start()
     components.triage = triage

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from pearscarf.storage.db import _get_conn, _now, init_db
 
-
 # --- Generic record API (used by ExpertContext) ---
 
 
@@ -94,8 +93,8 @@ def get_record(record_id: str) -> dict | None:
 RELEVANT = "relevant"
 NOISE = "noise"
 PENDING_TRIAGE = "pending_triage"
-TRIAGING = "triaging"      # transient: triage agent is processing
-UNCERTAIN = "uncertain"    # triage couldn't decide; HIL queue
+TRIAGING = "triaging"  # transient: triage agent is processing
+UNCERTAIN = "uncertain"  # triage couldn't decide; HIL queue
 
 
 def set_classification(record_id: str, label: str) -> None:
@@ -249,7 +248,9 @@ def save_ingest(
 
 def _next_change_id() -> str:
     with _get_conn() as conn:
-        row = conn.execute("SELECT COUNT(*) as c FROM records WHERE type = 'issue_change'").fetchone()
+        row = conn.execute(
+            "SELECT COUNT(*) as c FROM records WHERE type = 'issue_change'"
+        ).fetchone()
         num = row["c"] + 1
         return f"change_{num:03d}"
 
@@ -291,8 +292,16 @@ def save_issue_change(
             "INSERT INTO issue_changes (record_id, issue_record_id, linear_history_id, "
             "field, from_value, to_value, changed_by, changed_at) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-            (record_id, issue_record_id, linear_history_id, field,
-             from_value, to_value, changed_by, changed_at or now),
+            (
+                record_id,
+                issue_record_id,
+                linear_history_id,
+                field,
+                from_value,
+                to_value,
+                changed_by,
+                changed_at or now,
+            ),
         )
         conn.commit()
         return record_id
@@ -347,9 +356,20 @@ def save_issue(
                 "status = %s, priority = %s, assignee = %s, project = %s, "
                 "labels = %s, comments = %s, url = %s, linear_updated_at = %s "
                 "WHERE record_id = %s",
-                (identifier, title, description, status, priority, assignee, project,
-                 Jsonb(labels or []), Jsonb(comments or []), url,
-                 linear_updated_at or None, record_id),
+                (
+                    identifier,
+                    title,
+                    description,
+                    status,
+                    priority,
+                    assignee,
+                    project,
+                    Jsonb(labels or []),
+                    Jsonb(comments or []),
+                    url,
+                    linear_updated_at or None,
+                    record_id,
+                ),
             )
             conn.commit()
             return record_id, False
@@ -366,9 +386,22 @@ def save_issue(
             "priority, assignee, project, labels, comments, url, "
             "linear_created_at, linear_updated_at) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (record_id, linear_id, identifier, title, description, status, priority,
-             assignee, project, Jsonb(labels or []), Jsonb(comments or []), url,
-             linear_created_at or None, linear_updated_at or None),
+            (
+                record_id,
+                linear_id,
+                identifier,
+                title,
+                description,
+                status,
+                priority,
+                assignee,
+                project,
+                Jsonb(labels or []),
+                Jsonb(comments or []),
+                url,
+                linear_created_at or None,
+                linear_updated_at or None,
+            ),
         )
         conn.commit()
         return record_id, True
@@ -446,8 +479,7 @@ def enqueue_for_curation(record_id: str) -> None:
     init_db()
     with _get_conn() as conn:
         conn.execute(
-            "INSERT INTO curator_queue (record_id) VALUES (%s) "
-            "ON CONFLICT (record_id) DO NOTHING",
+            "INSERT INTO curator_queue (record_id) VALUES (%s) ON CONFLICT (record_id) DO NOTHING",
             (record_id,),
         )
         conn.commit()
@@ -487,8 +519,8 @@ def get_communications_for_entity(name_or_email: str, since: str | None = None) 
 
 # --- MCP Keys ---
 
-import hashlib
-import secrets
+import hashlib  # noqa: E402
+import secrets  # noqa: E402
 
 
 def _hash_key(raw_key: str) -> str:
@@ -521,8 +553,7 @@ def list_mcp_keys() -> list[dict]:
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, name, created_at, last_used_at, revoked FROM mcp_keys "
-            "ORDER BY created_at"
+            "SELECT id, name, created_at, last_used_at, revoked FROM mcp_keys ORDER BY created_at"
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -558,7 +589,6 @@ def validate_mcp_key(raw_key: str) -> bool:
         return True
 
 
-
 # --- Expert registration ---
 #
 # The experts table has one row per (name, version) combination. Multiple
@@ -569,8 +599,7 @@ def validate_mcp_key(raw_key: str) -> bool:
 
 
 _EXPERTS_COLUMNS = (
-    "id, name, version, source_type, package_name, install_method, "
-    "enabled, installed_at"
+    "id, name, version, source_type, package_name, install_method, enabled, installed_at"
 )
 
 
@@ -596,8 +625,7 @@ def get_enabled_expert(name: str) -> dict | None:
     init_db()
     with _get_conn() as conn:
         row = conn.execute(
-            f"SELECT {_EXPERTS_COLUMNS} FROM experts "
-            "WHERE name = %s AND enabled = TRUE",
+            f"SELECT {_EXPERTS_COLUMNS} FROM experts WHERE name = %s AND enabled = TRUE",
             (name,),
         ).fetchone()
         return dict(row) if row else None
@@ -608,8 +636,7 @@ def get_expert_version(name: str, version: str) -> dict | None:
     init_db()
     with _get_conn() as conn:
         row = conn.execute(
-            f"SELECT {_EXPERTS_COLUMNS} FROM experts "
-            "WHERE name = %s AND version = %s",
+            f"SELECT {_EXPERTS_COLUMNS} FROM experts WHERE name = %s AND version = %s",
             (name, version),
         ).fetchone()
         return dict(row) if row else None
@@ -620,8 +647,7 @@ def list_versions_of_expert(name: str) -> list[dict]:
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
-            f"SELECT {_EXPERTS_COLUMNS} FROM experts "
-            "WHERE name = %s ORDER BY installed_at DESC",
+            f"SELECT {_EXPERTS_COLUMNS} FROM experts WHERE name = %s ORDER BY installed_at DESC",
             (name,),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -632,8 +658,7 @@ def disable_enabled_expert(name: str) -> bool:
     init_db()
     with _get_conn() as conn:
         cur = conn.execute(
-            "UPDATE experts SET enabled = FALSE "
-            "WHERE name = %s AND enabled = TRUE",
+            "UPDATE experts SET enabled = FALSE WHERE name = %s AND enabled = TRUE",
             (name,),
         )
         conn.commit()
@@ -747,8 +772,7 @@ def write_full_registration(
         # Enforce single-enabled-per-name invariant
         if enabled:
             conn.execute(
-                "UPDATE experts SET enabled = FALSE "
-                "WHERE name = %s AND enabled = TRUE",
+                "UPDATE experts SET enabled = FALSE WHERE name = %s AND enabled = TRUE",
                 (name,),
             )
 
@@ -768,9 +792,7 @@ def write_full_registration(
 
         # Replace child rows for this version
         conn.execute("DELETE FROM entity_types WHERE expert_id = %s", (expert_id,))
-        conn.execute(
-            "DELETE FROM identifier_patterns WHERE expert_id = %s", (expert_id,)
-        )
+        conn.execute("DELETE FROM identifier_patterns WHERE expert_id = %s", (expert_id,))
         for et in entity_types:
             conn.execute(
                 "INSERT INTO entity_types (expert_id, type_name, knowledge_path) "
@@ -788,12 +810,10 @@ def write_full_registration(
         return expert_id
 
 
-
 # --- Expert record schemas (typed tables) ---
 
 
-import hashlib as _hashlib
-
+import hashlib as _hashlib  # noqa: E402
 
 _JSON_TO_PG: dict[str, str] = {
     "string": "TEXT",
@@ -809,6 +829,7 @@ _active_tables: dict[str, tuple[str, list[str]]] | None = None
 def _schema_hash(schema: dict) -> str:
     """Deterministic hash of a JSON Schema for change detection."""
     import json
+
     raw = json.dumps(schema, sort_keys=True)
     return _hashlib.sha256(raw.encode()).hexdigest()[:16]
 
@@ -941,9 +962,7 @@ def list_typed_tables() -> list[str]:
     """Return all typed table names from expert_record_schemas. Used by erase_all."""
     init_db()
     with _get_conn() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT table_name FROM expert_record_schemas"
-        ).fetchall()
+        rows = conn.execute("SELECT DISTINCT table_name FROM expert_record_schemas").fetchall()
         return [dict(r)["table_name"] for r in rows]
 
 

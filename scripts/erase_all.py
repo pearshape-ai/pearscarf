@@ -13,7 +13,8 @@ load_dotenv()
 
 from pearscarf.storage import vectorstore
 from pearscarf.storage.db import _get_conn, close_pool, init_db
-from pearscarf.storage.neo4j_client import close as neo4j_close, get_session
+from pearscarf.storage.neo4j_client import close as neo4j_close
+from pearscarf.storage.neo4j_client import get_session
 
 
 def main() -> None:
@@ -75,9 +76,7 @@ def main() -> None:
         client.delete_collection(vectorstore.COLLECTION_NAME)
         client.create_collection(
             collection_name=vectorstore.COLLECTION_NAME,
-            vectors_config=VectorParams(
-                size=vectorstore.VECTOR_SIZE, distance=Distance.COSINE
-            ),
+            vectors_config=VectorParams(size=vectorstore.VECTOR_SIZE, distance=Distance.COSINE),
         )
         vectorstore._client = None
         print(f"Deleted {vector_count} vectors from Qdrant (collection recreated).")
@@ -85,9 +84,10 @@ def main() -> None:
         print(f"Warning: Qdrant clear failed: {exc}")
 
     # --- Wipe Postgres records + curator queue + expert typed tables ---
+    import re
+
     from pearscarf.storage.store import list_typed_tables
 
-    import re
     typed_tables = list_typed_tables()
     with _get_conn() as conn:
         for t in typed_tables:

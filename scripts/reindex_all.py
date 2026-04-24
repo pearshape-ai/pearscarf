@@ -12,7 +12,8 @@ load_dotenv()
 
 from pearscarf.storage import vectorstore
 from pearscarf.storage.db import _get_conn, close_pool, init_db
-from pearscarf.storage.neo4j_client import close as neo4j_close, get_session
+from pearscarf.storage.neo4j_client import close as neo4j_close
+from pearscarf.storage.neo4j_client import get_session
 
 
 def main() -> None:
@@ -37,8 +38,7 @@ def main() -> None:
     # Count what will be affected — Postgres
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT count(*) AS c FROM records "
-            "WHERE classification = 'relevant' AND indexed = TRUE"
+            "SELECT count(*) AS c FROM records WHERE classification = 'relevant' AND indexed = TRUE"
         ).fetchone()
         record_count = row["c"]
 
@@ -74,9 +74,7 @@ def main() -> None:
         client.delete_collection(vectorstore.COLLECTION_NAME)
         client.create_collection(
             collection_name=vectorstore.COLLECTION_NAME,
-            vectors_config=VectorParams(
-                size=vectorstore.VECTOR_SIZE, distance=Distance.COSINE
-            ),
+            vectors_config=VectorParams(size=vectorstore.VECTOR_SIZE, distance=Distance.COSINE),
         )
         # Reset the cached client so _ensure_collection doesn't skip
         vectorstore._client = None
@@ -86,9 +84,7 @@ def main() -> None:
 
     # Reset indexed flags
     with _get_conn() as conn:
-        conn.execute(
-            "UPDATE records SET indexed = FALSE WHERE classification = 'relevant'"
-        )
+        conn.execute("UPDATE records SET indexed = FALSE WHERE classification = 'relevant'")
         conn.commit()
     print(f"Reset {record_count} records to unindexed.")
 

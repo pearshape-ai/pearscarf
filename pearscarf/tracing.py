@@ -7,7 +7,7 @@ LangSmith is only imported when tracing is enabled.
 
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from typing import Any
 
 from pearscarf.config import LANGSMITH_ENABLED, LANGSMITH_PROJECT
@@ -23,8 +23,10 @@ def traceable(
     No-op when LANGSMITH_ENABLED is False.
     """
     if not LANGSMITH_ENABLED:
+
         def noop(fn):
             return fn
+
         return noop
 
     from langsmith import traceable as ls_traceable

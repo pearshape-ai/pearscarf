@@ -11,7 +11,7 @@ incremental sync (each subsequent cycle, filtered by `synced_at`).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from pearscarf.consumer import Consumer
@@ -26,11 +26,13 @@ class LinearIngest(Consumer):
     name = "linearscarf"
     default_poll_interval = 300.0
 
-    def __init__(self, ctx: "ExpertContext", poll_interval: float | None = None) -> None:
+    def __init__(self, ctx: ExpertContext, poll_interval: float | None = None) -> None:
         from linearscarf.linear_connect import LinearConnect
 
         if poll_interval is None:
-            poll_interval = float(ctx.config.get("LINEAR_POLL_INTERVAL", self.default_poll_interval))
+            poll_interval = float(
+                ctx.config.get("LINEAR_POLL_INTERVAL", self.default_poll_interval)
+            )
         super().__init__(poll_interval=poll_interval)
 
         self._ctx = ctx
@@ -43,7 +45,7 @@ class LinearIngest(Consumer):
             return self._pending.pop(0)
 
         # No buffered work — run the next sync cycle.
-        cycle_started_at = datetime.now(timezone.utc).isoformat()
+        cycle_started_at = datetime.now(UTC).isoformat()
         try:
             if self._synced_at is None:
                 issues = self._connect.list_issues()
@@ -63,7 +65,8 @@ class LinearIngest(Consumer):
                     saved += 1
             if saved:
                 self._ctx.log.write(
-                    self._ctx.expert_name, "action",
+                    self._ctx.expert_name,
+                    "action",
                     f"Initial sync: {saved} new issues saved as records",
                 )
             # Initial sync processed inline — no per-item _handle pass needed.
@@ -92,28 +95,32 @@ class LinearIngest(Consumer):
                     saved += 1
             if saved:
                 self._ctx.log.write(
-                    self._ctx.expert_name, "action",
+                    self._ctx.expert_name,
+                    "action",
                     f"Poll: {saved} change(s) for {issue.get('identifier', '')}",
                 )
         except Exception as exc:
             self._ctx.log.write(
-                self._ctx.expert_name, "error",
+                self._ctx.expert_name,
+                "error",
                 f"History fetch failed for {issue.get('identifier', '')}: {exc}",
             )
 
         if is_new:
             self._ctx.log.write(
-                self._ctx.expert_name, "action",
+                self._ctx.expert_name,
+                "action",
                 f"Ingested {rid}: {issue.get('identifier', '')} — {issue.get('title', '')}",
             )
 
 
-def start(ctx: "ExpertContext"):
+def start(ctx: ExpertContext):
     """Entry point called by the expert registry. Returns the polling thread."""
     consumer = LinearIngest(ctx)
     consumer.start()
     ctx.log.write(
-        ctx.expert_name, "action",
+        ctx.expert_name,
+        "action",
         f"Linear ingestion started (interval={int(consumer._poll_interval)}s)",
     )
     return consumer._thread

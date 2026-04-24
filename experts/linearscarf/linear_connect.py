@@ -30,9 +30,12 @@ _ISSUE_FIELDS = """
     url createdAt updatedAt
 """
 
-_ISSUE_FIELDS_WITH_COMMENTS = _ISSUE_FIELDS + """
+_ISSUE_FIELDS_WITH_COMMENTS = (
+    _ISSUE_FIELDS
+    + """
     comments { nodes { body user { name } createdAt } }
 """
+)
 
 
 # --- LinearConnect ---
@@ -82,7 +85,7 @@ class LinearConnect:
             )
             if resp.status_code == 429:
                 if attempt < max_retries:
-                    retry_after = int(resp.headers.get("Retry-After", 2 ** attempt))
+                    retry_after = int(resp.headers.get("Retry-After", 2**attempt))
                     time.sleep(retry_after)
                     continue
             resp.raise_for_status()
@@ -133,9 +136,14 @@ class LinearConnect:
         return all_issues
 
     def list_issues(
-        self, team_id: str | None = None, status: str | None = None,
-        assignee: str | None = None, project: str | None = None,
-        priority: int | None = None, label: str | None = None, first: int = 50,
+        self,
+        team_id: str | None = None,
+        status: str | None = None,
+        assignee: str | None = None,
+        project: str | None = None,
+        priority: int | None = None,
+        label: str | None = None,
+        first: int = 50,
     ) -> list[dict]:
         filter_parts: dict = {}
         tid = team_id or self._ensure_team_id()
@@ -152,15 +160,21 @@ class LinearConnect:
         if label:
             filter_parts["labels"] = {"name": {"eq": label}}
 
-        query = """
+        query = (
+            """
             query($filter: IssueFilter, $first: Int, $after: String) {
                 issues(filter: $filter, first: $first, after: $after, orderBy: updatedAt) {
-                    nodes {""" + _ISSUE_FIELDS_WITH_COMMENTS + """}
+                    nodes {"""
+            + _ISSUE_FIELDS_WITH_COMMENTS
+            + """}
                     pageInfo { hasNextPage endCursor }
                 }
             }
         """
-        return self._paginate_issues(query, variables={"filter": filter_parts or None}, page_size=first)
+        )
+        return self._paginate_issues(
+            query, variables={"filter": filter_parts or None}, page_size=first
+        )
 
     def get_issue(self, identifier: str) -> dict | None:
         """Get a specific issue by identifier (e.g. 'PEA-88').
@@ -173,55 +187,79 @@ class LinearConnect:
             return None
         team_key, number = parts[0], int(parts[1])
 
-        data = self._query("""
+        data = self._query(
+            """
             query($filter: IssueFilter) {
                 issues(filter: $filter, first: 1) {
-                    nodes {""" + _ISSUE_FIELDS_WITH_COMMENTS + """}
+                    nodes {"""
+            + _ISSUE_FIELDS_WITH_COMMENTS
+            + """}
                 }
             }
-        """, variables={"filter": {"number": {"eq": number}, "team": {"key": {"eq": team_key}}}})
+        """,
+            variables={"filter": {"number": {"eq": number}, "team": {"key": {"eq": team_key}}}},
+        )
         nodes = data.get("issues", {}).get("nodes", [])
         if not nodes:
             return None
         issue = self._format_issue(nodes[0])
         comments = nodes[0].get("comments", {}).get("nodes", [])
         issue["comments"] = [
-            {"body": c.get("body", ""), "author": (c.get("user") or {}).get("name", ""), "created_at": c.get("createdAt", "")}
+            {
+                "body": c.get("body", ""),
+                "author": (c.get("user") or {}).get("name", ""),
+                "created_at": c.get("createdAt", ""),
+            }
             for c in comments
         ]
         return issue
 
     def search_issues(self, term: str, first: int = 20) -> list[dict]:
-        data = self._query("""
+        data = self._query(
+            """
             query($term: String!, $first: Int) {
                 searchIssues(term: $term, first: $first) {
-                    nodes {""" + _ISSUE_FIELDS + """}
+                    nodes {"""
+            + _ISSUE_FIELDS
+            + """}
                 }
             }
-        """, variables={"term": term, "first": first})
+        """,
+            variables={"term": term, "first": first},
+        )
         return [self._format_issue(n) for n in data.get("searchIssues", {}).get("nodes", [])]
 
-    def list_updated_since(self, since: str, team_id: str | None = None, first: int = 50) -> list[dict]:
+    def list_updated_since(
+        self, since: str, team_id: str | None = None, first: int = 50
+    ) -> list[dict]:
         filter_parts: dict = {"updatedAt": {"gt": since}}
         tid = team_id or self._ensure_team_id()
         if tid:
             filter_parts["team"] = {"id": {"eq": tid}}
-        query = """
+        query = (
+            """
             query($filter: IssueFilter, $first: Int, $after: String) {
                 issues(filter: $filter, first: $first, after: $after, orderBy: updatedAt) {
-                    nodes {""" + _ISSUE_FIELDS_WITH_COMMENTS + """}
+                    nodes {"""
+            + _ISSUE_FIELDS_WITH_COMMENTS
+            + """}
                     pageInfo { hasNextPage endCursor }
                 }
             }
         """
+        )
         return self._paginate_issues(query, variables={"filter": filter_parts}, page_size=first)
 
     # --- Mutations ---
 
     def create_issue(
-        self, title: str, team_id: str | None = None,
-        description: str | None = None, assignee_id: str | None = None,
-        priority: int | None = None, project_id: str | None = None,
+        self,
+        title: str,
+        team_id: str | None = None,
+        description: str | None = None,
+        assignee_id: str | None = None,
+        priority: int | None = None,
+        project_id: str | None = None,
         label_ids: list[str] | None = None,
     ) -> dict:
         tid = team_id or self._ensure_team_id()
@@ -297,7 +335,8 @@ class LinearConnect:
             vars_: dict = {"issueId": issue_id, "first": 50}
             if cursor:
                 vars_["after"] = cursor
-            data = self._query("""
+            data = self._query(
+                """
                 query($issueId: String!, $first: Int, $after: String) {
                     issue(id: $issueId) {
                         history(first: $first, after: $after) {
@@ -312,7 +351,9 @@ class LinearConnect:
                         }
                     }
                 }
-            """, variables=vars_)
+            """,
+                variables=vars_,
+            )
 
             history = data.get("issue", {}).get("history", {})
             nodes = history.get("nodes", [])
@@ -325,27 +366,43 @@ class LinearConnect:
                 actor_name = (node.get("actor") or {}).get("name", "")
 
                 if node.get("fromState") or node.get("toState"):
-                    all_entries.append({
-                        "id": node["id"], "created_at": created_at, "actor": actor_name,
-                        "field": "status",
-                        "from_value": (node.get("fromState") or {}).get("name", ""),
-                        "to_value": (node.get("toState") or {}).get("name", ""),
-                    })
+                    all_entries.append(
+                        {
+                            "id": node["id"],
+                            "created_at": created_at,
+                            "actor": actor_name,
+                            "field": "status",
+                            "from_value": (node.get("fromState") or {}).get("name", ""),
+                            "to_value": (node.get("toState") or {}).get("name", ""),
+                        }
+                    )
                 if node.get("fromAssignee") or node.get("toAssignee"):
-                    all_entries.append({
-                        "id": node["id"] + "_assignee", "created_at": created_at, "actor": actor_name,
-                        "field": "assignee",
-                        "from_value": (node.get("fromAssignee") or {}).get("name", ""),
-                        "to_value": (node.get("toAssignee") or {}).get("name", ""),
-                    })
+                    all_entries.append(
+                        {
+                            "id": node["id"] + "_assignee",
+                            "created_at": created_at,
+                            "actor": actor_name,
+                            "field": "assignee",
+                            "from_value": (node.get("fromAssignee") or {}).get("name", ""),
+                            "to_value": (node.get("toAssignee") or {}).get("name", ""),
+                        }
+                    )
                 from_p, to_p = node.get("fromPriority"), node.get("toPriority")
                 if (from_p is not None or to_p is not None) and from_p != to_p:
-                    all_entries.append({
-                        "id": node["id"] + "_priority", "created_at": created_at, "actor": actor_name,
-                        "field": "priority",
-                        "from_value": self._PRIORITY_LABELS.get(from_p, str(from_p)) if from_p is not None else "",
-                        "to_value": self._PRIORITY_LABELS.get(to_p, str(to_p)) if to_p is not None else "",
-                    })
+                    all_entries.append(
+                        {
+                            "id": node["id"] + "_priority",
+                            "created_at": created_at,
+                            "actor": actor_name,
+                            "field": "priority",
+                            "from_value": self._PRIORITY_LABELS.get(from_p, str(from_p))
+                            if from_p is not None
+                            else "",
+                            "to_value": self._PRIORITY_LABELS.get(to_p, str(to_p))
+                            if to_p is not None
+                            else "",
+                        }
+                    )
 
             if not page_info.get("hasNextPage"):
                 break
@@ -367,25 +424,33 @@ class LinearConnect:
         if self._users_cache is not None:
             return self._users_cache
         data = self._query("query { users { nodes { id name email active } } }")
-        self._users_cache = [u for u in data.get("users", {}).get("nodes", []) if u.get("active", True)]
+        self._users_cache = [
+            u for u in data.get("users", {}).get("nodes", []) if u.get("active", True)
+        ]
         return self._users_cache
 
     def list_workflow_states(self, team_id: str | None = None) -> list[dict]:
         tid = team_id or self._ensure_team_id()
         filter_arg = f', filter: {{team: {{id: {{eq: "{tid}"}}}}}}' if tid else ""
-        data = self._query(f"query {{ workflowStates(first: 100{filter_arg}) {{ nodes {{ id name }} }} }}")
+        data = self._query(
+            f"query {{ workflowStates(first: 100{filter_arg}) {{ nodes {{ id name }} }} }}"
+        )
         return data.get("workflowStates", {}).get("nodes", [])
 
     def list_projects(self, team_id: str | None = None) -> list[dict]:
         tid = team_id or self._ensure_team_id()
         filter_arg = f', filter: {{accessibleTeams: {{id: {{eq: "{tid}"}}}}}}' if tid else ""
-        data = self._query(f"query {{ projects(first: 100{filter_arg}) {{ nodes {{ id name }} }} }}")
+        data = self._query(
+            f"query {{ projects(first: 100{filter_arg}) {{ nodes {{ id name }} }} }}"
+        )
         return data.get("projects", {}).get("nodes", [])
 
     def list_labels(self, team_id: str | None = None) -> list[dict]:
         tid = team_id or self._ensure_team_id()
         filter_arg = f', filter: {{team: {{id: {{eq: "{tid}"}}}}}}' if tid else ""
-        data = self._query(f"query {{ issueLabels(first: 100{filter_arg}) {{ nodes {{ id name }} }} }}")
+        data = self._query(
+            f"query {{ issueLabels(first: 100{filter_arg}) {{ nodes {{ id name }} }} }}"
+        )
         return data.get("issueLabels", {}).get("nodes", [])
 
     def resolve_team_id(self, name_or_key: str) -> str | None:
@@ -414,7 +479,7 @@ class LinearConnect:
 
     def resolve_label_ids(self, names: list[str]) -> list[str]:
         labels = self.list_labels()
-        label_map = {l["name"].lower(): l["id"] for l in labels}
+        label_map = {lbl["name"].lower(): lbl["id"] for lbl in labels}
         return [label_map[n.lower()] for n in names if n.lower() in label_map]
 
     # --- Record ingestion ---
@@ -455,7 +520,10 @@ class LinearConnect:
             "linear_updated_at": data.get("updated_at", ""),
         }
         return self._ctx.storage.save_record(
-            "linear_issue", raw, content=content, metadata=metadata,
+            "linear_issue",
+            raw,
+            content=content,
+            metadata=metadata,
             dedup_key=data.get("id") or data.get("linear_id"),
         )
 
@@ -477,7 +545,10 @@ class LinearConnect:
             "linear_history_id": change.get("id", ""),
         }
         return self._ctx.storage.save_record(
-            "linear_issue_change", raw, content=content, metadata=metadata,
+            "linear_issue_change",
+            raw,
+            content=content,
+            metadata=metadata,
             dedup_key=change.get("id"),
         )
 
@@ -496,7 +567,7 @@ class LinearConnect:
             "assignee": (node.get("assignee") or {}).get("name", ""),
             "assignee_email": (node.get("assignee") or {}).get("email", ""),
             "project": (node.get("project") or {}).get("name", ""),
-            "labels": [l["name"] for l in (node.get("labels") or {}).get("nodes", [])],
+            "labels": [lbl["name"] for lbl in (node.get("labels") or {}).get("nodes", [])],
             "url": node.get("url", ""),
             "created_at": node.get("createdAt", ""),
             "updated_at": node.get("updatedAt", ""),
@@ -541,14 +612,22 @@ def _format_issue_detail(issue: dict) -> str:
 
 class LinearListIssuesTool(BaseTool):
     name = "linear_list_issues"
-    description = "List issues from Linear. Filter by status, assignee, project, priority, or label."
+    description = (
+        "List issues from Linear. Filter by status, assignee, project, priority, or label."
+    )
     input_schema = {
         "type": "object",
         "properties": {
-            "status": {"type": "string", "description": "Filter by status name (e.g. 'In Progress', 'Done')"},
+            "status": {
+                "type": "string",
+                "description": "Filter by status name (e.g. 'In Progress', 'Done')",
+            },
             "assignee": {"type": "string", "description": "Filter by assignee name"},
             "project": {"type": "string", "description": "Filter by project name"},
-            "priority": {"type": "string", "description": "Filter by priority label (e.g. 'Urgent', 'High')"},
+            "priority": {
+                "type": "string",
+                "description": "Filter by priority label (e.g. 'Urgent', 'High')",
+            },
             "label": {"type": "string", "description": "Filter by label name"},
         },
     }
@@ -561,8 +640,11 @@ class LinearListIssuesTool(BaseTool):
         priority = kwargs.get("priority")
         priority_num = self._PRIORITY_MAP.get(priority.lower()) if priority else None
         issues = self._connect.list_issues(
-            status=kwargs.get("status"), assignee=kwargs.get("assignee"),
-            project=kwargs.get("project"), priority=priority_num, label=kwargs.get("label"),
+            status=kwargs.get("status"),
+            assignee=kwargs.get("assignee"),
+            project=kwargs.get("project"),
+            priority=priority_num,
+            label=kwargs.get("label"),
         )
         if not issues:
             return "No issues found."
@@ -571,10 +653,14 @@ class LinearListIssuesTool(BaseTool):
 
 class LinearGetIssueTool(BaseTool):
     name = "linear_get_issue"
-    description = "Get a specific Linear issue by identifier (e.g. 'PEA-42') with full details and comments."
+    description = (
+        "Get a specific Linear issue by identifier (e.g. 'PEA-42') with full details and comments."
+    )
     input_schema = {
         "type": "object",
-        "properties": {"identifier": {"type": "string", "description": "Issue identifier, e.g. 'PEA-42'"}},
+        "properties": {
+            "identifier": {"type": "string", "description": "Issue identifier, e.g. 'PEA-42'"}
+        },
         "required": ["identifier"],
     }
 
@@ -624,7 +710,10 @@ class LinearCreateIssueTool(BaseTool):
             "title": {"type": "string", "description": "Issue title"},
             "description": {"type": "string", "description": "Issue description (markdown)"},
             "assignee": {"type": "string", "description": "Assignee name"},
-            "priority": {"type": "string", "description": "Priority: 'Urgent', 'High', 'Medium', 'Low'"},
+            "priority": {
+                "type": "string",
+                "description": "Priority: 'Urgent', 'High', 'Medium', 'Low'",
+            },
             "project": {"type": "string", "description": "Project name"},
             "labels": {"type": "array", "items": {"type": "string"}, "description": "Label names"},
         },
@@ -643,9 +732,12 @@ class LinearCreateIssueTool(BaseTool):
         label_ids = c.resolve_label_ids(kwargs["labels"]) if kwargs.get("labels") else None
 
         issue = c.create_issue(
-            title=kwargs["title"], description=kwargs.get("description"),
-            assignee_id=assignee_id, priority=priority_num,
-            project_id=project_id, label_ids=label_ids,
+            title=kwargs["title"],
+            description=kwargs.get("description"),
+            assignee_id=assignee_id,
+            priority=priority_num,
+            project_id=project_id,
+            label_ids=label_ids,
         )
         return f"Created: {issue.get('identifier', '')} ({issue.get('url', '')})"
 
@@ -696,7 +788,7 @@ class LinearAddCommentTool(BaseTool):
         issue = self._connect.get_issue(kwargs["identifier"])
         if not issue:
             return f"Issue {kwargs['identifier']} not found."
-        result = self._connect.add_comment(issue["id"], kwargs["body"])
+        self._connect.add_comment(issue["id"], kwargs["body"])
         return f"Comment added to {kwargs['identifier']}."
 
 
@@ -715,7 +807,11 @@ class SaveIssueTool(BaseTool):
             "assignee": {"type": "string", "description": "Assignee name"},
             "project": {"type": "string", "description": "Project name"},
             "labels": {"type": "array", "items": {"type": "string"}, "description": "Label names"},
-            "comments": {"type": "array", "items": {"type": "object"}, "description": "Issue comments"},
+            "comments": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Issue comments",
+            },
             "url": {"type": "string", "description": "Issue URL"},
         },
         "required": ["linear_id", "title"],

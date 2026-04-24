@@ -43,6 +43,35 @@ path = "pearscarf/__init__.py"
 [tool.pyright]
 extraPaths = ["experts"]
 
+[dependency-groups]
+dev = [
+    "ruff>=0.13.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+    "experts/*/eval",
+    "lab",
+    "data",
+]
+
+[tool.ruff.lint]
+# E: pycodestyle errors, F: pyflakes, W: pycodestyle warnings,
+# I: isort, UP: pyupgrade, B: bugbear
+select = ["E", "F", "W", "I", "UP", "B"]
+# Pearscarf uses `from __future__ import annotations` extensively + existing
+# style has some legitimately long lines in prompts / Cypher queries.
+ignore = [
+    "E501",  # line too long — handled by formatter; some lines intentionally long
+    "B008",  # function call in default argument — common Click / dataclass pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E402"]  # scripts do env setup before imports
+"experts/*/*_ingest.py" = ["E402"]  # same pattern in expert ingester entry points
+
 # Pin `torch` to the CPU-only wheel on linux. `sentence-transformers` pulls
 # torch transitively; on linux x86_64 its default wheel is the CUDA build,
 # which drags in ~4 GB of nvidia + triton libraries we never run. macOS

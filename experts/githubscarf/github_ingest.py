@@ -12,7 +12,7 @@ subsequent cycle.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from pearscarf.consumer import Consumer
@@ -27,11 +27,13 @@ class GithubIngest(Consumer):
     name = "githubscarf"
     default_poll_interval = 300.0
 
-    def __init__(self, ctx: "ExpertContext", poll_interval: float | None = None) -> None:
+    def __init__(self, ctx: ExpertContext, poll_interval: float | None = None) -> None:
         from githubscarf.github_connect import GitHubConnect
 
         if poll_interval is None:
-            poll_interval = float(ctx.config.get("GITHUB_POLL_INTERVAL", self.default_poll_interval))
+            poll_interval = float(
+                ctx.config.get("GITHUB_POLL_INTERVAL", self.default_poll_interval)
+            )
         super().__init__(poll_interval=poll_interval)
 
         self._ctx = ctx
@@ -43,7 +45,7 @@ class GithubIngest(Consumer):
         if self._pending:
             return self._pending.pop(0)
 
-        cycle_started_at = datetime.now(timezone.utc).isoformat()
+        cycle_started_at = datetime.now(UTC).isoformat()
 
         if self._synced_at is None:
             # Initial sync: bulk-load open PRs and issues inline.
@@ -55,7 +57,8 @@ class GithubIngest(Consumer):
 
             if pr_count or issue_count:
                 self._ctx.log.write(
-                    self._ctx.expert_name, "action",
+                    self._ctx.expert_name,
+                    "action",
                     f"Initial sync: {pr_count} PR(s), {issue_count} issue(s) saved as records",
                 )
             self._synced_at = cycle_started_at
@@ -75,24 +78,27 @@ class GithubIngest(Consumer):
             rid = self._connect.ingest_pr(payload)
             if rid:
                 self._ctx.log.write(
-                    self._ctx.expert_name, "action",
+                    self._ctx.expert_name,
+                    "action",
                     f"Ingested PR #{payload.get('number', '')} as {rid}",
                 )
         elif kind == "issue":
             rid = self._connect.ingest_issue(payload)
             if rid:
                 self._ctx.log.write(
-                    self._ctx.expert_name, "action",
+                    self._ctx.expert_name,
+                    "action",
                     f"Ingested issue #{payload.get('number', '')} as {rid}",
                 )
 
 
-def start(ctx: "ExpertContext"):
+def start(ctx: ExpertContext):
     """Entry point called by the expert registry. Returns the polling thread."""
     consumer = GithubIngest(ctx)
     consumer.start()
     ctx.log.write(
-        ctx.expert_name, "action",
+        ctx.expert_name,
+        "action",
         f"GitHub ingestion started (interval={int(consumer._poll_interval)}s)",
     )
     return consumer._thread

@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import importlib
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import yaml
 
@@ -165,9 +166,7 @@ class Registry:
         if entry_rel:
             ingester_path = package_dir / entry_rel
             entry_no_ext = Path(entry_rel).with_suffix("")
-            ingester_module = (
-                f"{name}." + entry_no_ext.as_posix().replace("/", ".")
-            )
+            ingester_module = f"{name}." + entry_no_ext.as_posix().replace("/", ".")
 
         # Resolve the tools entry point (optional)
         tools_rel = data.get("tools")
@@ -382,7 +381,5 @@ def base_entity_types() -> set[str]:
         from pearscarf.knowledge import KNOWLEDGE_DIR
 
         entities_dir = KNOWLEDGE_DIR / "core" / "entities"
-        _base_entity_types_cache = {
-            p.stem.lower() for p in entities_dir.glob("*.md")
-        }
+        _base_entity_types_cache = {p.stem.lower() for p in entities_dir.glob("*.md")}
     return _base_entity_types_cache

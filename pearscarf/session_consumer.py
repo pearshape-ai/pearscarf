@@ -62,7 +62,9 @@ class SessionConsumer(Consumer):
         content = msg["content"]
 
         log.write(
-            self.name, session_id, "message_received",
+            self.name,
+            session_id,
+            "message_received",
             f"from={from_agent}: {content[:200]}",
         )
 
@@ -92,13 +94,9 @@ class SessionConsumer(Consumer):
                 agent._messages.clear()
                 for h in history:
                     if h["from_agent"] == self.name:
-                        agent._messages.append(
-                            {"role": "assistant", "content": h["content"]}
-                        )
+                        agent._messages.append({"role": "assistant", "content": h["content"]})
                     else:
-                        agent._messages.append(
-                            {"role": "user", "content": h["content"]}
-                        )
+                        agent._messages.append({"role": "user", "content": h["content"]})
                 # Drop the last user message — agent.run(content) will append it
                 if agent._messages and agent._messages[-1]["role"] == "user":
                     agent._messages.pop()
@@ -106,7 +104,9 @@ class SessionConsumer(Consumer):
                 response = agent.run(content)
 
                 log.write(
-                    self.name, session_id, "thinking",
+                    self.name,
+                    session_id,
+                    "thinking",
                     f"agent output (not sent): {response[:200]}",
                 )
                 if span:
@@ -126,6 +126,7 @@ class SessionConsumer(Consumer):
 
     def _session_logging_callbacks(self, session_id: str):
         """Return (on_tool_call, on_text, on_tool_result) logging callbacks."""
+
         def on_tool_call(tool_name: str, args: dict) -> None:
             log.write(self.name, session_id, "tool", f"{tool_name}({json.dumps(args)})")
 

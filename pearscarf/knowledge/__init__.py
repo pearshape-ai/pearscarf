@@ -17,18 +17,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-
 KNOWLEDGE_DIR = Path(__file__).parent
 
 
 # prompt name → (relative path under pearscarf/knowledge/, override env var)
 _KNOWLEDGE_MAP: dict[str, tuple[str, str | None]] = {
-    "assistant":        ("assistant/agent.md",          None),
-    "ingest":           ("ingest/agent.md",             None),
-    "extractor_agent":  ("extractor/extractor_agent.md", None),
-    "seed_guidance":    ("ingest/seed_guidance.md",     None),
-    "triage_agent":     ("triage/agent.md",             None),
-    "onboarding":       ("onboarding.md",               "ONBOARDING_PROMPT_PATH"),
+    "assistant": ("assistant/agent.md", None),
+    "ingest": ("ingest/agent.md", None),
+    "extractor_agent": ("extractor/extractor_agent.md", None),
+    "seed_guidance": ("ingest/seed_guidance.md", None),
+    "triage_agent": ("triage/agent.md", None),
+    "onboarding": ("onboarding.md", "ONBOARDING_PROMPT_PATH"),
 }
 
 
@@ -40,9 +39,7 @@ def load(name: str) -> str:
         if override:
             path = Path(override)
             if not path.is_file():
-                raise FileNotFoundError(
-                    f"{override_env}={override!r} but file does not exist"
-                )
+                raise FileNotFoundError(f"{override_env}={override!r} but file does not exist")
             return path.read_text()
     return (KNOWLEDGE_DIR / rel_path).read_text()
 

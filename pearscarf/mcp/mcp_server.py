@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import threading
+from datetime import UTC
 
 from fastmcp import FastMCP
 
-from pearscarf.query import context_query
 from pearscarf.config import MCP_HOST, MCP_PORT
+from pearscarf.query import context_query
 from pearscarf.storage.db import init_db
-
 
 mcp = FastMCP("PearScarf")
 
@@ -23,7 +23,9 @@ mcp = FastMCP("PearScarf")
 async def health(request):
     """Health check — no auth required."""
     from starlette.responses import JSONResponse
+
     from pearscarf import __version__
+
     return JSONResponse({"status": "ok", "version": __version__})
 
 
@@ -45,11 +47,13 @@ def _resolve_entity(entity_name: str) -> tuple[dict | None, dict | None]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(description=(
-    "Resolve a name to a canonical entity in the PearScarf graph. "
-    "Use this first when you have a name and need to confirm PearScarf knows this entity, "
-    "or when a name could match multiple entities."
-))
+@mcp.tool(
+    description=(
+        "Resolve a name to a canonical entity in the PearScarf graph. "
+        "Use this first when you have a name and need to confirm PearScarf knows this entity, "
+        "or when a name could match multiple entities."
+    )
+)
 def find_entity(name: str, entity_type: str = None) -> dict:
     """Search for entities by name."""
     results = context_query.find_entity(name, entity_type)
@@ -58,12 +62,14 @@ def find_entity(name: str, entity_type: str = None) -> dict:
     return {"entities": results}
 
 
-@mcp.tool(description=(
-    "Get facts about an entity. The workhorse query — returns all known facts, "
-    "optionally filtered by edge label (AFFILIATED/ASSERTED/TRANSITIONED), "
-    "fact type (employee, commitment, status_change, etc.), or time range. "
-    "Use for current state, commitments, blockers, affiliations."
-))
+@mcp.tool(
+    description=(
+        "Get facts about an entity. The workhorse query — returns all known facts, "
+        "optionally filtered by edge label (AFFILIATED/ASSERTED/TRANSITIONED), "
+        "fact type (employee, commitment, status_change, etc.), or time range. "
+        "Use for current state, commitments, blockers, affiliations."
+    )
+)
 def get_facts(
     entity_name: str,
     edge_label: str = None,
@@ -89,11 +95,13 @@ def get_facts(
     }
 
 
-@mcp.tool(description=(
-    "Get entities directly connected to this entity via fact-edges. "
-    "Returns connected people, companies, projects — not Day nodes. "
-    "Use to understand who/what an entity is connected to."
-))
+@mcp.tool(
+    description=(
+        "Get entities directly connected to this entity via fact-edges. "
+        "Returns connected people, companies, projects — not Day nodes. "
+        "Use to understand who/what an entity is connected to."
+    )
+)
 def get_connections(
     entity_name: str,
     edge_label: str = None,
@@ -120,11 +128,13 @@ def get_connections(
     }
 
 
-@mcp.tool(description=(
-    "Find how two entities are connected in the PearScarf graph. "
-    "Returns direct facts between them and the shortest path if no direct connection exists. "
-    "Use before drafting a message or making a decision involving two parties."
-))
+@mcp.tool(
+    description=(
+        "Find how two entities are connected in the PearScarf graph. "
+        "Returns direct facts between them and the shortest path if no direct connection exists. "
+        "Use before drafting a message or making a decision involving two parties."
+    )
+)
 def get_relationship(entity_a: str, entity_b: str) -> dict:
     """Find the relationship between two entities."""
     ent_a, err_a = _resolve_entity(entity_a)
@@ -143,11 +153,13 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
     }
 
 
-@mcp.tool(description=(
-    "Find AFFILIATED facts where the graph holds two current conflicting values for the same slot. "
-    "These are cases where Curation detected equal source_at timestamps and could not resolve automatically. "
-    "Use when reviewing graph health or validating entity affiliations."
-))
+@mcp.tool(
+    description=(
+        "Find AFFILIATED facts where the graph holds two current conflicting values for the same slot. "
+        "These are cases where Curation detected equal source_at timestamps and could not resolve automatically. "
+        "Use when reviewing graph health or validating entity affiliations."
+    )
+)
 def get_conflicts(entity_name: str = None) -> dict:
     """Find conflicting AFFILIATED facts."""
     entity_id = None
@@ -169,11 +181,13 @@ def get_conflicts(entity_name: str = None) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(description=(
-    "Get a full picture of an entity — all current facts and direct connections. "
-    "Use this before acting on behalf of or about a person, company, or project. "
-    "Returns facts in chronological order by default, or grouped by edge label with format='clustered'."
-))
+@mcp.tool(
+    description=(
+        "Get a full picture of an entity — all current facts and direct connections. "
+        "Use this before acting on behalf of or about a person, company, or project. "
+        "Returns facts in chronological order by default, or grouped by edge label with format='clustered'."
+    )
+)
 def get_entity_context(
     entity_name: str,
     format: str = "chronological",
@@ -222,12 +236,14 @@ def get_entity_context(
         }
 
 
-@mcp.tool(description=(
-    "Get what is structurally true about an entity right now — "
-    "current role, employer, project memberships. "
-    "Returns AFFILIATED facts only. "
-    "Use when you need to know who someone works for or what projects they belong to."
-))
+@mcp.tool(
+    description=(
+        "Get what is structurally true about an entity right now — "
+        "current role, employer, project memberships. "
+        "Returns AFFILIATED facts only. "
+        "Use when you need to know who someone works for or what projects they belong to."
+    )
+)
 def get_current_state(entity_name: str) -> dict:
     """Current affiliations only."""
     entity, err = _resolve_entity(entity_name)
@@ -244,11 +260,13 @@ def get_current_state(entity_name: str) -> dict:
     }
 
 
-@mcp.tool(description=(
-    "Get pending commitments — what has been promised, by whom, and by when. "
-    "Only returns commitments with an explicit deadline (valid_until). "
-    "Use for morning briefings, deadline tracking, and accountability queries."
-))
+@mcp.tool(
+    description=(
+        "Get pending commitments — what has been promised, by whom, and by when. "
+        "Only returns commitments with an explicit deadline (valid_until). "
+        "Use for morning briefings, deadline tracking, and accountability queries."
+    )
+)
 def get_open_commitments(
     entity_name: str = None,
     before_date: str = None,
@@ -274,9 +292,9 @@ def get_open_commitments(
     else:
         # Global — need all entities' commitments. Use graph query directly.
         from pearscarf.storage import graph
+
         # Get all current ASSERTED/commitment edges
         all_facts = []
-        stats = graph.graph_stats()
         # Fall back to searching all entities
         entities = graph.search_entities("", limit=100)
         seen_edges: set[str] = set()
@@ -306,11 +324,13 @@ def get_open_commitments(
     return result
 
 
-@mcp.tool(description=(
-    "Get what is currently blocked. "
-    "Returns ASSERTED[blocker] facts that have no subsequent TRANSITIONED[resolution]. "
-    "Use when preparing a status update or surfacing impediments."
-))
+@mcp.tool(
+    description=(
+        "Get what is currently blocked. "
+        "Returns ASSERTED[blocker] facts that have no subsequent TRANSITIONED[resolution]. "
+        "Use when preparing a status update or surfacing impediments."
+    )
+)
 def get_open_blockers(entity_name: str = None) -> dict:
     """Current blockers without resolution."""
     entity_id = None
@@ -349,11 +369,13 @@ def get_open_blockers(entity_name: str = None) -> dict:
     return result
 
 
-@mcp.tool(description=(
-    "Get what happened around an entity recently — transitions, references, and communications. "
-    "Combines graph facts (state changes, mentions) with email metadata (who communicated with whom). "
-    "Use when catching up on a deal, project, or person after time away."
-))
+@mcp.tool(
+    description=(
+        "Get what happened around an entity recently — transitions, references, and communications. "
+        "Combines graph facts (state changes, mentions) with email metadata (who communicated with whom). "
+        "Use when catching up on a deal, project, or person after time away."
+    )
+)
 def get_recent_activity(
     entity_name: str,
     since: str = None,
@@ -369,15 +391,14 @@ def get_recent_activity(
 
     # Default since: 7 days ago
     if not since:
-        from datetime import datetime, timezone, timedelta
-        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        from datetime import datetime, timedelta
+
+        since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
 
     entity_id = entity["id"]
 
     # Three sources
-    transitions = context_query.get_facts(
-        entity_id, edge_label="TRANSITIONED", since=since
-    )
+    transitions = context_query.get_facts(entity_id, edge_label="TRANSITIONED", since=since)
     references = context_query.get_facts(
         entity_id, edge_label="ASSERTED", fact_type="reference", since=since
     )
@@ -387,24 +408,28 @@ def get_recent_activity(
     activity: list[dict] = []
 
     for f in transitions + references:
-        activity.append({
-            "type": "fact",
-            "edge_label": f.get("edge_label", ""),
-            "fact_type": f.get("fact_type", ""),
-            "fact": f.get("fact", ""),
-            "source_at": f.get("source_at", ""),
-            "source_record": f.get("source_record", ""),
-        })
+        activity.append(
+            {
+                "type": "fact",
+                "edge_label": f.get("edge_label", ""),
+                "fact_type": f.get("fact_type", ""),
+                "fact": f.get("fact", ""),
+                "source_at": f.get("source_at", ""),
+                "source_record": f.get("source_record", ""),
+            }
+        )
 
     for c in communications:
-        activity.append({
-            "type": "communication",
-            "sender": c.get("sender", ""),
-            "recipient": c.get("recipient", ""),
-            "subject": c.get("subject", ""),
-            "received_at": str(c.get("received_at", "")),
-            "record_id": c.get("record_id", ""),
-        })
+        activity.append(
+            {
+                "type": "communication",
+                "sender": c.get("sender", ""),
+                "recipient": c.get("recipient", ""),
+                "subject": c.get("subject", ""),
+                "received_at": str(c.get("received_at", "")),
+                "record_id": c.get("record_id", ""),
+            }
+        )
 
     # Sort by timestamp descending
     def _sort_key(item: dict) -> str:
@@ -436,9 +461,7 @@ class MCPServer:
 
     def start(self) -> None:
         """Start MCP server in a background daemon thread."""
-        self._thread = threading.Thread(
-            target=self._run, name="mcp-server", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run, name="mcp-server", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:

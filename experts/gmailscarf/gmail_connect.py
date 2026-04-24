@@ -42,12 +42,14 @@ class GmailAPIClient:
     def _ensure_valid(self) -> None:
         if self._creds.expired:
             from google.auth.transport.requests import Request
+
             self._creds.refresh(Request())
 
     def list_unread(self, max_results: int = 10) -> list[dict]:
         self._ensure_valid()
         resp = (
-            self._service.users().messages()
+            self._service.users()
+            .messages()
             .list(userId="me", q="is:unread", maxResults=max_results)
             .execute()
         )
@@ -61,7 +63,8 @@ class GmailAPIClient:
     def read_email(self, message_id: str) -> dict | None:
         self._ensure_valid()
         msg = (
-            self._service.users().messages()
+            self._service.users()
+            .messages()
             .get(userId="me", id=message_id, format="full")
             .execute()
         )
@@ -81,7 +84,8 @@ class GmailAPIClient:
     def search(self, query: str, max_results: int = 10) -> list[dict]:
         self._ensure_valid()
         resp = (
-            self._service.users().messages()
+            self._service.users()
+            .messages()
             .list(userId="me", q=query, maxResults=max_results)
             .execute()
         )
@@ -95,19 +99,27 @@ class GmailAPIClient:
     def mark_as_read(self, message_id: str) -> None:
         self._ensure_valid()
         self._service.users().messages().modify(
-            userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]},
+            userId="me",
+            id=message_id,
+            body={"removeLabelIds": ["UNREAD"]},
         ).execute()
 
     def _extract_body(self, payload: dict) -> str:
         if payload.get("body", {}).get("data"):
-            return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", errors="replace")
+            return base64.urlsafe_b64decode(payload["body"]["data"]).decode(
+                "utf-8", errors="replace"
+            )
         parts = payload.get("parts", [])
         for part in parts:
             if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
-                return base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8", errors="replace")
+                return base64.urlsafe_b64decode(part["body"]["data"]).decode(
+                    "utf-8", errors="replace"
+                )
         for part in parts:
             if part.get("body", {}).get("data"):
-                return base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8", errors="replace")
+                return base64.urlsafe_b64decode(part["body"]["data"]).decode(
+                    "utf-8", errors="replace"
+                )
         return ""
 
 
@@ -166,7 +178,10 @@ class GmailConnect:
         }
         classification = "noise" if self._is_noise(raw, metadata) else None
         return self._ctx.storage.save_record(
-            "email", raw, content=content, metadata=metadata,
+            "email",
+            raw,
+            content=content,
+            metadata=metadata,
             dedup_key=data.get("message_id"),
             classification=classification,
         )
@@ -181,8 +196,12 @@ class GmailConnect:
         """
         sender = (metadata.get("sender") or "").lower()
         for marker in (
-            "no-reply", "noreply", "donotreply", "do-not-reply",
-            "mailer-daemon", "postmaster@",
+            "no-reply",
+            "noreply",
+            "donotreply",
+            "do-not-reply",
+            "mailer-daemon",
+            "postmaster@",
         ):
             if marker in sender:
                 return True
@@ -284,7 +303,9 @@ class ReadEmailTool(BaseTool):
 
 class SearchEmailTool(BaseTool):
     name = "gmail_search"
-    description = "Search emails using Gmail search syntax (e.g. 'from:john@example.com', 'subject:invoice')."
+    description = (
+        "Search emails using Gmail search syntax (e.g. 'from:john@example.com', 'subject:invoice')."
+    )
     input_schema = {
         "type": "object",
         "properties": {
@@ -299,7 +320,9 @@ class SearchEmailTool(BaseTool):
 
     def execute(self, **kwargs: Any) -> str:
         try:
-            emails = self._connect._ensure_client().search(kwargs["query"], kwargs.get("max_results", 10))
+            emails = self._connect._ensure_client().search(
+                kwargs["query"], kwargs.get("max_results", 10)
+            )
             if not emails:
                 return f"No emails found for: {kwargs['query']}"
             lines = [
@@ -369,7 +392,10 @@ class SaveEmailTool(BaseTool):
             f"{kwargs['body']}"
         )
         rid = self._connect._ctx.storage.save_record(
-            "email", raw, content=content, metadata=metadata,
+            "email",
+            raw,
+            content=content,
+            metadata=metadata,
             dedup_key=kwargs.get("message_id"),
         )
         if rid is None:
@@ -395,11 +421,10 @@ def run_auth_flow() -> None:
     """
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
-    except ImportError:
+    except ImportError as err:
         raise SystemExit(
-            "google-auth-oauthlib is required for OAuth. "
-            "Install with: uv add google-auth-oauthlib"
-        )
+            "google-auth-oauthlib is required for OAuth. Install with: uv add google-auth-oauthlib"
+        ) from err
 
     import os
     from pathlib import Path

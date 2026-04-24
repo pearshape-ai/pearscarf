@@ -168,9 +168,7 @@ class GraphTraverseTool(BaseTool):
                 elif edge.get("source_at"):
                     temporal = f" [since: {edge['source_at']}]"
                 ft = f"/{edge['fact_type']}" if edge.get("fact_type") else ""
-                lines.append(
-                    f"  - [{edge['edge_label']}{ft}] {edge['fact']}{temporal}"
-                )
+                lines.append(f"  - [{edge['edge_label']}{ft}] {edge['fact']}{temporal}")
         if result["source_records"]:
             lines.append(f"Source records: {', '.join(result['source_records'])}")
         return "\n".join(lines)

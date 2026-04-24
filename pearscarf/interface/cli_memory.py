@@ -6,9 +6,8 @@ import time
 
 import click
 
-from pearscarf.storage import graph, vectorstore
 from pearscarf.interface.cli import cli
-
+from pearscarf.storage import graph, vectorstore
 
 # ---------------------------------------------------------------------------
 # Formatting helpers (used by both CLI and REPL)
@@ -176,13 +175,15 @@ def _get_all(limit: int = 10) -> list[dict]:
         items = []
         for point in results:
             payload = point.payload or {}
-            items.append({
-                "id": payload.get("record_id", ""),
-                "name": payload.get("subject", payload.get("content", "")[:60]),
-                "entity_type": payload.get("type", "record"),
-                "metadata": payload.get("sender", ""),
-                "created_at": "",
-            })
+            items.append(
+                {
+                    "id": payload.get("record_id", ""),
+                    "name": payload.get("subject", payload.get("content", "")[:60]),
+                    "entity_type": payload.get("type", "record"),
+                    "metadata": payload.get("sender", ""),
+                    "created_at": "",
+                }
+            )
         return items
     except Exception:
         return []
@@ -238,8 +239,11 @@ def _get_entity(name: str) -> dict | None:
         {
             "to_entity": n.get("name", "?"),
             "relationship": next(
-                (edge["edge_label"] for edge in traversal["edges"]
-                 if edge["to"] == n["id"] or edge["from"] == n["id"]),
+                (
+                    edge["edge_label"]
+                    for edge in traversal["edges"]
+                    if edge["to"] == n["id"] or edge["from"] == n["id"]
+                ),
                 "?",
             ),
         }

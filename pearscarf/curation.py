@@ -7,18 +7,18 @@ entry. One entry at a time — no concurrency.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pearscarf import log
-from pearscarf.consumer import Consumer
 from pearscarf.config import CURATOR_CLAIM_TIMEOUT, CURATOR_POLL_INTERVAL
+from pearscarf.consumer import Consumer
 from pearscarf.storage import graph
 from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.tracked_call import _record_id_var
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class Curation(Consumer):
@@ -77,9 +77,10 @@ class Curation(Consumer):
                 conn.commit()
                 for r in rows:
                     log.write(
-                        self.name, "--", "warning",
-                        f"reset timed-out claim: {r['record_id']} "
-                        f"(claimed at {r['claimed_at']})",
+                        self.name,
+                        "--",
+                        "warning",
+                        f"reset timed-out claim: {r['record_id']} (claimed at {r['claimed_at']})",
                     )
 
     def _claim_one(self) -> str | None:
@@ -123,20 +124,24 @@ class Curation(Consumer):
     def _notify_expiry(self, edge: dict) -> None:
         """Reserved hook for expiry notifications. No-op for now."""
         log.write(
-            self.name, "--", "action",
+            self.name,
+            "--",
+            "action",
             f"expiry notification reserved for {edge['edge_id']}",
         )
 
     def _scan_expired(self) -> int:
         """Stale all ASSERTED[commitment|promise] edges past their valid_until. Returns count."""
-        today = graph.utc_to_local_date(datetime.now(timezone.utc).isoformat())
+        today = graph.utc_to_local_date(datetime.now(UTC).isoformat())
         expired = graph.get_expired_commitments(today)
 
         for edge in expired:
             self._notify_expiry(edge)
             graph.mark_fact_stale(edge["edge_id"], replaced_by_id=None)
             log.write(
-                self.name, "--", "action",
+                self.name,
+                "--",
+                "action",
                 f"expired {edge['fact_type']} staled — edge_id={edge['edge_id']}, "
                 f"from={edge['from_name']}, valid_until={edge['valid_until']}, "
                 f"source_record={edge['source_record']}",
@@ -166,7 +171,9 @@ class Curation(Consumer):
             if has_stated:
                 graph.set_edge_confidence(edge["edge_id"], "stated")
                 log.write(
-                    self.name, "--", "action",
+                    self.name,
+                    "--",
+                    "action",
                     f"confidence upgraded: {edge['edge_id']} inferred → stated "
                     f"({edge['from_name']} → {edge['to_name']})",
                 )

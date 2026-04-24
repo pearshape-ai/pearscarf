@@ -17,8 +17,7 @@ class BaseTool(ABC):
     input_schema: dict[str, Any] = {}
 
     @abstractmethod
-    def execute(self, **kwargs: Any) -> str:
-        ...
+    def execute(self, **kwargs: Any) -> str: ...
 
     def to_api_schema(self) -> dict[str, Any]:
         return {

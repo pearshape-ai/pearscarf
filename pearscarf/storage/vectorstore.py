@@ -27,6 +27,7 @@ def _get_client():
     global _client
     if _client is None:
         from qdrant_client import QdrantClient
+
         _client = QdrantClient(url=QDRANT_URL)
         _ensure_collection()
     return _client
@@ -37,6 +38,7 @@ def _get_model():
     global _model
     if _model is None:
         from sentence_transformers import SentenceTransformer
+
         _model = SentenceTransformer("all-MiniLM-L6-v2")
     return _model
 
@@ -44,6 +46,7 @@ def _get_model():
 def _ensure_collection() -> None:
     """Create the records collection if it doesn't exist."""
     from qdrant_client.models import Distance, VectorParams
+
     collections = [c.name for c in _client.get_collections().collections]
     if COLLECTION_NAME not in collections:
         _client.create_collection(
@@ -97,10 +100,7 @@ def query(
         {
             "id": hit.payload.get("record_id", ""),
             "content": hit.payload.get("content", ""),
-            "metadata": {
-                k: v for k, v in hit.payload.items()
-                if k not in ("record_id", "content")
-            },
+            "metadata": {k: v for k, v in hit.payload.items() if k not in ("record_id", "content")},
             "score": hit.score,
         }
         for hit in results

@@ -11,22 +11,23 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
+from pearscarf import log
 from pearscarf.agents.base import BaseAgent
 from pearscarf.consumer import Consumer
-from pearscarf.storage import graph, vectorstore
-from pearscarf.tracked_call import _record_id_var
-from pearscarf import log
-from pearscarf.storage.db import _get_conn, init_db
+from pearscarf.knowledge import load as load_prompt
+from pearscarf.knowledge import load_onboarding_block
 from pearscarf.registry import compose_prompt
+from pearscarf.storage import graph, vectorstore
+from pearscarf.storage.db import _get_conn, init_db
 from pearscarf.tools import BaseTool
-from pearscarf.knowledge import load as load_prompt, load_onboarding_block
+from pearscarf.tracked_call import _record_id_var
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class SaveExtractionTool(BaseTool):
@@ -51,11 +52,26 @@ class SaveExtractionTool(BaseTool):
                 "items": {
                     "type": "object",
                     "properties": {
-                        "name": {"type": "string", "description": "Entity name as it appears in the record"},
-                        "type": {"type": "string", "description": "person, company, project, event"},
-                        "metadata": {"type": "object", "description": "email, domain, role if known"},
-                        "resolved_to": {"type": "string", "description": "Node ID if matched to existing entity, or 'new' if new entity"},
-                        "canonical_name": {"type": "string", "description": "The canonical name of the matched entity, if resolved"},
+                        "name": {
+                            "type": "string",
+                            "description": "Entity name as it appears in the record",
+                        },
+                        "type": {
+                            "type": "string",
+                            "description": "person, company, project, event",
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "description": "email, domain, role if known",
+                        },
+                        "resolved_to": {
+                            "type": "string",
+                            "description": "Node ID if matched to existing entity, or 'new' if new entity",
+                        },
+                        "canonical_name": {
+                            "type": "string",
+                            "description": "The canonical name of the matched entity, if resolved",
+                        },
                     },
                     "required": ["name", "type", "resolved_to"],
                 },
@@ -65,13 +81,25 @@ class SaveExtractionTool(BaseTool):
                 "items": {
                     "type": "object",
                     "properties": {
-                        "edge_label": {"type": "string", "description": "AFFILIATED, ASSERTED, or TRANSITIONED"},
+                        "edge_label": {
+                            "type": "string",
+                            "description": "AFFILIATED, ASSERTED, or TRANSITIONED",
+                        },
                         "fact_type": {"type": "string"},
-                        "fact": {"type": "string", "description": "Text cut directly from the record — never paraphrase"},
+                        "fact": {
+                            "type": "string",
+                            "description": "Text cut directly from the record — never paraphrase",
+                        },
                         "from_entity": {"type": "string", "description": "Name of the from entity"},
-                        "to_entity": {"type": "string", "description": "Name of the to entity, or null"},
+                        "to_entity": {
+                            "type": "string",
+                            "description": "Name of the to entity, or null",
+                        },
                         "confidence": {"type": "string", "description": "stated or inferred"},
-                        "valid_until": {"type": "string", "description": "ISO date if a deadline is stated, or null"},
+                        "valid_until": {
+                            "type": "string",
+                            "description": "ISO date if a deadline is stated, or null",
+                        },
                     },
                     "required": ["edge_label", "fact_type", "fact", "from_entity", "confidence"],
                 },
@@ -166,9 +194,10 @@ class Extraction(Consumer):
 
         self._pending = [dict(r) for r in rows]
         log.write(
-            self.name, "--", "action",
-            f"found {len(rows)} unindexed record(s): "
-            + ", ".join(r["id"] for r in rows),
+            self.name,
+            "--",
+            "action",
+            f"found {len(rows)} unindexed record(s): " + ", ".join(r["id"] for r in rows),
         )
         return self._pending.pop(0)
 
@@ -227,20 +256,34 @@ class Extraction(Consumer):
     ) -> None:
         """Write a fact edge with literal dup check."""
         existing = graph.find_exact_dup_edge(
-            from_id, edge_label, fact_type, to_id, record_id, fact_text,
+            from_id,
+            edge_label,
+            fact_type,
+            to_id,
+            record_id,
+            fact_text,
         )
         if existing:
             graph.append_source_record(existing, record_id, confidence)
             log.write(
-                self.name, "--", "action",
+                self.name,
+                "--",
+                "action",
                 f"dup merged: {record_id} already in edge {existing}",
             )
             return
 
         graph.create_fact_edge(
-            from_id, to_id, edge_label, fact_type, fact_text,
-            confidence, record_id, record_type,
-            source_at=source_at, valid_until=valid_until,
+            from_id,
+            to_id,
+            edge_label,
+            fact_type,
+            fact_text,
+            confidence,
+            record_id,
+            record_type,
+            source_at=source_at,
+            valid_until=valid_until,
         )
 
     def _embed_record(self, record: dict, content: str) -> None:
@@ -273,8 +316,8 @@ class Extraction(Consumer):
 
     def _run_extractor_agent(self, record: dict, content: str) -> dict | None:
         """Run the extractor agent on a record. Returns extraction result or None."""
-        from pearscarf.tools import ToolRegistry
         from pearscarf.graph_access_tools import ResolveEntityTool
+        from pearscarf.tools import ToolRegistry
 
         registry = ToolRegistry()
         save_tool = SaveExtractionTool()
@@ -311,7 +354,12 @@ class Extraction(Consumer):
         if error:
             return None
         if result is None:
-            log.write(self.name, "--", "warning", f"Extractor agent didn't call save_extraction for {record_id}")
+            log.write(
+                self.name,
+                "--",
+                "warning",
+                f"Extractor agent didn't call save_extraction for {record_id}",
+            )
             return None
 
         return result
@@ -355,7 +403,9 @@ class Extraction(Consumer):
                         eid=resolved_to,
                     )
                     if not result.single():
-                        errors.append(f"Entity '{ent['name']}' resolved_to non-existent node: {resolved_to}")
+                        errors.append(
+                            f"Entity '{ent['name']}' resolved_to non-existent node: {resolved_to}"
+                        )
 
         for fact in facts:
             # Validate edge label
@@ -386,7 +436,9 @@ class Extraction(Consumer):
                 content_lower = content.lower()
                 found = sum(1 for w in fact_words if w in content_lower)
                 if found / max(len(fact_words), 1) < 0.6:
-                    errors.append(f"Fact may be hallucinated (low grounding): {fact.get('fact', '')[:80]}")
+                    errors.append(
+                        f"Fact may be hallucinated (low grounding): {fact.get('fact', '')[:80]}"
+                    )
 
         return errors
 
@@ -410,7 +462,10 @@ class Extraction(Consumer):
                 entity_id_map[name] = resolved_to
                 if canonical_name and canonical_name.lower() != name.lower():
                     graph.create_identified_as_edge(
-                        resolved_to, name, record_id, record_type,
+                        resolved_to,
+                        name,
+                        record_id,
+                        record_type,
                         confidence="inferred",
                         reasoning=f"Extractor agent resolved '{name}' to '{canonical_name}'",
                     )
@@ -430,7 +485,9 @@ class Extraction(Consumer):
             if canonical_name and canonical_name.lower() != name.lower():
                 continue  # alias — handled in second pass
             node_id = graph.create_entity(
-                ent.get("type", ""), name, ent.get("metadata", {}),
+                ent.get("type", ""),
+                name,
+                ent.get("metadata", {}),
             )
             entity_id_map[name] = node_id
 
@@ -444,7 +501,10 @@ class Extraction(Consumer):
             if canonical_id:
                 entity_id_map[name] = canonical_id
                 graph.create_identified_as_edge(
-                    canonical_id, name, record_id, record_type,
+                    canonical_id,
+                    name,
+                    record_id,
+                    record_type,
                     confidence="stated",
                     reasoning=f"Seed alias: '{name}' for '{canonical_name}'",
                 )
@@ -493,15 +553,31 @@ class Extraction(Consumer):
 
             if to_id:
                 self._write_fact_edge(
-                    from_id, to_id, edge_label, fact_type, fact_text,
-                    confidence, record_id, record_type, source_at, valid_until,
+                    from_id,
+                    to_id,
+                    edge_label,
+                    fact_type,
+                    fact_text,
+                    confidence,
+                    record_id,
+                    record_type,
+                    source_at,
+                    valid_until,
                 )
             else:
                 day_date = graph.utc_to_local_date(source_at)
                 day_id = graph.get_or_create_day(day_date)
                 self._write_fact_edge(
-                    from_id, day_id, edge_label, fact_type, fact_text,
-                    confidence, record_id, record_type, source_at, valid_until,
+                    from_id,
+                    day_id,
+                    edge_label,
+                    fact_type,
+                    fact_text,
+                    confidence,
+                    record_id,
+                    record_type,
+                    source_at,
+                    valid_until,
                 )
 
         return entity_id_map
@@ -548,23 +624,26 @@ class Extraction(Consumer):
         entity_count = len(entity_id_map)
         fact_count = len(extraction.get("facts", []))
         log.write(
-            self.name, "--", "action",
+            self.name,
+            "--",
+            "action",
             f"indexed {record_id}: {entity_count} entities, {fact_count} facts",
         )
 
         self._mark_indexed(record_id)
         try:
             from pearscarf.storage.store import enqueue_for_curation
+
             enqueue_for_curation(record_id)
         except Exception as exc:
             log.write(
-                self.name, "--", "warning",
+                self.name,
+                "--",
+                "warning",
                 f"failed to enqueue {record_id} for curation: {exc}",
             )
 
     def _mark_indexed(self, record_id: str) -> None:
         with _get_conn() as conn:
-            conn.execute(
-                "UPDATE records SET indexed = TRUE WHERE id = %s", (record_id,)
-            )
+            conn.execute("UPDATE records SET indexed = TRUE WHERE id = %s", (record_id,))
             conn.commit()

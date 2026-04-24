@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _LOGS_DIR = Path("data/logs")
@@ -24,7 +24,7 @@ def write(
     message: str,
 ) -> None:
     """Append a single log entry. Thread-safe, append-only."""
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     ses = session or "--"
     line = f"[{ts}] [{agent}] [{ses}] [{entry_type}] {message}\n"
     with _lock:

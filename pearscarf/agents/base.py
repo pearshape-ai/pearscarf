@@ -7,13 +7,13 @@ from typing import Any
 from pearscarf.agents.llm_client import get_llm_client
 from pearscarf.config import MAX_TURNS, MODEL
 from pearscarf.tools import ToolRegistry
+from pearscarf.tracing import trace_child, trace_span
 from pearscarf.tracked_call import (
     _run_id_var,
     _turn_index_var,
     mark_run_hit_ceiling,
     tracked_call,
 )
-from pearscarf.tracing import trace_child, trace_span
 
 
 class BaseAgent:
@@ -71,16 +71,20 @@ class BaseAgent:
                             inputs={"model": MODEL, "message_count": len(self._messages)},
                         ) as llm_span:
                             response = tracked_call(
-                                self._client, self._agent_name, **invoke_kwargs,
+                                self._client,
+                                self._agent_name,
+                                **invoke_kwargs,
                             )
                             self.total_input_tokens += response.usage.input_tokens
                             self.total_output_tokens += response.usage.output_tokens
                             if llm_span:
-                                llm_span.end(outputs={
-                                    "stop_reason": response.stop_reason,
-                                    "input_tokens": response.usage.input_tokens,
-                                    "output_tokens": response.usage.output_tokens,
-                                })
+                                llm_span.end(
+                                    outputs={
+                                        "stop_reason": response.stop_reason,
+                                        "input_tokens": response.usage.input_tokens,
+                                        "output_tokens": response.usage.output_tokens,
+                                    }
+                                )
                     finally:
                         _turn_index_var.reset(turn_token)
 
@@ -120,9 +124,7 @@ class BaseAgent:
                                 self._on_tool_result(tc.name, result)
                             tool_outputs.append((tc.id, result))
 
-                        self._messages.extend(
-                            self._client.format_tool_results(tool_outputs)
-                        )
+                        self._messages.extend(self._client.format_tool_results(tool_outputs))
                     else:
                         if parent:
                             parent.end(outputs={"result": response.text[:500]})

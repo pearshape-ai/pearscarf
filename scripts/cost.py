@@ -32,7 +32,6 @@ load_dotenv(_ROOT / "env/.env")
 
 from pearscarf.storage.db import _get_conn  # noqa: E402
 
-
 # Rates in $/M tokens. Rates as of 2026-04-23.
 # Keyed by the exact `model` string logged to `llm_calls.model`.
 # Anthropic: anthropic.com/pricing. OpenAI: openai.com/api/pricing.
@@ -148,7 +147,7 @@ def _build_query(args: argparse.Namespace) -> tuple[str, list]:
                input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
                latency_ms, record_id, session_id
         FROM llm_calls
-        WHERE {' AND '.join(where)}
+        WHERE {" AND ".join(where)}
         ORDER BY created_at, turn_index
     """
     return sql, params
@@ -325,11 +324,10 @@ def _json_output(rows: list[dict], groups: dict[str, dict], summary: dict) -> No
             "total": summary["total"],
             "by_model": summary["by_model"],
         },
-        "per_record": {
-            k: {**g, "models": sorted(g["models"])} for k, g in groups.items()
-        },
+        "per_record": {k: {**g, "models": sorted(g["models"])} for k, g in groups.items()},
         "calls": [
-            {k: v for k, v in r.items() if k != "tool_calls"} | {
+            {k: v for k, v in r.items() if k != "tool_calls"}
+            | {
                 "tool_calls": r["tool_calls"],
                 "cost": _cost_of(r),
             }

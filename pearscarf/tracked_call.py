@@ -27,7 +27,6 @@ import pearscarf
 from pearscarf import log
 from pearscarf.storage.db import _get_conn, init_db
 
-
 # ContextVars set by the Consumer / BaseAgent before / during agent.run().
 # Defaults mean: "we're running outside a Consumer context" (e.g. `psc chat`).
 _runtime_id_var: ContextVar[str | None] = ContextVar("runtime_id", default=None)
@@ -77,6 +76,7 @@ def _collect_expert_versions() -> dict[str, str]:
     """Snapshot installed expert names → versions for the current process."""
     try:
         from pearscarf.registry import get_registry
+
         registry = get_registry()
         return {e.name: e.version for e in registry.enabled_experts()}
     except Exception:
@@ -195,8 +195,7 @@ def _log_call(
     with _get_conn() as conn:
         # Dedup-upsert the prompt body.
         conn.execute(
-            "INSERT INTO llm_prompts (hash, body) VALUES (%s, %s) "
-            "ON CONFLICT (hash) DO NOTHING",
+            "INSERT INTO llm_prompts (hash, body) VALUES (%s, %s) ON CONFLICT (hash) DO NOTHING",
             (prompt_hash, system_prompt),
         )
         conn.execute(

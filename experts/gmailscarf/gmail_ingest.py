@@ -22,7 +22,7 @@ class GmailIngest(Consumer):
     name = "gmailscarf"
     default_poll_interval = 300.0
 
-    def __init__(self, ctx: "ExpertContext", poll_interval: float | None = None) -> None:
+    def __init__(self, ctx: ExpertContext, poll_interval: float | None = None) -> None:
         from gmailscarf.gmail_connect import GmailConnect
 
         if poll_interval is None:
@@ -47,17 +47,19 @@ class GmailIngest(Consumer):
         if not rid:
             return
         self._ctx.log.write(
-            self._ctx.expert_name, "action",
+            self._ctx.expert_name,
+            "action",
             f"Ingested {rid} from {email['sender']}",
         )
 
 
-def start(ctx: "ExpertContext"):
+def start(ctx: ExpertContext):
     """Entry point called by the expert registry. Returns the polling thread."""
     consumer = GmailIngest(ctx)
     consumer.start()
     ctx.log.write(
-        ctx.expert_name, "action",
+        ctx.expert_name,
+        "action",
         f"Gmail ingestion started (interval={int(consumer._poll_interval)}s)",
     )
     return consumer._thread

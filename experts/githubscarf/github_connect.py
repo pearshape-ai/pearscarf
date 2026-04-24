@@ -122,7 +122,10 @@ class GitHubConnect:
             "merged_at": data.get("merged_at", ""),
         }
         return self._ctx.storage.save_record(
-            "github_pr", raw, content=content, metadata=metadata,
+            "github_pr",
+            raw,
+            content=content,
+            metadata=metadata,
             dedup_key=str(data.get("github_id", "")),
         )
 
@@ -151,7 +154,10 @@ class GitHubConnect:
             "closed_at": data.get("closed_at", ""),
         }
         return self._ctx.storage.save_record(
-            "github_issue", raw, content=content, metadata=metadata,
+            "github_issue",
+            raw,
+            content=content,
+            metadata=metadata,
             dedup_key=str(data.get("github_id", "")),
         )
 
@@ -174,7 +180,7 @@ class GitHubConnect:
             "author": (node.get("user") or {}).get("login", ""),
             "branch": (node.get("head") or {}).get("ref", ""),
             "base_branch": (node.get("base") or {}).get("ref", ""),
-            "labels": [l["name"] for l in node.get("labels", [])],
+            "labels": [lbl["name"] for lbl in node.get("labels", [])],
             "reviewers": [r["login"] for r in node.get("requested_reviewers", [])],
             "url": node.get("html_url", ""),
             "created_at": node.get("created_at", ""),
@@ -192,7 +198,7 @@ class GitHubConnect:
             "state": node.get("state", ""),
             "author": (node.get("user") or {}).get("login", ""),
             "assignees": [a["login"] for a in node.get("assignees", [])],
-            "labels": [l["name"] for l in node.get("labels", [])],
+            "labels": [lbl["name"] for lbl in node.get("labels", [])],
             "url": node.get("html_url", ""),
             "created_at": node.get("created_at", ""),
             "updated_at": node.get("updated_at", ""),
@@ -240,7 +246,11 @@ class GitHubListPRsTool(BaseTool):
     input_schema = {
         "type": "object",
         "properties": {
-            "state": {"type": "string", "enum": ["open", "closed", "all"], "description": "PR state filter (default: open)"},
+            "state": {
+                "type": "string",
+                "enum": ["open", "closed", "all"],
+                "description": "PR state filter (default: open)",
+            },
         },
     }
 
@@ -293,7 +303,11 @@ class GitHubListIssuesTool(BaseTool):
     input_schema = {
         "type": "object",
         "properties": {
-            "state": {"type": "string", "enum": ["open", "closed", "all"], "description": "Issue state filter (default: open)"},
+            "state": {
+                "type": "string",
+                "enum": ["open", "closed", "all"],
+                "description": "Issue state filter (default: open)",
+            },
         },
     }
 

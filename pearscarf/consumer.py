@@ -56,7 +56,7 @@ class Consumer(ABC):
     def _handle(self, msg: Any) -> None:
         """Process a single message. Exceptions are logged; the loop continues."""
 
-    def _setup(self) -> None:
+    def _setup(self) -> None:  # noqa: B027 — intentional optional hook, not abstract
         """Optional one-shot setup before the loop starts (e.g. init_db).
 
         Called once from _loop before the first poll. Override if needed.
@@ -101,9 +101,7 @@ class Consumer(ABC):
 
     def start(self) -> None:
         """Start the consumer on a daemon thread."""
-        self._thread = threading.Thread(
-            target=self._loop, name=self.name, daemon=True
-        )
+        self._thread = threading.Thread(target=self._loop, name=self.name, daemon=True)
         self._thread.start()
 
     def stop(self, timeout: float = 5.0) -> None:

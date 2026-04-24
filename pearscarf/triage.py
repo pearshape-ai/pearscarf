@@ -24,6 +24,8 @@ from pearscarf.graph_access_tools import (
 )
 from pearscarf.knowledge import (
     load as load_prompt,
+)
+from pearscarf.knowledge import (
     load_onboarding_block,
     load_relevancy_guidance,
 )
@@ -134,14 +136,15 @@ class Triage(Consumer):
         """
         with _get_conn() as conn:
             rows = conn.execute(
-                "UPDATE records SET classification = %s "
-                "WHERE classification = %s RETURNING id",
+                "UPDATE records SET classification = %s WHERE classification = %s RETURNING id",
                 (store.PENDING_TRIAGE, store.TRIAGING),
             ).fetchall()
             if rows:
                 conn.commit()
                 log.write(
-                    self.name, "--", "action",
+                    self.name,
+                    "--",
+                    "action",
                     f"reset {len(rows)} stale triaging record(s)",
                 )
 
@@ -172,21 +175,17 @@ class Triage(Consumer):
         guidance_block = ""
         if guidance and guidance.strip():
             guidance_block = (
-                f"## Relevancy guidance for {expert_name}\n\n"
-                f"{guidance.strip()}\n\n---\n\n"
+                f"## Relevancy guidance for {expert_name}\n\n{guidance.strip()}\n\n---\n\n"
             )
         else:
             log.write(
-                self.name, "--", "warning",
+                self.name,
+                "--",
+                "warning",
                 f"no relevancy guidance for expert {expert_name!r} — "
                 "falling back to onboarding-only framing",
             )
-        return (
-            load_prompt("triage_agent")
-            + "\n\n"
-            + load_onboarding_block()
-            + guidance_block
-        )
+        return load_prompt("triage_agent") + "\n\n" + load_onboarding_block() + guidance_block
 
     def _process(self, record: dict) -> None:
         """Run triage on a claimed record."""
@@ -215,7 +214,9 @@ class Triage(Consumer):
 
         if classify_tool.result is None:
             log.write(
-                self.name, "--", "warning",
+                self.name,
+                "--",
+                "warning",
                 f"triage didn't call classify for {record_id} — marking uncertain",
             )
             store.set_classification(record_id, store.UNCERTAIN)
@@ -224,6 +225,8 @@ class Triage(Consumer):
         result = classify_tool.result
         store.set_classification(record_id, result["classification"])
         log.write(
-            self.name, "--", "action",
+            self.name,
+            "--",
+            "action",
             f"{record_id} -> {result['classification']}: {result['reasoning'][:160]}",
         )

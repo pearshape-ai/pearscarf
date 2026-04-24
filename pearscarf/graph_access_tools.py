@@ -41,13 +41,15 @@ class FindEntityTool(BaseTool):
     def execute(self, **kwargs: Any) -> str:
         result = graph.find_entity(kwargs["entity_type"], kwargs["name"])
         if result:
-            return json.dumps({
-                "found": True,
-                "id": result["id"],
-                "name": result["name"],
-                "type": result.get("type", kwargs["entity_type"]),
-                "metadata": result.get("metadata", {}),
-            })
+            return json.dumps(
+                {
+                    "found": True,
+                    "id": result["id"],
+                    "name": result["name"],
+                    "type": result.get("type", kwargs["entity_type"]),
+                    "metadata": result.get("metadata", {}),
+                }
+            )
         return json.dumps({"found": False})
 
 
@@ -117,8 +119,13 @@ class CheckAliasTool(BaseTool):
     def execute(self, **kwargs: Any) -> str:
         entity_type = kwargs["entity_type"]
         surface_form = kwargs["surface_form"]
-        label = {"person": "Person", "company": "Company", "project": "Project",
-                 "event": "Event", "repository": "Repository"}.get(entity_type, entity_type.capitalize())
+        label = {
+            "person": "Person",
+            "company": "Company",
+            "project": "Project",
+            "event": "Event",
+            "repository": "Repository",
+        }.get(entity_type, entity_type.capitalize())
 
         with graph.get_session() as session:
             result = session.run(
@@ -130,12 +137,14 @@ class CheckAliasTool(BaseTool):
             )
             record = result.single()
             if record:
-                return json.dumps({
-                    "found": True,
-                    "id": record["eid"],
-                    "name": record["name"],
-                    "type": entity_type,
-                })
+                return json.dumps(
+                    {
+                        "found": True,
+                        "id": record["eid"],
+                        "name": record["name"],
+                        "type": entity_type,
+                    }
+                )
         return json.dumps({"found": False})
 
 
@@ -210,17 +219,20 @@ def _exact_name_hits(entity_type: str, name: str, limit: int = 5) -> list[dict]:
         result = session.run(
             f"MATCH (n:{label}) WHERE toLower(n.name) = toLower($name) "
             "RETURN n, elementId(n) AS eid LIMIT $limit",
-            name=name, limit=limit,
+            name=name,
+            limit=limit,
         )
         hits = []
         for record in result:
             node = record["n"]
-            hits.append({
-                "id": record["eid"],
-                "name": node.get("name", ""),
-                "type": entity_type,
-                "metadata": _strip_node_props(node),
-            })
+            hits.append(
+                {
+                    "id": record["eid"],
+                    "name": node.get("name", ""),
+                    "type": entity_type,
+                    "metadata": _strip_node_props(node),
+                }
+            )
         return hits
 
 
@@ -232,17 +244,20 @@ def _alias_hits(entity_type: str, surface_form: str, limit: int = 5) -> list[dic
             f"MATCH (n:{label})-[r:IDENTIFIED_AS]->(n) "
             "WHERE toLower(r.surface_form) = toLower($sf) "
             "RETURN n, elementId(n) AS eid LIMIT $limit",
-            sf=surface_form, limit=limit,
+            sf=surface_form,
+            limit=limit,
         )
         hits = []
         for record in result:
             node = record["n"]
-            hits.append({
-                "id": record["eid"],
-                "name": node.get("name", ""),
-                "type": entity_type,
-                "metadata": _strip_node_props(node),
-            })
+            hits.append(
+                {
+                    "id": record["eid"],
+                    "name": node.get("name", ""),
+                    "type": entity_type,
+                    "metadata": _strip_node_props(node),
+                }
+            )
         return hits
 
 
@@ -250,13 +265,9 @@ def _brief_context(entity_id: str) -> dict:
     """Compact context — top 3 facts + top 3 connections."""
     ctx = graph.get_entity_context(entity_id, max_facts=3, max_connections=3)
     return {
-        "facts": [
-            f"[{f.get('edge_label', '')}] {f.get('fact', '')}"
-            for f in ctx.get("facts", [])
-        ],
+        "facts": [f"[{f.get('edge_label', '')}] {f.get('fact', '')}" for f in ctx.get("facts", [])],
         "connections": [
-            f"{c.get('name', '')} ({c.get('type', '')})"
-            for c in ctx.get("connections", [])
+            f"{c.get('name', '')} ({c.get('type', '')})" for c in ctx.get("connections", [])
         ],
     }
 
@@ -311,65 +322,77 @@ class ResolveEntityTool(BaseTool):
         if identifier:
             id_hit = _identifier_hit(entity_type, identifier)
             if id_hit:
-                return json.dumps({
-                    "match": "definitive",
-                    "via": "identifier",
-                    "entity": id_hit,
-                    "context": _brief_context(id_hit["id"]),
-                })
+                return json.dumps(
+                    {
+                        "match": "definitive",
+                        "via": "identifier",
+                        "entity": id_hit,
+                        "context": _brief_context(id_hit["id"]),
+                    }
+                )
 
         # 2. Exact name — 0 / 1 / many, each handled differently.
         exact_hits = _exact_name_hits(entity_type, name)
         if len(exact_hits) == 1:
             h = exact_hits[0]
-            return json.dumps({
-                "match": "definitive",
-                "via": "exact_name",
-                "entity": h,
-                "context": _brief_context(h["id"]),
-            })
+            return json.dumps(
+                {
+                    "match": "definitive",
+                    "via": "exact_name",
+                    "entity": h,
+                    "context": _brief_context(h["id"]),
+                }
+            )
         if len(exact_hits) > 1:
-            return json.dumps({
-                "match": "candidates",
-                "via": "exact_name_ambiguous",
-                "candidates": [_bundle(h) for h in exact_hits],
-            })
+            return json.dumps(
+                {
+                    "match": "candidates",
+                    "via": "exact_name_ambiguous",
+                    "candidates": [_bundle(h) for h in exact_hits],
+                }
+            )
 
         # 3. Alias self-loop — also may have collisions.
         alias_hits = _alias_hits(entity_type, name)
         if len(alias_hits) == 1:
             h = alias_hits[0]
-            return json.dumps({
-                "match": "definitive",
-                "via": "alias",
-                "entity": h,
-                "context": _brief_context(h["id"]),
-            })
+            return json.dumps(
+                {
+                    "match": "definitive",
+                    "via": "alias",
+                    "entity": h,
+                    "context": _brief_context(h["id"]),
+                }
+            )
         if len(alias_hits) > 1:
-            return json.dumps({
-                "match": "candidates",
-                "via": "alias_ambiguous",
-                "candidates": [_bundle(h) for h in alias_hits],
-            })
+            return json.dumps(
+                {
+                    "match": "candidates",
+                    "via": "alias_ambiguous",
+                    "candidates": [_bundle(h) for h in alias_hits],
+                }
+            )
 
         # 4. Fuzzy fallback.
         fuzzy = graph.search_entities(name, entity_type=entity_type, limit=3)
         if fuzzy:
-            return json.dumps({
-                "match": "candidates",
-                "via": "fuzzy_name",
-                "candidates": [
-                    {
-                        "entity": {
-                            "id": r["id"],
-                            "name": r["name"],
-                            "type": r.get("type", entity_type),
-                            "metadata": r.get("metadata", {}),
-                        },
-                        "context": _brief_context(r["id"]),
-                    }
-                    for r in fuzzy
-                ],
-            })
+            return json.dumps(
+                {
+                    "match": "candidates",
+                    "via": "fuzzy_name",
+                    "candidates": [
+                        {
+                            "entity": {
+                                "id": r["id"],
+                                "name": r["name"],
+                                "type": r.get("type", entity_type),
+                                "metadata": r.get("metadata", {}),
+                            },
+                            "context": _brief_context(r["id"]),
+                        }
+                        for r in fuzzy
+                    ],
+                }
+            )
 
         return json.dumps({"match": "none"})

@@ -19,14 +19,14 @@ import importlib
 import json
 import os
 import time
+from datetime import UTC
 
 import yaml
 
 from pearscarf import __version__ as pearscarf_version
-from pearscarf.config import EXTRACTION_MODEL, EXTRACTION_TEMPERATURE, EXTRACTION_MAX_TOKENS
+from pearscarf.config import EXTRACTION_MAX_TOKENS, EXTRACTION_MODEL, EXTRACTION_TEMPERATURE
 from pearscarf.storage import graph, store
 from pearscarf.storage.db import _get_conn, init_db
-
 
 # --- Dataset loading ---
 
@@ -116,8 +116,7 @@ def _ingest_record_file(dataset_path: str, file_rel: str, record_type: str) -> s
 def _pending_record_count() -> int:
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT COUNT(*) AS c FROM records "
-            "WHERE indexed = FALSE AND classification = %s",
+            "SELECT COUNT(*) AS c FROM records WHERE indexed = FALSE AND classification = %s",
             (store.RELEVANT,),
         ).fetchone()
         return dict(row).get("c", 0) if row else 0
@@ -168,16 +167,22 @@ def _get_all_graph_facts() -> list[dict]:
             "b.name AS to_name, labels(b) AS to_labels"
         )
         for record in result:
-            to_name = record["to_name"] if record["to_labels"] and "Day" not in record["to_labels"] else None
-            facts.append({
-                "edge_label": record["edge_label"],
-                "fact_type": record["fact_type"] or "",
-                "from_entity": record["from_name"] or "",
-                "to_entity": to_name,
-                "fact": record["fact"] or "",
-                "confidence": record["confidence"] or "",
-                "valid_until": record["valid_until"],
-            })
+            to_name = (
+                record["to_name"]
+                if record["to_labels"] and "Day" not in record["to_labels"]
+                else None
+            )
+            facts.append(
+                {
+                    "edge_label": record["edge_label"],
+                    "fact_type": record["fact_type"] or "",
+                    "from_entity": record["from_name"] or "",
+                    "to_entity": to_name,
+                    "fact": record["fact"] or "",
+                    "confidence": record["confidence"] or "",
+                    "valid_until": record["valid_until"],
+                }
+            )
 
     # Also get single-entity facts (to Day nodes)
     with graph.get_session() as session:
@@ -189,15 +194,17 @@ def _get_all_graph_facts() -> list[dict]:
             "r.confidence AS confidence, r.valid_until AS valid_until"
         )
         for record in result:
-            facts.append({
-                "edge_label": record["edge_label"],
-                "fact_type": record["fact_type"] or "",
-                "from_entity": record["from_name"] or "",
-                "to_entity": None,
-                "fact": record["fact"] or "",
-                "confidence": record["confidence"] or "",
-                "valid_until": record["valid_until"],
-            })
+            facts.append(
+                {
+                    "edge_label": record["edge_label"],
+                    "fact_type": record["fact_type"] or "",
+                    "from_entity": record["from_name"] or "",
+                    "to_entity": None,
+                    "fact": record["fact"] or "",
+                    "confidence": record["confidence"] or "",
+                    "valid_until": record["valid_until"],
+                }
+            )
 
     return facts
 
@@ -211,8 +218,13 @@ def _get_all_graph_entities() -> list[dict]:
     Returns list of {"name", "type", "aliases"}.
     """
     entities = []
-    labels = {"Person": "person", "Company": "company", "Project": "project",
-              "Event": "event", "Repository": "repository"}
+    labels = {
+        "Person": "person",
+        "Company": "company",
+        "Project": "project",
+        "Event": "event",
+        "Repository": "repository",
+    }
     with graph.get_session() as session:
         for neo_label, type_name in labels.items():
             result = session.run(
@@ -228,11 +240,13 @@ def _get_all_graph_entities() -> list[dict]:
                     eid=eid,
                 )
                 aliases = [r["sf"] for r in alias_result if r["sf"].lower() != name.lower()]
-                entities.append({
-                    "name": name,
-                    "type": type_name,
-                    "aliases": aliases,
-                })
+                entities.append(
+                    {
+                        "name": name,
+                        "type": type_name,
+                        "aliases": aliases,
+                    }
+                )
     return entities
 
 
@@ -279,8 +293,7 @@ def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
         entity_merge_total += 1
         canonical = exp["canonical_name"].lower()
         all_correct = all(
-            graph_lookup.get(sf.lower(), "").lower() == canonical
-            for sf in surface_forms
+            graph_lookup.get(sf.lower(), "").lower() == canonical for sf in surface_forms
         )
         if all_correct:
             entity_merge_correct += 1
@@ -313,7 +326,8 @@ def _score_er_global(er_ground_truth: dict, graph_entities: list[dict]) -> dict:
     return {
         "node_count_expected": node_count_expected,
         "node_count_actual": node_count_actual,
-        "node_count_accuracy": 1.0 - abs(node_count_expected - node_count_actual) / max(node_count_expected, 1),
+        "node_count_accuracy": 1.0
+        - abs(node_count_expected - node_count_actual) / max(node_count_expected, 1),
         "merge_recall": merge_recall,
         "merge_recall_correct": sf_correct,
         "merge_recall_total": sf_total,
@@ -352,11 +366,11 @@ def _format_verbose_er(timeslice: dict, graph_entities: list[dict]) -> str:
         for sf in surface_forms:
             resolved_to = graph_lookup.get(sf.lower())
             if resolved_to is None:
-                lines.append(f"      \u2717 \"{sf}\" \u2192 not found in graph")
+                lines.append(f'      \u2717 "{sf}" \u2192 not found in graph')
             elif resolved_to.lower() == canonical.lower():
-                lines.append(f"      \u2713 \"{sf}\" \u2192 {resolved_to}")
+                lines.append(f'      \u2713 "{sf}" \u2192 {resolved_to}')
             else:
-                lines.append(f"      \u2717 \"{sf}\" \u2192 {resolved_to} (expected {canonical})")
+                lines.append(f'      \u2717 "{sf}" \u2192 {resolved_to} (expected {canonical})')
     return "\n".join(lines)
 
 
@@ -372,15 +386,23 @@ def _format_er_report(
     lines.append("=" * 50)
     lines.append("Entity Resolution — Global")
     lines.append("=" * 50)
-    lines.append(f"  Node count:       {global_scores['node_count_expected']} expected, "
-                 f"{global_scores['node_count_actual']} actual "
-                 f"({global_scores['node_count_accuracy']:.0%})")
-    lines.append(f"  Merge recall:     {global_scores['merge_recall_correct']}/{global_scores['merge_recall_total']} "
-                 f"({global_scores['merge_recall']:.0%})")
-    lines.append(f"  Entity merge rate:{global_scores['entity_merge_correct']}/{global_scores['entity_merge_total']} "
-                 f"({global_scores['entity_merge_rate']:.0%})")
-    lines.append(f"  False merges:     {global_scores['false_merge_count']}/{global_scores['false_merge_total']} "
-                 f"({global_scores['false_merge_rate']:.0%})")
+    lines.append(
+        f"  Node count:       {global_scores['node_count_expected']} expected, "
+        f"{global_scores['node_count_actual']} actual "
+        f"({global_scores['node_count_accuracy']:.0%})"
+    )
+    lines.append(
+        f"  Merge recall:     {global_scores['merge_recall_correct']}/{global_scores['merge_recall_total']} "
+        f"({global_scores['merge_recall']:.0%})"
+    )
+    lines.append(
+        f"  Entity merge rate:{global_scores['entity_merge_correct']}/{global_scores['entity_merge_total']} "
+        f"({global_scores['entity_merge_rate']:.0%})"
+    )
+    lines.append(
+        f"  False merges:     {global_scores['false_merge_count']}/{global_scores['false_merge_total']} "
+        f"({global_scores['false_merge_rate']:.0%})"
+    )
 
     if timeslice_scores:
         lines.append("")
@@ -391,10 +413,16 @@ def _format_er_report(
             if not scores:
                 continue
             lines.append(f"  {record_key}:")
-            lines.append(f"    nodes: {scores['node_count_expected']} expected, {scores['node_count_actual']} actual")
-            lines.append(f"    merge recall: {scores['merge_recall_correct']}/{scores['merge_recall_total']}")
+            lines.append(
+                f"    nodes: {scores['node_count_expected']} expected, {scores['node_count_actual']} actual"
+            )
+            lines.append(
+                f"    merge recall: {scores['merge_recall_correct']}/{scores['merge_recall_total']}"
+            )
             if scores["entity_merge_total"] > 0:
-                lines.append(f"    entity merge rate: {scores['entity_merge_correct']}/{scores['entity_merge_total']}")
+                lines.append(
+                    f"    entity merge rate: {scores['entity_merge_correct']}/{scores['entity_merge_total']}"
+                )
             if scores["false_merge_count"] > 0:
                 lines.append(f"    false merges: {scores['false_merge_count']}")
 
@@ -416,6 +444,13 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     """Run ER evaluation. Returns scores dict."""
     init_db()
 
+    # The eval runs against fixture datasets whose entity names may overlap
+    # with names a deployment's operator onboarding lists as "never real"
+    # (e.g. test fixtures shared across pearscarf-eval). Unset the override
+    # env var so `load_onboarding_block` resolves to the shipped stub and
+    # doesn't opinionate the score.
+    os.environ.pop("ONBOARDING_PROMPT_PATH", None)
+
     config = _load_dataset_config(dataset_path)
     version = config.get("version", "unknown")
 
@@ -433,7 +468,9 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
         er_ground_truth = json.load(fh)
 
     print(f"PearScarf v{pearscarf_version} — ER eval against dataset v{version}")
-    print(f"Model: {EXTRACTION_MODEL}  Temperature: {EXTRACTION_TEMPERATURE}  Max tokens: {EXTRACTION_MAX_TOKENS}")
+    print(
+        f"Model: {EXTRACTION_MODEL}  Temperature: {EXTRACTION_TEMPERATURE}  Max tokens: {EXTRACTION_MAX_TOKENS}"
+    )
     print()
 
     # Require clean graph
@@ -450,9 +487,10 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     from pearscarf.extraction import Extraction
 
     if debug_dir:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         dataset_name = os.path.basename(os.path.normpath(dataset_path))
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
         run_name = f"{dataset_name}_v{version}_{timestamp}"
         debug_dir = os.path.join(debug_dir, run_name)
         os.makedirs(debug_dir, exist_ok=True)
@@ -463,9 +501,7 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
 
     # Ingest in sequence order
     timeslices = er_ground_truth.get("timeslices", [])
-    timeslice_by_record: dict[str, dict] = {
-        ts["record"]: ts for ts in timeslices
-    }
+    timeslice_by_record: dict[str, dict] = {ts["record"]: ts for ts in timeslices}
     timeslice_scores: list[tuple[str, dict]] = []
 
     print(f"Ingesting {len(sequence)} record(s)...")
@@ -507,7 +543,9 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     # Build verbose diagnostics
     global_verbose = None
     if verbose:
-        global_verbose = _format_verbose_er({"entities": er_ground_truth.get("global", [])}, graph_entities)
+        global_verbose = _format_verbose_er(
+            {"entities": er_ground_truth.get("global", [])}, graph_entities
+        )
 
     # Format and print report
     report = _format_er_report(
@@ -521,12 +559,16 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
     if token_usage:
         total_in = sum(t["input"] for t in token_usage.values())
         total_out = sum(t["output"] for t in token_usage.values())
-        print(f"Token usage: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)")
+        print(
+            f"Token usage: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)"
+        )
         print()
 
     # Save to debug dir — always include full diagnostics in the file
     if debug_dir:
-        full_verbose = _format_verbose_er({"entities": er_ground_truth.get("global", [])}, graph_entities)
+        full_verbose = _format_verbose_er(
+            {"entities": er_ground_truth.get("global", [])}, graph_entities
+        )
         full_report = _format_er_report(
             global_scores,
             timeslice_scores if timeslice_scores else None,
@@ -534,17 +576,19 @@ def run_er_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | No
         )
         results_path = os.path.join(debug_dir, "eval-results.md")
         with open(results_path, "w") as fh:
-            fh.write(f"# ER Eval Results\n\n")
+            fh.write("# ER Eval Results\n\n")
             fh.write(f"PearScarf v{pearscarf_version} — dataset v{version}\n")
             fh.write(f"Model: {EXTRACTION_MODEL}\n\n")
             fh.write(full_report)
             if token_usage:
-                fh.write(f"\n## Token Usage\n\n")
+                fh.write("\n## Token Usage\n\n")
                 total_in = sum(t["input"] for t in token_usage.values())
                 total_out = sum(t["output"] for t in token_usage.values())
                 for rid, t in token_usage.items():
                     fh.write(f"  {rid}: {t['input']:,} in, {t['output']:,} out\n")
-                fh.write(f"\n  Total: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)\n")
+                fh.write(
+                    f"\n  Total: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)\n"
+                )
         print(f"Results saved to {results_path}")
 
     return {
@@ -561,6 +605,7 @@ def _score_facts(expected_facts: list[dict], graph_facts: list[dict], match_on: 
 
     Matches on the fields listed in match_on. Returns precision, recall, F1, details.
     """
+
     def _key(f: dict) -> tuple:
         return tuple((f.get(k) or "").lower() for k in match_on)
 
@@ -608,23 +653,25 @@ def _format_facts_report(scores: dict) -> str:
         lines.append("")
         lines.append("  Missing (expected but not found):")
         for f in scores["missing"]:
-            to = f" → {f['to_entity']}" if f.get('to_entity') else ""
+            to = f" → {f['to_entity']}" if f.get("to_entity") else ""
             lines.append(f"    {f['edge_label']}/{f['fact_type']}: {f['from_entity']}{to}")
 
     if scores["extra"]:
         lines.append("")
         lines.append("  Extra (found but not expected):")
         for f in scores["extra"]:
-            to = f" → {f['to_entity']}" if f.get('to_entity') else ""
+            to = f" → {f['to_entity']}" if f.get("to_entity") else ""
             lines.append(f"    {f['edge_label']}/{f['fact_type']}: {f['from_entity']}{to}")
             if f.get("fact"):
-                lines.append(f"      \"{f['fact'][:80]}\"")
+                lines.append(f'      "{f["fact"][:80]}"')
 
     lines.append("")
     return "\n".join(lines)
 
 
-def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str | None = None) -> dict:
+def run_facts_eval(
+    dataset_path: str, *, verbose: bool = False, debug_dir: str | None = None
+) -> dict:
     """Run facts evaluation. Returns scores dict."""
     init_db()
 
@@ -646,7 +693,9 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
     match_on = facts_gt.get("match_on", ["edge_label", "fact_type", "from_entity", "to_entity"])
 
     print(f"PearScarf v{pearscarf_version} — facts eval against dataset v{version}")
-    print(f"Model: {EXTRACTION_MODEL}  Temperature: {EXTRACTION_TEMPERATURE}  Max tokens: {EXTRACTION_MAX_TOKENS}")
+    print(
+        f"Model: {EXTRACTION_MODEL}  Temperature: {EXTRACTION_TEMPERATURE}  Max tokens: {EXTRACTION_MAX_TOKENS}"
+    )
     print()
 
     # Require clean graph
@@ -660,13 +709,14 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
     _ensure_expert_connects()
 
     # Start extraction + curator
-    from pearscarf.extraction import Extraction
     from pearscarf.curation import Curation
+    from pearscarf.extraction import Extraction
 
     if debug_dir:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         dataset_name = os.path.basename(os.path.normpath(dataset_path))
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
         run_name = f"{dataset_name}_v{version}_{timestamp}"
         debug_dir = os.path.join(debug_dir, run_name)
         os.makedirs(debug_dir, exist_ok=True)
@@ -721,14 +771,16 @@ def run_facts_eval(dataset_path: str, *, verbose: bool = False, debug_dir: str |
     if token_usage:
         total_in = sum(t["input"] for t in token_usage.values())
         total_out = sum(t["output"] for t in token_usage.values())
-        print(f"Token usage: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)")
+        print(
+            f"Token usage: {total_in:,} input, {total_out:,} output ({total_in + total_out:,} total)"
+        )
         print()
 
     # Save to debug dir
     if debug_dir:
         results_path = os.path.join(debug_dir, "eval-results.md")
         with open(results_path, "w") as fh:
-            fh.write(f"# Facts Eval Results\n\n")
+            fh.write("# Facts Eval Results\n\n")
             fh.write(f"PearScarf v{pearscarf_version} — dataset v{version}\n")
             fh.write(f"Model: {EXTRACTION_MODEL}\n\n")
             fh.write(report)

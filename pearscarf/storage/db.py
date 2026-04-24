@@ -3,9 +3,8 @@ from __future__ import annotations
 import atexit
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -250,7 +249,7 @@ def init_db() -> None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _next_session_id() -> str:
@@ -342,6 +341,7 @@ def get_history(session_id: str) -> list[dict]:
 
 
 # Discord thread mapping
+
 
 def save_thread_mapping(session_id: str, thread_id: int, channel_id: int) -> None:
     with _get_conn() as conn:
