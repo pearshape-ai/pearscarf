@@ -129,7 +129,9 @@ class PearscarfBot(discord.Client):
                         if thread:
                             text = f"**{from_agent}**: {content}"
                             for i in range(0, len(text), 2000):
-                                await thread.send(text[i : i + 2000])
+                                # get_channel returns a broad union; in practice this is
+                                # always a TextChannel or Thread (both support `.send`).
+                                await thread.send(text[i : i + 2000])  # type: ignore[union-attr]
                     else:
                         # Expert-initiated session with no thread yet
                         # Create a thread in the first text channel we can find

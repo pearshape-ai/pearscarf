@@ -128,11 +128,11 @@ class SessionRepl:
             return True
 
         if cmd == "/history":
-            target = parts[1] if len(parts) > 1 else self._active_session
-            if not target:
+            history_target: str | None = parts[1] if len(parts) > 1 else self._active_session
+            if not history_target:
                 self._ui.print_above("No active session.")
                 return True
-            history = self._bus.get_history(target)
+            history = self._bus.get_history(history_target)
             if not history:
                 self._ui.print_above("No messages.")
             else:

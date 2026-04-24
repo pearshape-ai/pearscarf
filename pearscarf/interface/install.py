@@ -290,7 +290,7 @@ def stage_identifier_patterns(ctx: ValidationContext) -> StageResult:
     _stage("Stage 6 — identifier patterns")
 
     declared_types = {
-        (entry.get("name") if isinstance(entry, dict) else entry).lower()
+        ((entry.get("name") or "") if isinstance(entry, dict) else entry).lower()
         for entry in (ctx.manifest.get("new_entity_types") or [])
         if entry
     }

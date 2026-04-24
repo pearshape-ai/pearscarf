@@ -13,10 +13,13 @@ repos:
     rev: v1.13.0
     hooks:
       - id: mypy
-        # Typing only the pearscarf package — experts get separate treatment later,
-        # lab + scripts are tooling that we don't type-check in this phase.
+        # Typing only the pearscarf package — experts get separate treatment
+        # later, lab + scripts are tooling that we don't type-check in this
+        # phase. additional_dependencies mirror the import-untyped bridge that
+        # `types-PyYAML` (dev-deps) covers locally.
         files: ^pearscarf/
         additional_dependencies:
           - click
           - httpx
           - pydantic
+          - types-PyYAML

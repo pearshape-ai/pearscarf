@@ -12,6 +12,7 @@ import sys
 import termios
 import threading
 import tty
+from types import FrameType
 
 # Terminal settings saved from inside read_line() before entering raw mode.
 # This ensures we capture a known-good cooked-mode state, not a broken one
@@ -34,7 +35,7 @@ atexit.register(_restore_terminal)
 try:
     _prev_sigterm = signal.getsignal(signal.SIGTERM)
 
-    def _sigterm_handler(signum: int, frame: object) -> None:
+    def _sigterm_handler(signum: int, frame: FrameType | None) -> None:
         _restore_terminal()
         # Re-raise with previous handler or default
         if callable(_prev_sigterm):

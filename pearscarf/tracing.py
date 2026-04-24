@@ -31,7 +31,9 @@ def traceable(
 
     from langsmith import traceable as ls_traceable
 
-    return ls_traceable(
+    # langsmith's `traceable` overload types `run_type` as a Literal, but we
+    # accept a free-form str from callers (and LangSmith tolerates it at runtime).
+    return ls_traceable(  # type: ignore[call-overload]
         name=name,
         run_type=run_type,
         metadata=metadata or {},

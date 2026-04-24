@@ -46,6 +46,8 @@ extraPaths = ["experts"]
 [dependency-groups]
 dev = [
     "ruff>=0.13.0",
+    "mypy>=1.13.0",
+    "types-PyYAML",
 ]
 
 [tool.ruff]
@@ -71,6 +73,24 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E402"]  # scripts do env setup before imports
 "experts/*/*_ingest.py" = ["E402"]  # same pattern in expert ingester entry points
+
+[tool.mypy]
+python_version = "3.12"
+# Start loose — tighten per-module over time. Third-party libs without stubs
+# (neo4j, qdrant-client, sentence-transformers, discord.py, etc.) shouldn't
+# drown the signal on code we actually wrote.
+ignore_missing_imports = true
+strict = false
+# Keep these on — they catch real mistakes without requiring full strictness.
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+# Lab + eval fixtures + experts' own eval folders are out of scope.
+exclude = [
+    "^lab/",
+    "^data/",
+    "^experts/.*/eval/",
+]
 
 # Pin `torch` to the CPU-only wheel on linux. `sentence-transformers` pulls
 # torch transitively; on linux x86_64 its default wheel is the CUDA build,

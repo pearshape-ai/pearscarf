@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 import click
 
@@ -745,6 +746,10 @@ def query_cmd(tool_name, **kwargs):
 
     init_db()
 
+    # `result` takes different shapes per branch (list[dict] from find_entity,
+    # dict from get_connections / get_path, etc.) — one widened annotation keeps
+    # mypy quiet without narrowing every branch separately.
+    result: Any
     try:
         if tool_name == "find_entity":
             result = context_query.find_entity(

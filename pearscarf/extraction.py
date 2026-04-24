@@ -226,6 +226,8 @@ class Extraction(Consumer):
 
     def _debug_write(self, record_id: str, name: str, content: str) -> None:
         """Write a single debug file."""
+        if not self._debug_dir:
+            return
         folder = self._debug_folder_name(record_id)
         record_dir = os.path.join(self._debug_dir, folder)
         os.makedirs(record_dir, exist_ok=True)

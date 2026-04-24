@@ -47,6 +47,7 @@ def _ensure_collection() -> None:
     """Create the records collection if it doesn't exist."""
     from qdrant_client.models import Distance, VectorParams
 
+    assert _client is not None  # caller (`_get_client`) initializes before calling
     collections = [c.name for c in _client.get_collections().collections]
     if COLLECTION_NAME not in collections:
         _client.create_collection(

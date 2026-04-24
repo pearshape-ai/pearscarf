@@ -54,7 +54,7 @@ def _resolve_entity(entity_name: str) -> tuple[dict | None, dict | None]:
         "or when a name could match multiple entities."
     )
 )
-def find_entity(name: str, entity_type: str = None) -> dict:
+def find_entity(name: str, entity_type: str | None = None) -> dict:
     """Search for entities by name."""
     results = context_query.find_entity(name, entity_type)
     if not results:
@@ -72,15 +72,16 @@ def find_entity(name: str, entity_type: str = None) -> dict:
 )
 def get_facts(
     entity_name: str,
-    edge_label: str = None,
-    fact_type: str = None,
+    edge_label: str | None = None,
+    fact_type: str | None = None,
     include_stale: bool = False,
-    since: str = None,
+    since: str | None = None,
 ) -> dict:
     """Get fact-edges for an entity with optional filters."""
     entity, err = _resolve_entity(entity_name)
     if err:
         return err
+    assert entity is not None  # narrowed by the err check above
     facts = context_query.get_facts(
         entity["id"],
         edge_label=edge_label,
@@ -104,13 +105,14 @@ def get_facts(
 )
 def get_connections(
     entity_name: str,
-    edge_label: str = None,
+    edge_label: str | None = None,
     include_stale: bool = False,
 ) -> dict:
     """Get connected entities via 1-hop traversal."""
     entity, err = _resolve_entity(entity_name)
     if err:
         return err
+    assert entity is not None  # narrowed by the err check above
     edge_labels = [edge_label] if edge_label else None
     result = context_query.get_connections(
         entity["id"],
@@ -143,6 +145,7 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
     ent_b, err_b = _resolve_entity(entity_b)
     if err_b:
         return err_b
+    assert ent_a is not None and ent_b is not None  # narrowed by the err checks above
 
     result = context_query.get_path(ent_a["id"], ent_b["id"])
     return {
@@ -160,13 +163,14 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
         "Use when reviewing graph health or validating entity affiliations."
     )
 )
-def get_conflicts(entity_name: str = None) -> dict:
+def get_conflicts(entity_name: str | None = None) -> dict:
     """Find conflicting AFFILIATED facts."""
     entity_id = None
     if entity_name:
         entity, err = _resolve_entity(entity_name)
         if err:
             return err
+        assert entity is not None  # narrowed by the err check above
         entity_id = entity["id"]
 
     conflicts = context_query.get_conflicts(entity_id=entity_id)
@@ -200,6 +204,7 @@ def get_entity_context(
     entity, err = _resolve_entity(entity_name)
     if err:
         return err
+    assert entity is not None  # narrowed by the err check above
 
     facts = context_query.get_facts(entity["id"], include_stale=include_stale)
     conns_result = context_query.get_connections(
@@ -249,6 +254,7 @@ def get_current_state(entity_name: str) -> dict:
     entity, err = _resolve_entity(entity_name)
     if err:
         return err
+    assert entity is not None  # narrowed by the err check above
 
     affiliations = context_query.get_facts(
         entity["id"], edge_label="AFFILIATED", include_stale=False
@@ -268,8 +274,8 @@ def get_current_state(entity_name: str) -> dict:
     )
 )
 def get_open_commitments(
-    entity_name: str = None,
-    before_date: str = None,
+    entity_name: str | None = None,
+    before_date: str | None = None,
     format: str = "chronological",
 ) -> dict:
     """Open commitments with deadlines."""
@@ -282,6 +288,7 @@ def get_open_commitments(
         entity, err = _resolve_entity(entity_name)
         if err:
             return err
+        assert entity is not None  # narrowed by the err check above
         entity_id = entity["id"]
         entity_info = {"id": entity["id"], "name": entity["name"], "type": entity["type"]}
 
@@ -331,7 +338,7 @@ def get_open_commitments(
         "Use when preparing a status update or surfacing impediments."
     )
 )
-def get_open_blockers(entity_name: str = None) -> dict:
+def get_open_blockers(entity_name: str | None = None) -> dict:
     """Current blockers without resolution."""
     entity_id = None
     entity_info = None
@@ -339,6 +346,7 @@ def get_open_blockers(entity_name: str = None) -> dict:
         entity, err = _resolve_entity(entity_name)
         if err:
             return err
+        assert entity is not None  # narrowed by the err check above
         entity_id = entity["id"]
         entity_info = {"id": entity["id"], "name": entity["name"], "type": entity["type"]}
 
@@ -378,7 +386,7 @@ def get_open_blockers(entity_name: str = None) -> dict:
 )
 def get_recent_activity(
     entity_name: str,
-    since: str = None,
+    since: str | None = None,
     format: str = "chronological",
 ) -> dict:
     """Recent activity: transitions + references + communications."""
@@ -388,6 +396,7 @@ def get_recent_activity(
     entity, err = _resolve_entity(entity_name)
     if err:
         return err
+    assert entity is not None  # narrowed by the err check above
 
     # Default since: 7 days ago
     if not since:

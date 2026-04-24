@@ -76,6 +76,11 @@ class SendMessageTool(BaseTool):
 class AssistantAgent(BaseAgent):
     """LLM agent spawned per session by `Assistant` to reason + delegate."""
 
+    # Attached by `Assistant._build_agent` so downstream tool-handling code
+    # can reach the session-scoped `SendMessageTool` without threading it
+    # through BaseAgent's callback signature.
+    _send_tool: SendMessageTool | None = None
+
     def __init__(
         self,
         tool_registry,
