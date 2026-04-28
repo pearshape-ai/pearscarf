@@ -122,6 +122,7 @@ psc dev --poll                 # Local-dev monolith: Discord frontend + all serv
 - [Getting Started](docs/getting-started.md) — installation, credentials, first run
 - [Architecture](docs/architecture.md) — system design, expert contract, startup flow, prompt composition
 - [Building an Expert](docs/expert_guide.md) — step-by-step guide to creating a new expert
+- [Deployment Vocabulary](docs/deployment-vocab.md) — declare deployment-specific entity types and fact_types via `vocab.yaml`
 - [Usage](docs/usage.md) — full command reference
 - [Data Model](docs/data-model.md) — entities, fact types, full schema, bi-temporal model
 - [Query Surface](docs/query-surface.md) — MCP tools reference

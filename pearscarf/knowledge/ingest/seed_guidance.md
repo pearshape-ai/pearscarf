@@ -7,6 +7,7 @@ Seed files declare known world state before any records are processed. They use 
 **`## people`** — one person per line: `name | role | email`
 **`## companies`** — one company per line: `name | domain`
 **`## projects`** — one project per line: `name`
+{{deployment_entity_sections}}
 **`## facts`** — one fact per line: `from_entity | EDGE_LABEL/fact_type | to_entity | optional fact text`
 **`## aliases`** — one alias declaration per line: `canonical_name | alias1 | alias2 | ...`
 

@@ -307,7 +307,11 @@ class Registry:
         record_type = record.get("type", "")
 
         if record_type == "ingest":
-            return load("seed_guidance")
+            template = load("seed_guidance")
+            return template.replace(
+                "{{deployment_entity_sections}}",
+                self._render_deployment_section_seed(),
+            )
 
         core = self._core_parts()
         parts: list[str] = [
@@ -324,6 +328,34 @@ class Registry:
             parts.append(expert.extraction_path.read_text())
 
         return "\n\n".join(parts)
+
+    # --- Deployment-vocab prompt rendering ---
+
+    def _render_deployment_section_seed(self) -> str:
+        """Render the deployment-vocab entity-type sections for seed prompts.
+
+        Replaces the `{{deployment_entity_sections}}` placeholder in
+        `seed_guidance.md`. Produces one bullet per declared entity type;
+        the bullet names the corresponding `## <plural>` section the
+        operator's seed file is expected to use. Returns the empty string
+        when no deployment vocab is loaded — backward-compatible with
+        deployments that don't set `DEPLOYMENT_VOCAB_PATH`.
+        """
+        from pearscarf.deployment_vocab import get_vocab
+
+        types = get_vocab().entity_types
+        if not types:
+            return ""
+        lines = []
+        for t in types:
+            desc = f" — {t.description.strip()}" if t.description else ""
+            lines.append(
+                f"**`## {t.section_name}`** — one `{t.name}` per line: "
+                f"`name | description`. Each line creates a `{t.name}` "
+                f"entity (Neo4j label `:{t.name[0].upper() + t.name[1:]}`)"
+                f"{desc}"
+            )
+        return "\n".join(lines)
 
     # --- Future hook ---
 

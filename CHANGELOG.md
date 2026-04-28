@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.28.0
+- Add deployment-vocabulary mechanism. Operators set `DEPLOYMENT_VOCAB_PATH` to a `vocab.yaml` declaring deployment-specific `entity_types` and `fact_types`; declarations merge into `pearscarf/storage/graph.py` `_LABELS` and `FACT_CATEGORIES` at module load. Seed prompts pick up declared entity types via a `{{deployment_entity_sections}}` placeholder in `seed_guidance.md`, rendered by `Registry._render_deployment_section_seed()`. New module `pearscarf/deployment_vocab.py` (loader). New doc `docs/deployment-vocab.md`. README links the new doc. Behaviour unchanged when the env var is unset.
+
 ## 1.27.10
 - Strengthen seed extraction's fact-text generation in `pearscarf/knowledge/ingest/seed_guidance.md`. The seed-record extraction prompt is deliberately narrow — it teaches the seed format without loading the broader extraction stack. The narrow design under-specified fact-text generation: a single buried bullet said "generate a short self-contained fact text from the three fields" with no example. The LLM, lacking guidance, fell back to its conservative default of treating the source line as ground-truth content and copying it verbatim — facts ended up with text like `"psc-qdrant | AFFILIATED/component_of | PearScarf"` instead of readable English. Two fixes in one prompt change. (1) Added an optional 4th pipe-delimited column to seed fact lines for operator-declared fact text — when present, the LLM uses it verbatim. (2) For 3-column lines, strengthened the generation rule with explicit examples and an anti-pattern (`"never copy the pipe-separated source line as the fact text"`). Verified on a small test seed: ten facts, every one stored as readable English matching the operator-declared 4th column verbatim.
 

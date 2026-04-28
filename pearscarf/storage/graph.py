@@ -70,6 +70,27 @@ FACT_CATEGORIES = {
 IDENTIFIED_AS = "IDENTIFIED_AS"
 
 
+def _apply_deployment_vocab() -> None:
+    """Merge deployment-vocab additions into _LABELS and FACT_CATEGORIES."""
+    from pearscarf.deployment_vocab import get_vocab
+
+    vocab = get_vocab()
+    for et in vocab.entity_types:
+        if et.name not in _LABELS:
+            # snake_case → PascalCase-ish: "sub_system" → "Sub_system"
+            _LABELS[et.name] = et.name[0].upper() + et.name[1:]
+    for label, types in vocab.fact_types.items():
+        if label not in FACT_CATEGORIES:
+            continue
+        existing = set(FACT_CATEGORIES[label])
+        for t in types:
+            if t.name not in existing:
+                FACT_CATEGORIES[label].append(t.name)
+
+
+_apply_deployment_vocab()
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -203,10 +224,19 @@ def create_entity(entity_type: str, name: str, metadata: dict | None = None) -> 
 
 
 def _label_to_type(labels: list[str]) -> str:
-    """Convert Neo4j labels list to entity type string."""
+    """Convert Neo4j labels list to entity type string.
+
+    Reverse-lookups against `_LABELS` so deployment-vocab entity types
+    (e.g. "sub_system" registered via `DEPLOYMENT_VOCAB_PATH`) round-trip
+    correctly. Falls back to lowercase match for legacy / case-insensitive
+    cases.
+    """
+    reverse = {v: k for k, v in _LABELS.items()}
     for label in labels:
+        if label in reverse:
+            return reverse[label]
         lower = label.lower()
-        if lower in ("person", "company", "project", "event"):
+        if lower in _LABELS:
             return lower
     return ""
 
