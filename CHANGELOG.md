@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.28.5
+- Extraction threads `op_area` from the source record onto fact edges. `pearscarf/extraction.py:_commit_extraction` reads `metadata.op_area` (default `"reality"`) and passes it through `_write_fact_edge` → `graph.create_fact_edge`. Without this, every edge carried the static default from `create_fact_edge`'s signature regardless of source.
+
 ## 1.28.4
 - Linearscarf restricts ingestion to Done issues and tags them as reality. `experts/linearscarf/linear_connect.py:list_updated_since` gains an optional `status: str | None = None` parameter that, when set, applies as a `state.name.eq` clause on the GraphQL filter; `LinearConnect.ingest_record` adds `op_area: "reality"` to every saved record's metadata. `experts/linearscarf/linear_ingest.py:LinearIngest` initialises `_synced_at` to the consumer's start time (instead of `None`) so no historical backfill happens — only Done transitions that occur after the consumer comes up are captured. Each cycle now follows a single incremental path: `list_updated_since(self._synced_at, status="Done")`. The bulk initial-sync branch is gone. Module docstring rewritten to describe the new posture in operator-agnostic language. Manifest bumped to 0.1.6.
 
