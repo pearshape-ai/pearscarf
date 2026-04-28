@@ -230,12 +230,18 @@ class LinearConnect:
         return [self._format_issue(n) for n in data.get("searchIssues", {}).get("nodes", [])]
 
     def list_updated_since(
-        self, since: str, team_id: str | None = None, first: int = 50
+        self,
+        since: str,
+        team_id: str | None = None,
+        status: str | None = None,
+        first: int = 50,
     ) -> list[dict]:
         filter_parts: dict = {"updatedAt": {"gt": since}}
         tid = team_id or self._ensure_team_id()
         if tid:
             filter_parts["team"] = {"id": {"eq": tid}}
+        if status:
+            filter_parts["state"] = {"name": {"eq": status}}
         query = (
             """
             query($filter: IssueFilter, $first: Int, $after: String) {
@@ -518,6 +524,7 @@ class LinearConnect:
             "url": data.get("url", ""),
             "linear_created_at": data.get("created_at", ""),
             "linear_updated_at": data.get("updated_at", ""),
+            "op_area": "reality",
         }
         return self._ctx.storage.save_record(
             "linear_issue",

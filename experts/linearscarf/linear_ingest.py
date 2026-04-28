@@ -1,12 +1,17 @@
 """Linear background ingestion — `LinearIngest` consumer.
 
-Polls Linear for new issues and history changes and saves each as a
-record via `ctx.storage.save_record()`. Records land with
-`classification=pending_triage`; Triage picks them up via queue
-polling. This ingester does not touch the bus.
+Polls Linear for issues that transitioned to `Done` since the consumer
+last synced and saves each as a record via `ctx.storage.save_record()`.
+Records land with `classification=pending_triage`; Triage picks them up
+via queue polling. This ingester does not touch the bus.
 
-Polls run in two modes: an initial bulk load (first cycle) and
-incremental sync (each subsequent cycle, filtered by `synced_at`).
+Only Done issues are ingested. Each saved record is tagged with
+`metadata.op_area = "reality"` — Linear's Done state represents work
+that has shipped. Open/in-progress issues are not pulled.
+
+`synced_at` initialises to the consumer's start time, so no historical
+backfill happens. Each cycle queries Linear for issues with
+`updatedAt > synced_at AND state == "Done"` and ingests them.
 """
 
 from __future__ import annotations
@@ -37,44 +42,21 @@ class LinearIngest(Consumer):
 
         self._ctx = ctx
         self._connect = LinearConnect(ctx)
-        self._synced_at: str | None = None
+        # Initialise to consumer-start time so no historical issues are pulled —
+        # only Done transitions that happen after the consumer comes up are
+        # captured. This is the no-backfill posture for a reality source.
+        self._synced_at: str = datetime.now(UTC).isoformat()
         self._pending: list = []  # list of issue dicts to process
 
     def _next(self):
         if self._pending:
             return self._pending.pop(0)
 
-        # No buffered work — run the next sync cycle.
+        # No buffered work — run the next sync cycle. Only Done issues
+        # updated since the last sync are pulled.
         cycle_started_at = datetime.now(UTC).isoformat()
-        try:
-            if self._synced_at is None:
-                issues = self._connect.list_issues()
-                initial = True
-            else:
-                issues = self._connect.list_updated_since(self._synced_at)
-                initial = False
-        except Exception:
-            # Let base-class error handling take over in _next.
-            raise
-
-        if initial and issues:
-            saved = 0
-            for issue in issues:
-                rid = self._connect.ingest_record(issue)
-                if rid:
-                    saved += 1
-            if saved:
-                self._ctx.log.write(
-                    self._ctx.expert_name,
-                    "action",
-                    f"Initial sync: {saved} new issues saved as records",
-                )
-            # Initial sync processed inline — no per-item _handle pass needed.
-            self._synced_at = cycle_started_at
-            return None
-
-        if not initial:
-            self._pending = list(issues)
+        issues = self._connect.list_updated_since(self._synced_at, status="Done")
+        self._pending = list(issues)
         self._synced_at = cycle_started_at
         return self._pending.pop(0) if self._pending else None
 
