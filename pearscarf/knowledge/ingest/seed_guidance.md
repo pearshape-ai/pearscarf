@@ -1,24 +1,47 @@
 ## Seed record guidance
 
-Seed files declare the known world state before any records are processed. They use structured markdown with pipe-delimited sections.
+Seed files declare known world state before any records are processed. They use structured markdown with pipe-delimited sections.
 
 ### Sections
 
 **`## people`** — one person per line: `name | role | email`
 **`## companies`** — one company per line: `name | domain`
 **`## projects`** — one project per line: `name`
-**`## facts`** — one fact per line: `from_entity | EDGE_LABEL/fact_type | to_entity`
+**`## facts`** — one fact per line: `from_entity | EDGE_LABEL/fact_type | to_entity | optional fact text`
 **`## aliases`** — one alias declaration per line: `canonical_name | alias1 | alias2 | ...`
 
-### Rules
+### Rules — entities
 
 - Every line in people/companies/projects is an entity — extract all of them, never skip
-- Every line in facts is a fact — extract all of them
 - All seed content is declared ground truth — confidence is always `stated`
 - `valid_until` is always `null`
 - Capitalize entity names correctly: "Elena Vasquez" not "elena vasquez"
 - Put email and role in person metadata, domain in company metadata
-- For facts, generate a short self-contained fact text from the three fields
+
+### Rules — facts
+
+Every line in `## facts` is a fact. Extract all of them.
+
+Each fact line has **3 or 4** pipe-delimited columns:
+- 3 columns: `from_entity | EDGE_LABEL/fact_type | to_entity`
+- 4 columns: `from_entity | EDGE_LABEL/fact_type | to_entity | fact text`
+
+**If a 4th column is present, use it VERBATIM as the fact's `fact` text.** Do not modify, paraphrase, or shorten it. The operator wrote that text precisely so downstream agents can read it.
+
+**If only 3 columns are present, generate a short self-contained sentence as the fact text.** The sentence should:
+- Use the from-entity and to-entity names directly
+- Read as natural English
+- Make the relationship type explicit
+
+Examples of good generated fact text:
+- `Elena Vasquez | AFFILIATED/employee | Brightlane` → `"Elena Vasquez is employed at Brightlane"`
+- `Crestwood Onboarding | AFFILIATED/sub_project | Brightlane` → `"Crestwood Onboarding is a sub-project of Brightlane"`
+- `Tom Hayward | AFFILIATED/contributor | Crestwood Onboarding` → `"Tom Hayward contributes to the Crestwood Onboarding project"`
+
+**ANTI-PATTERN — never copy the pipe-separated source line as the fact text.** The fact's `fact` field must NEVER contain `|` characters from the source format. The fact text is what downstream agents read; a pipe-encoded tuple is not readable English.
+
+WRONG: `"Tom Hayward | AFFILIATED/contributor | Crestwood Onboarding"`
+RIGHT: `"Tom Hayward contributes to the Crestwood Onboarding project"`
 
 ### Aliases
 
