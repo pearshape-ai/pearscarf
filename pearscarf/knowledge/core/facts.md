@@ -1,5 +1,9 @@
 Every fact has an `edge_label` (the relationship type) and a `fact_type` (the specific kind within that label). Pick the combination that most precisely describes the relationship or claim.
 
+`edge_label` is foundational and closed: always one of `AFFILIATED`, `ASSERTED`, `TRANSITIONED`. The choice is structural — is the fact an attachment, a claim, or a state change? Almost never ambiguous.
+
+`fact_type` is an anchor set, not a closed list. The values listed under each edge label below are the canonical types — prefer them when one fits the relationship cleanly. When the relationship doesn't match any canonical type, propose a new `lower_snake_case` fact_type that names the relationship precisely. The curator consolidates novel proposals over time; a clean novel name is better than forcing a relationship into a canonical type that doesn't really describe it.
+
 ### AFFILIATED — organizational attachments
 
 Stable facts about how entities relate. Who belongs to what, who leads what. Rarely change over time.

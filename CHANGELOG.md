@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.28.1
+- Anchored extensibility for `fact_type`. The canonical `fact_type` values in `pearscarf/storage/graph.py FACT_CATEGORIES` (now extensible per deployment via `DEPLOYMENT_VOCAB_PATH`) are an anchor set, not a closed list. Extraction in `pearscarf/extraction.py` no longer flags novel fact_types as invalid; instead, when a fact emits a fact_type that's not in the merged canonical list for its edge label, a `novel_fact_type` log entry is written and the fact still commits onto the edge. `edge_label` validation stays strict — the three foundational labels (`AFFILIATED`, `ASSERTED`, `TRANSITIONED`) remain closed. `pearscarf/knowledge/core/facts.md` gains a paragraph at the top framing the anchor-vs-extensible distinction so the LLM extractor knows it can propose new `lower_snake_case` fact_types when no canonical one fits. Combined with deployment vocab and the future curator consolidation pass, this lets each deployment's fact_type vocabulary grow organically while remaining queryable.
+
 ## 1.28.0
 - Add deployment-vocabulary mechanism. Operators set `DEPLOYMENT_VOCAB_PATH` to a `vocab.yaml` declaring deployment-specific `entity_types` and `fact_types`; declarations merge into `pearscarf/storage/graph.py` `_LABELS` and `FACT_CATEGORIES` at module load. Seed prompts pick up declared entity types via a `{{deployment_entity_sections}}` placeholder in `seed_guidance.md`, rendered by `Registry._render_deployment_section_seed()`. New module `pearscarf/deployment_vocab.py` (loader). New doc `docs/deployment-vocab.md`. README links the new doc. Behaviour unchanged when the env var is unset.
 

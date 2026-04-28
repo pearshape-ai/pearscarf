@@ -416,10 +416,18 @@ class Extraction(Consumer):
                 errors.append(f"Invalid edge_label: {edge_label}")
                 continue
 
-            # Validate fact type
+            # Anchored extensibility — novel fact_types are accepted, not rejected.
+            # The canonical lists in graph.FACT_CATEGORIES (extended by deployment
+            # vocab) are an anchor set. Anything outside is logged for curator review;
+            # the fact still commits onto the edge.
             fact_type = fact.get("fact_type", "")
             if fact_type and fact_type not in graph.FACT_CATEGORIES[edge_label]:
-                errors.append(f"Invalid fact_type '{fact_type}' for {edge_label}")
+                log.write(
+                    self.name,
+                    "--",
+                    "novel_fact_type",
+                    f"{record.get('id', '?')}: proposed '{fact_type}' under {edge_label}",
+                )
 
             # Check entity references
             from_name = fact.get("from_entity", "").lower()
