@@ -1,86 +1,52 @@
 ## Linear extraction guidance
 
-Linear records are issue reports. **The issue itself is not an entity.** It is a source
-document — extract facts and references FROM it, but don't create a graph node FOR it.
+Linear records are issues filed in Linear. The body of a well-formed Done issue carries a `## For agents` YAML block declaring exactly which facts join the graph; when present, that block is the extraction source of truth. When absent, the body is treated as narrative and extracted as prose with the linearscarf-specific exclusions below.
 
-### The Project rule is absolute
+The complete format spec lives in `knowledge/issue_format.md`.
 
-For any Linear issue record, you may create AT MOST ONE `Project` entity from it, and it
-is the exact value on the `Project:` metadata line near the top of the record content.
-If the metadata line says `Project: Foo`, resolve that to the `Foo` Project (creating it
-if new) — that is the project for this record.
+### Path 1: `## For agents` YAML block (preferred)
 
-**No other Project nodes are permitted, regardless of how they appear in the body.** The
-following are NEVER projects:
+When the issue body contains a `## For agents` section with a YAML block of the form:
 
-- **The issue identifier** (the `<TEAM>-<NUMBER>` code such as `ABC-142`) — it
-  identifies this source document, not a project.
-- **The issue title** or any rephrasing of it — it describes the work, not a project.
-- **The URL slug** at the end of the issue URL — it's a URL path derived from the title.
-- **Code identifiers** — class names, module names, function names, tool names,
-  variable names, CLI subcommands. Technical vocabulary the issue talks ABOUT, not
-  workstreams.
-- **Abbreviations or acronyms** treated as named systems (e.g. `API`, `CI`, `CD`, or
-  other technical-abbreviation-style identifiers used throughout the body) — not
-  projects.
-- **Work themes or body section headings** — multi-word phrases describing what the
-  issue is about ("architecture refactor", "caching layer", "observability substrate").
-  Those are the subject of the work, not a project.
-- **Other issue identifiers** referenced in the body (links to related issues) — they
-  are other source documents in this same table.
+```yaml
+facts:
+  - subject: <entity name>
+    edge_label: TRANSITIONED | ASSERTED | AFFILIATED
+    fact_type: <lower_snake_case>
+    target: <entity name | (Day)>
+    fact_text: <readable English sentence>
+```
 
-If you are tempted to extract something from the body as a Project — **don't**. The body
-describes the work for the metadata Project; it does not name separate projects. Any
-Project beyond the metadata value is a false positive.
+Extract by parsing the YAML and emitting one fact per entry:
 
-The only time to extract a non-metadata Project is when the body unambiguously names a
-different workstream owned by a different team or customer — and the onboarding block
-confirms it's a real entity in this deployment's world. When in doubt, skip. The
-curator consolidates duplicates cheaply; false Project nodes are harder to clean up.
+- Resolve `subject` via standard entity resolution. Create a new entity only when no match is found.
+- Resolve `target` the same way. The special target `(Day)` resolves to the day node for the issue's recorded date.
+- Emit one fact via the save-extraction tool with:
+  - `from_entity` = resolved `subject`
+  - `to_entity` = resolved `target` (or the day node id for `(Day)`)
+  - `edge_label`, `fact_type`, `fact_text` = verbatim from YAML
+  - `confidence` = `stated` (the operator declared this fact in the issue)
 
-### What IS worth extracting beyond the metadata Project
+Do not extract anything from the `## For humans` section or other prose when the YAML block is present — the YAML is the complete, intentional fact set.
 
-- **People in comments or description** — @-mentions, assignees, or people named as
-  active participants (e.g. "Alex is reviewing", "Handed off to Sam"). Create as
-  `Person` entities with AFFILIATED/contributor facts to the metadata project.
-- **Commitments and blockers** from the description or comments. "Blocked on the
-  vendor's API key" → ASSERTED/blocker fact. "Targeting end of Q2" →
-  ASSERTED/commitment fact. Fact text must be a direct quote or close substring.
+### Path 2: prose fallback (no `## For agents` block)
 
-That is the complete list of what to extract from a Linear issue beyond its metadata
-Project. Anything else is body text and does not become a graph node.
+When the issue body has no `## For agents` block, treat the body as narrative and extract facts using general extraction guidance, with these linearscarf-specific rules:
 
-### Illustrative examples and hypotheticals are NOT facts
-
-Issue descriptions often contain illustrative examples, sample scenarios, or
-hypothetical quotes used to explain a design problem. These are teaching material
-inside the document, not real facts about real entities.
-
-Signals that a passage is illustrative and must be IGNORED for extraction:
-
-- Leading phrases like `Example:`, `e.g.`, `For example`, `Imagine`, `Suppose`,
-  `Hypothetical:`.
-- Quoted passages inside the body that describe a scenario rather than report an event.
-- Inline code blocks showing sample input/output.
-- Lists framed as "what the extractor might see" or "what could go wrong" —
-  metadiscussion, not live facts.
-
-Do not create entities or facts from illustrative content. The onboarding block lists
-any fixture / test-dataset names that must always be skipped regardless of how they
-appear.
-
-### Issue change records (source_type: linear_change)
-
-When the record is an issue change (indicated by "Change:" in the content):
-
-- **One change = at most one TRANSITIONED fact.** A status change from "In Progress" to
-  "In Review" → TRANSITIONED/status_change with fact text describing the transition.
-- **Reference the person who made the change** if named in "Changed by: …".
-- **Don't create new entities from structured fields.** Issue, project, person are
-  already known from the parent issue. Reuse the same names.
-- **Keep it minimal.** A change record yields at most one or two facts.
+- **The issue itself is not an entity.** Do not create a graph node for the issue identifier (e.g. `ABC-142`).
+- **Issue metadata is not extracted as facts.** Assignee, project, labels, status are structural — don't produce facts that just restate them (e.g. "Person X is assigned to Project Y" when both are already known from the issue's metadata fields).
+- **The metadata `Project: <name>` line is the only project source.** Don't create other Project nodes from body text.
+- **Illustrative examples are not facts.** Phrases like `Example:`, `e.g.`, `For example`, `Imagine`, `Hypothetical:`, quoted scenarios, sample input/output blocks — teaching material, not facts.
 
 ### Source timing
 
-The fact's `source_at` is the issue's `linear_created_at` or the change's `changed_at` —
-never the indexing time.
+The fact's `source_at` is the issue's `linear_created_at` — never the indexing time.
+
+### Issue change records (source_type: linear_issue_change)
+
+Issue change records are field-level diff events on a parent issue and do not carry the `## For agents` block. When the record is an issue change (indicated by "Change:" in the content):
+
+- One change = at most one TRANSITIONED fact (e.g. status change → TRANSITIONED/status_change).
+- Reference the person who made the change if named in "Changed by: …".
+- Reuse entities already named on the parent issue. Don't create new ones.
+- Keep it minimal — at most one or two facts per change.

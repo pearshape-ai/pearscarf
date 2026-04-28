@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.28.7
+- Linearscarf gains an issue-format contract (linearscarf 0.1.7). New `experts/linearscarf/knowledge/issue_format.md` documents a recommended Done-issue body shape — a `## For humans` prose section plus an optional `## For agents` YAML fact block — and is loadable as a prompt by any agent that reads or writes Linear issues. `experts/linearscarf/knowledge/extraction.md` rewritten with two extraction paths: when the YAML block is present, parse it and emit each entry as a fact verbatim (operator-controlled, deterministic); when absent, fall back to prose extraction with linearscarf-specific exclusions (issue identifier is not an entity, metadata is not facts, Project comes only from the metadata line, illustrative examples are skipped). New `experts/linearscarf/README.md` points to the format and explains the rationale on the human and agent axes.
+
 ## 1.28.6
 - Triage decides `op_area` when the source record lacks an explicit marker. `pearscarf/triage.py:_process` reads `metadata.op_area` first; absent that, the classify tool gains an `op_area` enum and the prompt gains an inference block, and the inferred value is merged back onto the record's metadata via new `store.set_op_area`. Today every queued record has an explicit marker, so the inference branch stays dormant.
 
