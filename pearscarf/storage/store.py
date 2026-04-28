@@ -116,6 +116,24 @@ def mark_relevant(record_id: str) -> None:
     set_classification(record_id, RELEVANT)
 
 
+def set_op_area(record_id: str, op_area: str) -> None:
+    """Merge `op_area` into a record's metadata jsonb.
+
+    Used by triage when the source ingester didn't set an explicit
+    `metadata.op_area` and triage had to infer it from content. Existing
+    metadata fields are preserved via `jsonb || jsonb` semantics.
+    """
+    from psycopg.types.json import Jsonb
+
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "UPDATE records SET metadata = COALESCE(metadata, '{}'::jsonb) || %s WHERE id = %s",
+            (Jsonb({"op_area": op_area}), record_id),
+        )
+        conn.commit()
+
+
 # --- Per-type record helpers (legacy, used by existing experts) ---
 
 

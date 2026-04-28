@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.28.6
+- Triage decides `op_area` when the source record lacks an explicit marker. `pearscarf/triage.py:_process` reads `metadata.op_area` first; absent that, the classify tool gains an `op_area` enum and the prompt gains an inference block, and the inferred value is merged back onto the record's metadata via new `store.set_op_area`. Today every queued record has an explicit marker, so the inference branch stays dormant.
+
 ## 1.28.5
 - Extraction threads `op_area` from the source record onto fact edges. `pearscarf/extraction.py:_commit_extraction` reads `metadata.op_area` (default `"reality"`) and passes it through `_write_fact_edge` → `graph.create_fact_edge`. Without this, every edge carried the static default from `create_fact_edge`'s signature regardless of source.
 

@@ -36,16 +36,25 @@ from pearscarf.tracked_call import _record_id_var
 
 
 class ClassifyTriageTool(BaseTool):
-    """The triage agent calls this once at the end to commit its decision."""
+    """The triage agent calls this once at the end to commit its decision.
+
+    When `infer_op_area=True`, the schema also requires an `op_area` field
+    (used when the source record didn't carry an explicit
+    `metadata.op_area` marker — typically free-form ingesters like a chat
+    source). When False, op_area was already set by the ingester and the
+    LLM doesn't need to decide.
+    """
 
     name = "classify"
     description = (
         "Emit your final classification decision with reasoning. Call this "
         "exactly once, after you have gathered whatever graph context you need."
     )
-    input_schema = {
-        "type": "object",
-        "properties": {
+
+    def __init__(self, infer_op_area: bool = False) -> None:
+        self.result: dict | None = None
+        self._infer_op_area = infer_op_area
+        properties: dict[str, Any] = {
             "classification": {
                 "type": "string",
                 "enum": [store.RELEVANT, store.NOISE, store.UNCERTAIN],
@@ -55,18 +64,32 @@ class ClassifyTriageTool(BaseTool):
                 "type": "string",
                 "description": "Why you chose this classification.",
             },
-        },
-        "required": ["classification", "reasoning"],
-    }
-
-    def __init__(self) -> None:
-        self.result: dict | None = None
+        }
+        required = ["classification", "reasoning"]
+        if infer_op_area:
+            properties["op_area"] = {
+                "type": "string",
+                "enum": ["reality", "intention"],
+                "description": (
+                    "Whether this record describes things that have happened/are "
+                    "observed (reality) or things that should/will happen (intention)."
+                ),
+            }
+            required.append("op_area")
+        self.input_schema = {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+        }
 
     def execute(self, **kwargs: Any) -> str:
-        self.result = {
+        result: dict[str, Any] = {
             "classification": kwargs["classification"],
             "reasoning": kwargs.get("reasoning", ""),
         }
+        if self._infer_op_area:
+            result["op_area"] = kwargs.get("op_area")
+        self.result = result
         return f"classification recorded: {kwargs['classification']}"
 
 
@@ -168,8 +191,13 @@ class Triage(Consumer):
         """Return a claimed record to the queue for retry on failure."""
         store.set_classification(record_id, store.PENDING_TRIAGE)
 
-    def _build_prompt(self, record: dict) -> str:
-        """Compose the triage system prompt: role + onboarding + expert guidance."""
+    def _build_prompt(self, record: dict, infer_op_area: bool) -> str:
+        """Compose the triage system prompt: role + onboarding + expert guidance.
+
+        When `infer_op_area` is True, the op_area inference block is appended
+        so the agent knows it must emit an `op_area` value alongside the
+        relevance classification.
+        """
         expert_name = record.get("expert_name") or ""
         guidance = load_relevancy_guidance(expert_name)
         guidance_block = ""
@@ -185,21 +213,36 @@ class Triage(Consumer):
                 f"no relevancy guidance for expert {expert_name!r} — "
                 "falling back to onboarding-only framing",
             )
-        return load_prompt("triage_agent") + "\n\n" + load_onboarding_block() + guidance_block
+        op_area_block = ""
+        if infer_op_area:
+            op_area_block = "\n\n---\n\n" + load_prompt("triage_op_area_inference")
+        return (
+            load_prompt("triage_agent")
+            + "\n\n"
+            + load_onboarding_block()
+            + guidance_block
+            + op_area_block
+        )
 
     def _process(self, record: dict) -> None:
         """Run triage on a claimed record."""
         record_id = record["id"]
+
+        # Explicit `metadata.op_area` from the ingester wins. When absent
+        # (free-form sources like chat), the agent infers it from content.
+        metadata = record.get("metadata") or {}
+        explicit_op_area = metadata.get("op_area")
+        infer_op_area = explicit_op_area is None
 
         registry = ToolRegistry()
         registry.register(FindEntityTool())
         registry.register(SearchEntitiesTool())
         registry.register(CheckAliasTool())
         registry.register(GetEntityContextTool())
-        classify_tool = ClassifyTriageTool()
+        classify_tool = ClassifyTriageTool(infer_op_area=infer_op_area)
         registry.register(classify_tool)
 
-        system_prompt = self._build_prompt(record)
+        system_prompt = self._build_prompt(record, infer_op_area=infer_op_area)
         user_message = (
             f"Record ({record_id}, {record.get('type', '?')}):\n\n"
             f"{record.get('content') or '(no content)'}"
@@ -224,6 +267,13 @@ class Triage(Consumer):
 
         result = classify_tool.result
         store.set_classification(record_id, result["classification"])
+
+        # Persist inferred op_area onto record.metadata so extraction reads it.
+        # If the ingester already set one, leave it alone.
+        if infer_op_area:
+            inferred = result.get("op_area") or "reality"
+            store.set_op_area(record_id, inferred)
+
         log.write(
             self.name,
             "--",
