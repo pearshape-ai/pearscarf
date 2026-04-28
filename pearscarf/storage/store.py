@@ -507,29 +507,37 @@ def enqueue_for_curation(record_id: str) -> None:
 
 
 def get_communications_for_entity(name_or_email: str, since: str | None = None) -> list[dict]:
-    """Find emails where the entity appears as sender or recipient."""
+    """Find emails where the entity appears as sender or recipient.
+
+    Queries the generic `records` table filtered by `type='email'` and matches
+    against `metadata->>'sender'` / `metadata->>'recipients'`. Decouples from
+    expert-versioned typed tables (e.g. `gmailscarf_email_0_1_5`) so the read
+    keeps working across expert version bumps.
+    """
     init_db()
     with _get_conn() as conn:
         pattern = f"%{name_or_email}%"
+        base_select = (
+            "SELECT id AS record_id, "
+            "metadata->>'sender' AS sender, "
+            "metadata->>'recipients' AS recipient, "
+            "metadata->>'subject' AS subject, "
+            "metadata->>'received_at' AS received_at, "
+            "source "
+            "FROM records "
+            "WHERE type = 'email' "
+            "AND (metadata->>'sender' ILIKE %s OR metadata->>'recipients' ILIKE %s) "
+        )
         if since:
             rows = conn.execute(
-                "SELECT e.record_id, e.sender, e.recipient, e.subject, "
-                "e.received_at, r.source "
-                "FROM emails e "
-                "JOIN records r ON e.record_id = r.id "
-                "WHERE (e.sender ILIKE %s OR e.recipient ILIKE %s) "
-                "AND e.received_at >= %s "
-                "ORDER BY e.received_at DESC LIMIT 20",
+                base_select
+                + "AND metadata->>'received_at' >= %s "
+                + "ORDER BY metadata->>'received_at' DESC LIMIT 20",
                 (pattern, pattern, since),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT e.record_id, e.sender, e.recipient, e.subject, "
-                "e.received_at, r.source "
-                "FROM emails e "
-                "JOIN records r ON e.record_id = r.id "
-                "WHERE (e.sender ILIKE %s OR e.recipient ILIKE %s) "
-                "ORDER BY e.received_at DESC LIMIT 20",
+                base_select + "ORDER BY metadata->>'received_at' DESC LIMIT 20",
                 (pattern, pattern),
             ).fetchall()
         return [dict(r) for r in rows]
