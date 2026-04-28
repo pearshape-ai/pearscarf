@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.28.3
+- Run mypy in pre-commit through the project's own venv. `.pre-commit-config.yaml` switches the mypy hook from `mirrors-mypy` (which spins up a minimal isolated env from `additional_dependencies`) to a local `language: system, entry: uv run mypy` hook that reuses `.venv`. The mirrors-mypy env was missing transitive deps that the local venv has, which surfaced as spurious `Unused "type: ignore"` diagnostics on `pearscarf/tracing.py:36` and `pearscarf/interface/discord_bot.py:134` at commit time only — `uv run mypy` and CI saw zero errors. Pre-commit, local invocation, and CI now all read the exact same dep set and produce the exact same diagnostics. Also adds `pre-commit>=4.0.0` to `[dependency-groups] dev` so `uv sync --group dev` installs the runner alongside ruff/mypy. One drive-by: ruff-format pass on `pearscarf/deployment_vocab.py` (two multi-line constructs collapsed to single lines under the 100-char limit) — formatting that should have been part of the 1.28.0 commit.
+
 ## 1.28.2
 - Add `op_area` property to fact edges via `pearscarf/storage/graph.py create_fact_edge`. New kwarg `op_area: str = "reality"`; included in the props dict written onto every new edge. Existing callers are unchanged because of the default — every fact created today is tagged `"reality"`. The property identifies which operational area a fact lives in: reality (things that have happened, are deployed, are observed) versus intention (objectives, plans, commitments).
 

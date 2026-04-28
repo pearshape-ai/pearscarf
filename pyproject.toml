@@ -48,6 +48,7 @@ dev = [
     "ruff>=0.13.0",
     "mypy>=1.13.0",
     "types-PyYAML",
+    "pre-commit>=4.0.0",
 ]
 
 [tool.ruff]

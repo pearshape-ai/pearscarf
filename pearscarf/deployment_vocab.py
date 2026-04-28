@@ -72,9 +72,7 @@ def get_vocab() -> DeploymentVocab:
 
     path = Path(path_str)
     if not path.is_file():
-        raise FileNotFoundError(
-            f"DEPLOYMENT_VOCAB_PATH={path_str!r} but file does not exist"
-        )
+        raise FileNotFoundError(f"DEPLOYMENT_VOCAB_PATH={path_str!r} but file does not exist")
 
     data = yaml.safe_load(path.read_text()) or {}
 
@@ -90,8 +88,7 @@ def get_vocab() -> DeploymentVocab:
     fact_types: dict[str, list[FactType]] = {}
     for label, types in (data.get("fact_types") or {}).items():
         fact_types[label] = [
-            FactType(name=t["name"], description=t.get("description", ""))
-            for t in (types or [])
+            FactType(name=t["name"], description=t.get("description", "")) for t in (types or [])
         ]
 
     _vocab = DeploymentVocab(entity_types=entity_types, fact_types=fact_types)
