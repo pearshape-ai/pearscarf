@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.28.2
+- Add `op_area` property to fact edges via `pearscarf/storage/graph.py create_fact_edge`. New kwarg `op_area: str = "reality"`; included in the props dict written onto every new edge. Existing callers are unchanged because of the default — every fact created today is tagged `"reality"`. The property identifies which operational area a fact lives in: reality (things that have happened, are deployed, are observed) versus intention (objectives, plans, commitments).
+
 ## 1.28.1
 - Anchored extensibility for `fact_type`. The canonical `fact_type` values in `pearscarf/storage/graph.py FACT_CATEGORIES` (now extensible per deployment via `DEPLOYMENT_VOCAB_PATH`) are an anchor set, not a closed list. Extraction in `pearscarf/extraction.py` no longer flags novel fact_types as invalid; instead, when a fact emits a fact_type that's not in the merged canonical list for its edge label, a `novel_fact_type` log entry is written and the fact still commits onto the edge. `edge_label` validation stays strict — the three foundational labels (`AFFILIATED`, `ASSERTED`, `TRANSITIONED`) remain closed. `pearscarf/knowledge/core/facts.md` gains a paragraph at the top framing the anchor-vs-extensible distinction so the LLM extractor knows it can propose new `lower_snake_case` fact_types when no canonical one fits. Combined with deployment vocab and the future curator consolidation pass, this lets each deployment's fact_type vocabulary grow organically while remaining queryable.
 

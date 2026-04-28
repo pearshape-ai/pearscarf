@@ -398,6 +398,7 @@ def create_fact_edge(
     source_type: str,
     source_at: str | None = None,
     valid_until: str | None = None,
+    op_area: str = "reality",
 ) -> str:
     """Create a fact-edge between two nodes. Returns the edge element ID.
 
@@ -405,6 +406,9 @@ def create_fact_edge(
     fact_type: specific type within the label (e.g. employee, commitment, status_change).
     source_at: event time — when the fact became true in the world.
     valid_until: optional deadline/expiry.
+    op_area: which operational area this fact lives in — "reality" (the default;
+        things that have happened, are deployed, are observed) or "intention"
+        (objectives, plans, commitments). Stored as an edge property.
     """
     ts = _now()
     props = {
@@ -421,6 +425,7 @@ def create_fact_edge(
         "replaced_by": None,
         "valid_until": valid_until,
         "created_at": ts,
+        "op_area": op_area,
     }
 
     with get_session() as session:
