@@ -801,37 +801,35 @@ class LinearAddCommentTool(BaseTool):
 
 class SaveIssueTool(BaseTool):
     name = "save_issue"
-    description = "Save an issue to the system of record for future reference and indexing."
+    description = (
+        "Save an issue to the system of record for future reference and indexing. "
+        "Pass only the human-readable identifier (e.g. 'PEA-42'); the tool re-fetches "
+        "the full current issue state from Linear and stores it. Extraction quality is "
+        "decoupled from whatever (possibly truncated) payload upstream tools produced."
+    )
     input_schema = {
         "type": "object",
         "properties": {
-            "linear_id": {"type": "string", "description": "Linear's unique issue ID"},
-            "identifier": {"type": "string", "description": "Human-readable ID, e.g. 'PEA-42'"},
-            "title": {"type": "string", "description": "Issue title"},
-            "description": {"type": "string", "description": "Issue description"},
-            "status": {"type": "string", "description": "Issue status"},
-            "priority": {"type": "string", "description": "Issue priority"},
-            "assignee": {"type": "string", "description": "Assignee name"},
-            "project": {"type": "string", "description": "Project name"},
-            "labels": {"type": "array", "items": {"type": "string"}, "description": "Label names"},
-            "comments": {
-                "type": "array",
-                "items": {"type": "object"},
-                "description": "Issue comments",
+            "identifier": {
+                "type": "string",
+                "description": "Human-readable identifier, e.g. 'PEA-42'",
             },
-            "url": {"type": "string", "description": "Issue URL"},
         },
-        "required": ["linear_id", "title"],
+        "required": ["identifier"],
     }
 
     def __init__(self, connect: LinearConnect) -> None:
         self._connect = connect
 
     def execute(self, **kwargs: Any) -> str:
-        rid = self._connect.ingest_record(kwargs)
+        identifier = kwargs["identifier"]
+        issue = self._connect.get_issue(identifier)
+        if issue is None:
+            return f"Issue {identifier} not found."
+        rid = self._connect.ingest_record(issue)
         if rid is None:
-            return "Issue already stored (duplicate)."
-        return f"Issue saved as {rid}."
+            return f"Issue {identifier} already stored (duplicate)."
+        return f"Issue {identifier} saved as {rid}."
 
 
 # --- Module entry point ---
