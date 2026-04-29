@@ -91,9 +91,9 @@ def query(
     client = _get_client()
     vector = _embed(query_text)
 
-    results = client.search(
+    response = client.query_points(
         collection_name=COLLECTION_NAME,
-        query_vector=vector,
+        query=vector,
         limit=n_results,
     )
 
@@ -104,5 +104,5 @@ def query(
             "metadata": {k: v for k, v in hit.payload.items() if k not in ("record_id", "content")},
             "score": hit.score,
         }
-        for hit in results
+        for hit in response.points
     ]

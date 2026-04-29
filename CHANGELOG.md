@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28.9
+- Replace MCP tool surface with dynamic primitives. Drop 8 narrow tools (`find_entity`, `get_facts`, `get_current_state`, `get_open_blockers`, `get_open_commitments`, `get_recent_activity`, `get_conflicts`, `get_connections`); add 4 primitives in `pearscarf/mcp/mcp_server.py` — `get_schema` (vocabulary introspection of entity_types, edge_labels, fact_types, source_types, op_areas), `search` (semantic similarity over records, Qdrant + Postgres join, with record_type/source/since filters), `query_facts` (parameterized graph query — subject/target/edge_label/fact_type/op_area/source_type/since/until/include_stale), `query_records` (parameterized records query — type/source/expert/classification/since/until and metadata field matchers). Keep 2 bundles (`get_entity_context`, `get_relationship`). Agents call `get_schema` once, then compose specific queries against the actual vocabulary instead of using opaque canned tools.
+- Fix `pearscarf/storage/vectorstore.py:query` for the Qdrant client API change: `client.search(...)` (removed) → `client.query_points(...)`. Without this the new `search` MCP tool DOAs on first call.
+
 ## 1.28.8
 - Fix `get_communications_for_entity` to query the generic `records` table instead of the legacy `emails` table that no longer gets created (replaced by per-version typed dual-write tables — e.g. `gmailscarf_email_0_1_5`). The function now reads `type='email'` records and matches `metadata->>'sender'` / `metadata->>'recipients'`, decoupling from expert-versioned tables. `get_recent_activity` (MCP tool) no longer errors with `relation "emails" does not exist`.
 

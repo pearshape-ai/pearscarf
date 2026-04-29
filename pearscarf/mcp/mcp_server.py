@@ -1,15 +1,39 @@
-"""MCP server — exposes PearScarf context queries via FastMCP over HTTP/SSE."""
+"""MCP server — exposes PearScarf context queries via FastMCP over HTTP/SSE.
+
+Tool surface (6 tools, dynamic primitives + bundles):
+
+- get_schema: vocabulary introspection — entity_types, edge_labels, fact_types,
+  source_types, op_areas. Call once at task start to know the vocabulary.
+- search: semantic similarity search across records (Qdrant + records join),
+  with optional record_type / source / since filters.
+- query_facts: parameterized graph query — subject / target / edge_label /
+  fact_type / op_area / source_type / since / until / include_stale.
+- query_records: parameterized records query — type / source / expert /
+  classification / since / until / metadata field matchers.
+- get_entity_context: high-value bundle — facts + connections + recent records
+  for an entity. The "tell me everything about X" tool.
+- get_relationship: high-value bundle — direct facts + shortest path between
+  two entities.
+
+Earlier narrow tools (find_entity, get_facts, get_current_state,
+get_open_blockers, get_open_commitments, get_recent_activity, get_conflicts,
+get_connections) are expressible via the dynamic primitives plus schema
+knowledge — agents call get_schema once and then compose query_facts /
+query_records calls.
+"""
 
 from __future__ import annotations
 
+import re
 import threading
-from datetime import UTC
+from datetime import datetime
 
 from fastmcp import FastMCP
 
 from pearscarf.config import MCP_HOST, MCP_PORT
 from pearscarf.query import context_query
-from pearscarf.storage.db import init_db
+from pearscarf.storage import graph, vectorstore
+from pearscarf.storage.db import _get_conn, init_db
 
 mcp = FastMCP("PearScarf")
 
@@ -30,7 +54,7 @@ async def health(request):
 
 
 # ---------------------------------------------------------------------------
-# Entity resolution helper
+# Helpers
 # ---------------------------------------------------------------------------
 
 
@@ -42,154 +66,362 @@ def _resolve_entity(entity_name: str) -> tuple[dict | None, dict | None]:
     return matches[0], None
 
 
+_VALID_KEY = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _iso(dt: datetime | None) -> str:
+    """Safely ISO-format a datetime that may be None."""
+    return dt.isoformat() if dt is not None else ""
+
+
 # ---------------------------------------------------------------------------
-# Primitive tools
+# Tool 1 — get_schema
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool(
     description=(
-        "Resolve a name to a canonical entity in the PearScarf graph. "
-        "Use this first when you have a name and need to confirm PearScarf knows this entity, "
-        "or when a name could match multiple entities."
+        "Return this deployment's vocabulary — entity types, edge labels, "
+        "fact_types, source_types, and op_areas. Call this once at the start "
+        "of a task so you know what to filter on in query_facts and query_records. "
+        "The fact_types map is keyed by edge_label and lists the canonical "
+        "fact_types each edge accepts (deployment-vocab additions included)."
     )
 )
-def find_entity(name: str, entity_type: str | None = None) -> dict:
-    """Search for entities by name."""
-    results = context_query.find_entity(name, entity_type)
-    if not results:
-        return {"error": "not_found", "name": name}
-    return {"entities": results}
+def get_schema() -> dict:
+    """Vocabulary introspection."""
+    init_db()
+
+    entity_types = sorted(graph._LABELS.keys())
+    edge_labels = sorted(graph.FACT_CATEGORIES.keys())
+    fact_types = {label: sorted(types) for label, types in graph.FACT_CATEGORIES.items()}
+
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT type FROM records WHERE type IS NOT NULL ORDER BY type"
+        ).fetchall()
+        source_types = [dict(r)["type"] for r in rows]
+
+    return {
+        "entity_types": entity_types,
+        "edge_labels": edge_labels,
+        "fact_types": fact_types,
+        "source_types": source_types,
+        "op_areas": ["reality", "intention"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tool 2 — search
+# ---------------------------------------------------------------------------
 
 
 @mcp.tool(
     description=(
-        "Get facts about an entity. The workhorse query — returns all known facts, "
-        "optionally filtered by edge label (AFFILIATED/ASSERTED/TRANSITIONED), "
-        "fact type (employee, commitment, status_change, etc.), or time range. "
-        "Use for current state, commitments, blockers, affiliations."
+        "Semantic search over records (Qdrant embedding similarity + Postgres join). "
+        "Takes a natural-language query plus optional filters (record_type, source, since). "
+        "Returns top-N records with relevance scores and key metadata. "
+        "Use to find records about a topic when you don't know the exact entity names — "
+        "e.g. 'records about anchored extensibility' or 'past messaging on deployment vocab'."
     )
 )
-def get_facts(
-    entity_name: str,
+def search(
+    query: str,
+    record_type: str | None = None,
+    source: str | None = None,
+    since: str | None = None,
+    n: int = 10,
+) -> dict:
+    """Semantic search across records."""
+    init_db()
+
+    fetch_n = n * 4 if (record_type or source or since) else n
+    hits = vectorstore.query(query, n_results=fetch_n)
+    if not hits:
+        return {"query": query, "results": [], "count": 0}
+
+    record_ids = [h["id"] for h in hits if h.get("id")]
+    if not record_ids:
+        return {"query": query, "results": [], "count": 0}
+
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, type, source, classification, created_at, expert_name, metadata "
+            "FROM records WHERE id = ANY(%s)",
+            (record_ids,),
+        ).fetchall()
+    record_map = {dict(r)["id"]: dict(r) for r in rows}
+
+    results = []
+    for hit in hits:
+        rid = hit.get("id")
+        rec = record_map.get(rid)
+        if not rec:
+            continue
+
+        if record_type and rec.get("type") != record_type:
+            continue
+        if source and source.lower() not in (rec.get("source") or "").lower():
+            continue
+        if since and _iso(rec.get("created_at")) < since:
+            continue
+
+        results.append(
+            {
+                "record_id": rid,
+                "type": rec.get("type") or "",
+                "source": rec.get("source") or "",
+                "expert": rec.get("expert_name") or "",
+                "classification": rec.get("classification") or "",
+                "created_at": _iso(rec.get("created_at")),
+                "metadata": rec.get("metadata") or {},
+                "snippet": (hit.get("content") or "")[:300],
+                "score": hit.get("score") or 0.0,
+            }
+        )
+        if len(results) >= n:
+            break
+
+    return {"query": query, "results": results, "count": len(results)}
+
+
+# ---------------------------------------------------------------------------
+# Tool 3 — query_facts
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Parameterized graph query. Filter facts by subject (entity name), target "
+        "(entity name or the literal '(Day)'), edge_label, fact_type, op_area "
+        "('reality' or 'intention'), source_type, time range (since/until on source_at), "
+        "and stale flag. Use after get_schema to know the vocabulary. Returns matching "
+        "facts ordered by source_at descending. "
+        "Examples: open blockers on PearScarf → subject='PearScarf', edge_label='ASSERTED', "
+        "fact_type='blocker'. Recent shipping events → edge_label='TRANSITIONED', "
+        "fact_type='feature_shipped', since='2026-04-01T00:00:00Z'."
+    )
+)
+def query_facts(
+    subject: str | None = None,
+    target: str | None = None,
     edge_label: str | None = None,
     fact_type: str | None = None,
-    include_stale: bool = False,
+    op_area: str | None = None,
+    source_type: str | None = None,
     since: str | None = None,
-) -> dict:
-    """Get fact-edges for an entity with optional filters."""
-    entity, err = _resolve_entity(entity_name)
-    if err:
-        return err
-    assert entity is not None  # narrowed by the err check above
-    facts = context_query.get_facts(
-        entity["id"],
-        edge_label=edge_label,
-        fact_type=fact_type,
-        include_stale=include_stale,
-        since=since,
-    )
-    return {
-        "entity": {"id": entity["id"], "name": entity["name"], "type": entity["type"]},
-        "facts": facts,
-        "count": len(facts),
-    }
-
-
-@mcp.tool(
-    description=(
-        "Get entities directly connected to this entity via fact-edges. "
-        "Returns connected people, companies, projects — not Day nodes. "
-        "Use to understand who/what an entity is connected to."
-    )
-)
-def get_connections(
-    entity_name: str,
-    edge_label: str | None = None,
+    until: str | None = None,
     include_stale: bool = False,
+    limit: int = 50,
 ) -> dict:
-    """Get connected entities via 1-hop traversal."""
-    entity, err = _resolve_entity(entity_name)
-    if err:
-        return err
-    assert entity is not None  # narrowed by the err check above
-    edge_labels = [edge_label] if edge_label else None
-    result = context_query.get_connections(
-        entity["id"],
-        max_depth=1,
-        include_stale=include_stale,
-        edge_labels=edge_labels,
+    """Parameterized graph query. Returns facts matching all provided filters."""
+    init_db()
+
+    where_parts = ["r.fact IS NOT NULL"]
+    params: dict = {}
+
+    if subject:
+        where_parts.append("a.name = $subject_name")
+        params["subject_name"] = subject
+
+    if target:
+        if target == "(Day)":
+            where_parts.append("'Day' IN labels(b)")
+        else:
+            where_parts.append("(b.name = $target_name OR b.date = $target_name)")
+            params["target_name"] = target
+
+    if edge_label:
+        where_parts.append("type(r) = $edge_label")
+        params["edge_label"] = edge_label
+
+    if fact_type:
+        where_parts.append("r.fact_type = $fact_type")
+        params["fact_type"] = fact_type
+
+    if op_area:
+        where_parts.append("r.op_area = $op_area")
+        params["op_area"] = op_area
+
+    if source_type:
+        where_parts.append("r.source_type = $source_type")
+        params["source_type"] = source_type
+
+    if since:
+        where_parts.append("r.source_at >= $since")
+        params["since"] = since
+
+    if until:
+        where_parts.append("r.source_at <= $until")
+        params["until"] = until
+
+    if not include_stale:
+        where_parts.append("(r.stale IS NULL OR r.stale = false)")
+
+    where_clause = " AND ".join(where_parts)
+    params["limit"] = limit
+
+    cypher = (
+        f"MATCH (a)-[r]->(b) WHERE {where_clause} "
+        "RETURN elementId(r) AS rid, type(r) AS edge_label, "
+        "r.fact_type AS fact_type, r.fact AS fact, "
+        "r.confidence AS confidence, r.source_record AS source_record, "
+        "r.source_type AS source_type, r.source_at AS source_at, "
+        "r.op_area AS op_area, r.stale AS stale, r.valid_until AS valid_until, "
+        "elementId(a) AS subject_id, a.name AS subject_name, labels(a) AS subject_labels, "
+        "elementId(b) AS target_id, b.name AS target_name, b.date AS target_date, "
+        "labels(b) AS target_labels "
+        "ORDER BY r.source_at DESC LIMIT $limit"
     )
-    # Filter out Day nodes from connections
-    connections = [n for n in result.get("nodes", []) if n.get("type") != "day"]
-    return {
-        "entity": {"id": entity["id"], "name": entity["name"], "type": entity["type"]},
-        "connections": connections,
-        "edges": result.get("edges", []),
-        "count": len(connections),
+
+    with graph.get_session() as session:
+        rows = session.run(cypher, **params).data()
+
+    facts = []
+    for r in rows:
+        target_labels = r.get("target_labels") or []
+        if "Day" in target_labels:
+            target_display = r.get("target_date") or "?"
+        else:
+            target_display = r.get("target_name") or "?"
+        facts.append(
+            {
+                "id": r["rid"],
+                "edge_label": r.get("edge_label"),
+                "fact_type": r.get("fact_type") or "",
+                "fact": r.get("fact"),
+                "confidence": r.get("confidence") or "",
+                "op_area": r.get("op_area") or "",
+                "source_at": r.get("source_at") or "",
+                "source_record": r.get("source_record") or "",
+                "source_type": r.get("source_type") or "",
+                "stale": r.get("stale") or False,
+                "valid_until": r.get("valid_until"),
+                "subject": {"id": r.get("subject_id"), "name": r.get("subject_name")},
+                "target": {"id": r.get("target_id"), "name": target_display},
+            }
+        )
+
+    filters_applied = {
+        k: v
+        for k, v in {
+            "subject": subject,
+            "target": target,
+            "edge_label": edge_label,
+            "fact_type": fact_type,
+            "op_area": op_area,
+            "source_type": source_type,
+            "since": since,
+            "until": until,
+            "include_stale": include_stale or None,
+        }.items()
+        if v is not None
     }
-
-
-@mcp.tool(
-    description=(
-        "Find how two entities are connected in the PearScarf graph. "
-        "Returns direct facts between them and the shortest path if no direct connection exists. "
-        "Use before drafting a message or making a decision involving two parties."
-    )
-)
-def get_relationship(entity_a: str, entity_b: str) -> dict:
-    """Find the relationship between two entities."""
-    ent_a, err_a = _resolve_entity(entity_a)
-    if err_a:
-        return err_a
-    ent_b, err_b = _resolve_entity(entity_b)
-    if err_b:
-        return err_b
-    assert ent_a is not None and ent_b is not None  # narrowed by the err checks above
-
-    result = context_query.get_path(ent_a["id"], ent_b["id"])
-    return {
-        "entity_a": {"id": ent_a["id"], "name": ent_a["name"], "type": ent_a["type"]},
-        "entity_b": {"id": ent_b["id"], "name": ent_b["name"], "type": ent_b["type"]},
-        "direct_facts": result.get("direct_facts", []),
-        "path": result.get("path", []),
-    }
-
-
-@mcp.tool(
-    description=(
-        "Find AFFILIATED facts where the graph holds two current conflicting values for the same slot. "
-        "These are cases where Curation detected equal source_at timestamps and could not resolve automatically. "
-        "Use when reviewing graph health or validating entity affiliations."
-    )
-)
-def get_conflicts(entity_name: str | None = None) -> dict:
-    """Find conflicting AFFILIATED facts."""
-    entity_id = None
-    if entity_name:
-        entity, err = _resolve_entity(entity_name)
-        if err:
-            return err
-        assert entity is not None  # narrowed by the err check above
-        entity_id = entity["id"]
-
-    conflicts = context_query.get_conflicts(entity_id=entity_id)
-    return {
-        "conflicts": conflicts,
-        "count": len(conflicts),
-    }
+    return {"facts": facts, "count": len(facts), "filters_applied": filters_applied}
 
 
 # ---------------------------------------------------------------------------
-# Convenience tools
+# Tool 4 — query_records
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool(
     description=(
-        "Get a full picture of an entity — all current facts and direct connections. "
-        "Use this before acting on behalf of or about a person, company, or project. "
-        "Returns facts in chronological order by default, or grouped by edge label with format='clustered'."
+        "Parameterized records query against Postgres. Filter by record type, source, "
+        "expert, classification, time range (created_at), and metadata field matchers "
+        "(metadata is a dict — each {key: value} adds a `metadata->>'key' = 'value'` "
+        "match). Returns record summaries with snippets. Use to find raw source records "
+        "(Linear issues, emails, spreadsheet rows) by structured criteria — e.g. all "
+        "Linear issues marked Done since last Tuesday, or all email records from a "
+        "specific sender."
+    )
+)
+def query_records(
+    type: str | None = None,
+    source: str | None = None,
+    expert: str | None = None,
+    classification: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    metadata: dict | None = None,
+    limit: int = 50,
+) -> dict:
+    """Parameterized records query."""
+    init_db()
+    where_parts: list[str] = []
+    params: list = []
+
+    if type:
+        where_parts.append("type = %s")
+        params.append(type)
+    if source:
+        where_parts.append("source ILIKE %s")
+        params.append(f"%{source}%")
+    if expert:
+        where_parts.append("expert_name = %s")
+        params.append(expert)
+    if classification:
+        where_parts.append("classification = %s")
+        params.append(classification)
+    if since:
+        where_parts.append("created_at >= %s")
+        params.append(since)
+    if until:
+        where_parts.append("created_at <= %s")
+        params.append(until)
+    if metadata:
+        for k, v in metadata.items():
+            if not _VALID_KEY.match(k):
+                continue
+            where_parts.append("metadata->>%s = %s")
+            params.append(k)
+            params.append(str(v))
+
+    where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+    params.append(limit)
+
+    sql = (
+        "SELECT id, type, source, classification, created_at, expert_name, "
+        "expert_version, metadata, LEFT(content, 300) AS snippet "
+        f"FROM records{where_clause} "
+        "ORDER BY created_at DESC LIMIT %s"
+    )
+
+    with _get_conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    records = []
+    for r in rows:
+        d = dict(r)
+        records.append(
+            {
+                "record_id": d["id"],
+                "type": d.get("type") or "",
+                "source": d.get("source") or "",
+                "classification": d.get("classification") or "",
+                "expert": d.get("expert_name") or "",
+                "expert_version": d.get("expert_version") or "",
+                "created_at": _iso(d.get("created_at")),
+                "metadata": d.get("metadata") or {},
+                "snippet": d.get("snippet") or "",
+            }
+        )
+
+    return {"records": records, "count": len(records)}
+
+
+# ---------------------------------------------------------------------------
+# Tool 5 — get_entity_context
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "High-value bundle: given an entity name, return its facts + direct connections "
+        "+ recent source records that produced those facts. The 'tell me everything "
+        "about X' tool. Use when starting work on an entity and want a single shot of "
+        "context. Format 'chronological' returns facts sorted by source_at; "
+        "'clustered' groups them by edge_label."
     )
 )
 def get_entity_context(
@@ -197,20 +429,41 @@ def get_entity_context(
     format: str = "chronological",
     include_stale: bool = False,
 ) -> dict:
-    """Full entity context: facts + connections."""
+    """Full entity context: facts + connections + recent records."""
     if format not in ("chronological", "clustered"):
         return {"error": "invalid_format", "valid_values": ["chronological", "clustered"]}
 
     entity, err = _resolve_entity(entity_name)
     if err:
         return err
-    assert entity is not None  # narrowed by the err check above
+    assert entity is not None
 
     facts = context_query.get_facts(entity["id"], include_stale=include_stale)
     conns_result = context_query.get_connections(
         entity["id"], max_depth=1, include_stale=include_stale
     )
     connections = [n for n in conns_result.get("nodes", []) if n.get("type") != "day"]
+
+    record_ids = list({f.get("source_record") for f in facts if f.get("source_record")})
+    related_records: list[dict] = []
+    if record_ids:
+        with _get_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, type, source, created_at, LEFT(content, 200) AS snippet "
+                "FROM records WHERE id = ANY(%s) ORDER BY created_at DESC LIMIT 20",
+                (record_ids,),
+            ).fetchall()
+        for r in rows:
+            d = dict(r)
+            related_records.append(
+                {
+                    "record_id": d["id"],
+                    "type": d.get("type") or "",
+                    "source": d.get("source") or "",
+                    "created_at": _iso(d.get("created_at")),
+                    "snippet": d.get("snippet") or "",
+                }
+            )
 
     entity_info = {
         "id": entity["id"],
@@ -225,233 +478,58 @@ def get_entity_context(
             "entity": entity_info,
             "facts": facts,
             "connections": connections,
-            "count": len(facts),
-        }
-    else:
-        # Clustered by edge_label
-        clustered: dict[str, list] = {}
-        for f in facts:
-            label = f.get("edge_label", "OTHER")
-            clustered.setdefault(label, []).append(f)
-        return {
-            "entity": entity_info,
-            "facts": clustered,
-            "connections": connections,
+            "related_records": related_records,
             "count": len(facts),
         }
 
-
-@mcp.tool(
-    description=(
-        "Get what is structurally true about an entity right now — "
-        "current role, employer, project memberships. "
-        "Returns AFFILIATED facts only. "
-        "Use when you need to know who someone works for or what projects they belong to."
-    )
-)
-def get_current_state(entity_name: str) -> dict:
-    """Current affiliations only."""
-    entity, err = _resolve_entity(entity_name)
-    if err:
-        return err
-    assert entity is not None  # narrowed by the err check above
-
-    affiliations = context_query.get_facts(
-        entity["id"], edge_label="AFFILIATED", include_stale=False
-    )
+    clustered: dict[str, list] = {}
+    for f in facts:
+        label = f.get("edge_label", "OTHER")
+        clustered.setdefault(label, []).append(f)
     return {
-        "entity": {"id": entity["id"], "name": entity["name"], "type": entity["type"]},
-        "affiliations": affiliations,
-        "count": len(affiliations),
+        "entity": entity_info,
+        "facts": clustered,
+        "connections": connections,
+        "related_records": related_records,
+        "count": len(facts),
     }
 
 
-@mcp.tool(
-    description=(
-        "Get pending commitments — what has been promised, by whom, and by when. "
-        "Only returns commitments with an explicit deadline (valid_until). "
-        "Use for morning briefings, deadline tracking, and accountability queries."
-    )
-)
-def get_open_commitments(
-    entity_name: str | None = None,
-    before_date: str | None = None,
-    format: str = "chronological",
-) -> dict:
-    """Open commitments with deadlines."""
-    if format not in ("chronological", "clustered"):
-        return {"error": "invalid_format", "valid_values": ["chronological", "clustered"]}
-
-    entity_id = None
-    entity_info = None
-    if entity_name:
-        entity, err = _resolve_entity(entity_name)
-        if err:
-            return err
-        assert entity is not None  # narrowed by the err check above
-        entity_id = entity["id"]
-        entity_info = {"id": entity["id"], "name": entity["name"], "type": entity["type"]}
-
-    if entity_id:
-        commitments = context_query.get_facts(
-            entity_id, edge_label="ASSERTED", fact_type="commitment", include_stale=False
-        )
-    else:
-        # Global — need all entities' commitments. Use graph query directly.
-        from pearscarf.storage import graph
-
-        # Get all current ASSERTED/commitment edges
-        all_facts = []
-        # Fall back to searching all entities
-        entities = graph.search_entities("", limit=100)
-        seen_edges: set[str] = set()
-        for ent in entities:
-            facts = context_query.get_facts(
-                ent["id"], edge_label="ASSERTED", fact_type="commitment", include_stale=False
-            )
-            for f in facts:
-                eid = f.get("id", "")
-                if eid not in seen_edges:
-                    seen_edges.add(eid)
-                    all_facts.append(f)
-        commitments = all_facts
-
-    # Filter to only those with valid_until
-    commitments = [c for c in commitments if c.get("valid_until")]
-
-    # Filter by before_date
-    if before_date:
-        commitments = [c for c in commitments if (c.get("valid_until") or "") <= before_date]
-
-    commitments.sort(key=lambda c: c.get("valid_until", ""))
-
-    result: dict = {"commitments": commitments, "count": len(commitments)}
-    if entity_info:
-        result["entity"] = entity_info
-    return result
+# ---------------------------------------------------------------------------
+# Tool 6 — get_relationship
+# ---------------------------------------------------------------------------
 
 
 @mcp.tool(
     description=(
-        "Get what is currently blocked. "
-        "Returns ASSERTED[blocker] facts that have no subsequent TRANSITIONED[resolution]. "
-        "Use when preparing a status update or surfacing impediments."
+        "High-value bundle: given two entity names, return how they connect — direct "
+        "facts between them, plus the shortest path through the graph if no direct "
+        "connection exists. Use before drafting a message or making a decision involving "
+        "two parties."
     )
 )
-def get_open_blockers(entity_name: str | None = None) -> dict:
-    """Current blockers without resolution."""
-    entity_id = None
-    entity_info = None
-    if entity_name:
-        entity, err = _resolve_entity(entity_name)
-        if err:
-            return err
-        assert entity is not None  # narrowed by the err check above
-        entity_id = entity["id"]
-        entity_info = {"id": entity["id"], "name": entity["name"], "type": entity["type"]}
+def get_relationship(entity_a: str, entity_b: str) -> dict:
+    """Find how two entities connect."""
+    ent_a, err_a = _resolve_entity(entity_a)
+    if err_a:
+        return err_a
+    ent_b, err_b = _resolve_entity(entity_b)
+    if err_b:
+        return err_b
+    assert ent_a is not None and ent_b is not None
 
-    if entity_id:
-        blockers = context_query.get_facts(
-            entity_id, edge_label="ASSERTED", fact_type="blocker", include_stale=False
-        )
-
-        # Filter out blockers that have a subsequent resolution
-        resolutions = context_query.get_facts(
-            entity_id, edge_label="TRANSITIONED", fact_type="resolution", include_stale=False
-        )
-        resolution_times = {r.get("source_at", "") for r in resolutions}
-        # Exclude blockers where a resolution exists with source_at > blocker's source_at
-        open_blockers = []
-        for b in blockers:
-            b_time = b.get("source_at", "")
-            has_resolution = any(rt > b_time for rt in resolution_times if rt)
-            if not has_resolution:
-                open_blockers.append(b)
-        blockers = open_blockers
-    else:
-        blockers = []
-
-    result: dict = {"blockers": blockers, "count": len(blockers)}
-    if entity_info:
-        result["entity"] = entity_info
-    return result
-
-
-@mcp.tool(
-    description=(
-        "Get what happened around an entity recently — transitions, references, and communications. "
-        "Combines graph facts (state changes, mentions) with email metadata (who communicated with whom). "
-        "Use when catching up on a deal, project, or person after time away."
-    )
-)
-def get_recent_activity(
-    entity_name: str,
-    since: str | None = None,
-    format: str = "chronological",
-) -> dict:
-    """Recent activity: transitions + references + communications."""
-    if format not in ("chronological", "clustered"):
-        return {"error": "invalid_format", "valid_values": ["chronological", "clustered"]}
-
-    entity, err = _resolve_entity(entity_name)
-    if err:
-        return err
-    assert entity is not None  # narrowed by the err check above
-
-    # Default since: 7 days ago
-    if not since:
-        from datetime import datetime, timedelta
-
-        since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
-
-    entity_id = entity["id"]
-
-    # Three sources
-    transitions = context_query.get_facts(entity_id, edge_label="TRANSITIONED", since=since)
-    references = context_query.get_facts(
-        entity_id, edge_label="ASSERTED", fact_type="reference", since=since
-    )
-    communications = context_query.get_communications(entity_id, since=since)
-
-    # Build unified activity list
-    activity: list[dict] = []
-
-    for f in transitions + references:
-        activity.append(
-            {
-                "type": "fact",
-                "edge_label": f.get("edge_label", ""),
-                "fact_type": f.get("fact_type", ""),
-                "fact": f.get("fact", ""),
-                "source_at": f.get("source_at", ""),
-                "source_record": f.get("source_record", ""),
-            }
-        )
-
-    for c in communications:
-        activity.append(
-            {
-                "type": "communication",
-                "sender": c.get("sender", ""),
-                "recipient": c.get("recipient", ""),
-                "subject": c.get("subject", ""),
-                "received_at": str(c.get("received_at", "")),
-                "record_id": c.get("record_id", ""),
-            }
-        )
-
-    # Sort by timestamp descending
-    def _sort_key(item: dict) -> str:
-        return item.get("source_at") or item.get("received_at") or ""
-
-    activity.sort(key=_sort_key, reverse=True)
-
+    result = context_query.get_path(ent_a["id"], ent_b["id"])
     return {
-        "entity": {"id": entity["id"], "name": entity["name"], "type": entity["type"]},
-        "activity": activity,
-        "count": len(activity),
-        "since": since,
+        "entity_a": {"id": ent_a["id"], "name": ent_a["name"], "type": ent_a["type"]},
+        "entity_b": {"id": ent_b["id"], "name": ent_b["name"], "type": ent_b["type"]},
+        "direct_facts": result.get("direct_facts", []),
+        "path": result.get("path", []),
     }
+
+
+# ---------------------------------------------------------------------------
+# Server runner
+# ---------------------------------------------------------------------------
 
 
 class MCPServer:
