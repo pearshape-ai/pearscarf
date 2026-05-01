@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.28.11
+- Refresh README front-matter messaging. New tagline ("Shared operational brain for teams of AI coworkers") replaces the prior "self-improving context engine for teams of agents" framing. New lead emphasises a knowledge graph of the work your team has actually done, sourced from the systems where the work lives, rather than from chat history. New §1 "Your operation isn't in the chat" makes the chat-vs-records distinction explicit. New §2 closing line describes PearScarf as a multi-agent, self-evolving system with conversational and MCP interfaces. No code or behaviour changes.
+
 ## 1.28.10
 - Fix `save_issue` (linearscarf 0.1.8) to re-fetch the issue from Linear by identifier instead of relying on the payload the agent passes. `LinearGetIssueTool` truncates the issue description to 1000 chars for display; agents that read an issue then save it were passing the truncated text through, which dropped the `## For agents` YAML block on issues whose bodies exceed the cap (e.g. PEA-147 lost the YAML and fell back to Path 2 prose extraction, ending up with a generic "Shipped in pearscarf 1.28.0" fact instead of the title-anchored declared one). `SaveIssueTool`'s schema now takes only `identifier`; `execute` calls `connect.get_issue(identifier)` to fetch the full current state and feeds that to `ingest_record`. The save path becomes structurally equivalent to the polling ingester — extraction quality no longer depends on the agent's context fidelity.
 

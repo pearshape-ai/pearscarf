@@ -5,7 +5,7 @@
 <h1 align="center">PearScarf</h1>
 
 <p align="center">
-  Self-improving context engine for teams of agents.
+  Shared operational brain for teams of AI coworkers.
 </p>
 
 <p align="center">
@@ -14,23 +14,23 @@
 
 ---
 
-PearScarf is a self-improving, reality-aligned context engine for teams of agents, built on a bi-temporal knowledge graph.
+PearScarf is the shared operational brain for your AI coworkers — a knowledge graph of the work your team has actually done, sourced from the systems where the work lives, not from what someone said about it in a thread. Every coworker reads from the same view; none of them rebuild context on every run.
 
-It watches your data sources — Gmail, Linear, GitHub, and more — extracts what matters, and makes it queryable by any agent in your system. One structured call. Sourced, dated, current context. No raw record processing on every run.
+It separates **observed reality** (what shipped, what's true now) from **stated intention** (commitments, plans, goals) — so coworkers don't confuse a promise with a delivery.
 
-## Why current approaches fall short
+## Your operation isn't in the chat
 
-Teams of agents deal with heterogeneous data — emails, issues, PRs, calendar, CRM — all connected in your head but siloed for your agents. Vector storage-based RAG loses those connections and when things happened. Stuffing raw records into context grows with every new source, and still leaves every agent rebuilding the same connections on every run.
+Most agent-memory tools learn from conversations — a noisy log of one assistant's exchanges with one user. Your operation lives elsewhere: in Linear issues, Gmail threads, GitHub PRs, calendar events, CRM updates, Spreadsheets. PearScarf reads from those systems directly and keeps the connections between them in a graph. Vector retrieval over raw records loses those connections; hand-maintained markdown systems go stale.
 
-## One call. Everything your agent needs to know.
+## One call. Everything your coworker needs to know.
 
-PearScarf sits between your data sources and your agents. It observes records as they arrive, extracts structured facts with full provenance, and maintains those facts over time — nothing silently overwritten, history always preserved. When an agent needs context, it asks PearScarf. One call returns everything known about an entity: current state, recent activity, open commitments, blockers.
+PearScarf watches your operational systems — Linear, Gmail, GitHub — and extracts structured facts with full provenance. Nothing silently overwritten, history always preserved. When a coworker needs context, it asks PearScarf. One call returns everything known about an entity: current state, recent activity, open commitments, blockers — sourced and dated.
 
-PearScarf is itself an agent — built and run as one. Its captures and maintaines the state of the world so your other agents don't have to.
+PearScarf is itself multi-agent, self-evolving system with conversational, mcp interfaces. It captures and maintains the state of your operation so your other coworkers don't have to.
 
 > **For MCP-compatible frameworks**
 >
-> Connect once via MCP. Every agent in your system gets access to the same shared, up-to-date context — without writing any retrieval logic.
+> Connect once via MCP. Every coworker in your fleet reads from the same shared brain.
 
 ## Expert plugin architecture
 
