@@ -82,7 +82,7 @@ def start_system(
 
         # Start expert bot if tools + agent.md exist
         connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
-        if connect is not None:
+        if connect is not None and expert.knowledge_dir is not None:
             prompt_path = expert.knowledge_dir / "agent.md"
             if prompt_path.is_file():
                 prompt = prompt_path.read_text()

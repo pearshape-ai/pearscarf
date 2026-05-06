@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.4
+- Manifests declare every expert path explicitly (`knowledge`, `extraction`, `ingester`, `tools`); the registry no longer hardcodes folder or file conventions.
+
 ## 1.29.3
 - Publish the records format spec as MCP resource `pearscarf://format/record`. Clients can fetch the spec live before submitting a record.
 

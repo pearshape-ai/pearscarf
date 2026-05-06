@@ -1,5 +1,5 @@
 name: linearscarf
-version: 0.1.8
+version: 0.1.9
 source_type: linear
 author: pearshape-ai
 description: Linear expert for PearScarf — polls issues and changes via the Linear GraphQL API
@@ -20,6 +20,8 @@ new_entity_types: []
 
 identifier_patterns: []
 
+knowledge: knowledge
+extraction: knowledge/extraction.md
 tools: linear_connect.py
 ingester: linear_ingest.py
 eval: eval/

@@ -31,7 +31,6 @@ from datetime import datetime
 from fastmcp import FastMCP
 
 from pearscarf.config import MCP_HOST, MCP_PORT
-from pearscarf.knowledge import KNOWLEDGE_DIR
 from pearscarf.query import context_query
 from pearscarf.storage import graph, vectorstore
 from pearscarf.storage.db import _get_conn, init_db
@@ -545,8 +544,13 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
     mime_type="text/markdown",
 )
 def records_format_spec() -> str:
-    """Serve the records format spec from `pearscarf/knowledge/records/format.md`."""
-    return (KNOWLEDGE_DIR / "records" / "format.md").read_text()
+    """Serve the records format spec from the records expert's knowledge dir."""
+    from pearscarf.registry import get_registry
+
+    expert = get_registry().get_by_name("records")
+    if expert is None or expert.knowledge_dir is None:
+        raise FileNotFoundError("records expert not registered")
+    return (expert.knowledge_dir / "format.md").read_text()
 
 
 # ---------------------------------------------------------------------------
