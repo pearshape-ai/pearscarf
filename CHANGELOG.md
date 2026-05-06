@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.3
+- Publish the records format spec as MCP resource `pearscarf://format/record`. Clients can fetch the spec live before submitting a record.
+
 ## 1.29.2
 - Add the records-format spec at `pearscarf/knowledge/records/format.md` — describes the body shape clients use to submit records and the author discipline for writing facts.
 
