@@ -1,8 +1,17 @@
 """Expert registry — discovers installed experts and exposes runtime lookups.
 
-The registry scans the experts/ directory at the repo root, parses each
-manifest.yaml it finds, and builds in-memory indexes. It then serves the
-runtime needs of the indexer:
+The registry has three discovery paths, run in order on startup:
+
+1. **Internal experts** — packages bundled with pearscarf itself
+   (e.g. `pearscarf.records`). Always registered, no DB row, no install
+   pipeline. The list lives in `_INTERNAL_EXPERTS` below.
+2. **DB-registered experts** — operator-installed experts whose rows
+   live in the `experts` table. Resolved by `importlib` from the package
+   name in each row.
+3. **Filesystem experts** — fallback when the DB has no rows; scans
+   `<repo>/experts/` for subdirectories with `manifest.yaml`.
+
+The registry then serves the runtime needs of the indexer:
 
 * `get(source_type)` / `get_by_record_type(record_type)` — find the expert
   responsible for a given source or record type
@@ -12,10 +21,8 @@ runtime needs of the indexer:
 * `agent_factory(expert_name)` — placeholder for the LLM agent factory,
   wired up in a follow-up
 
-This is path-based today: experts live as local subdirectories of
-`<repo>/experts/`. There's no database yet — discovery happens on first
-use of `get_registry()` and the result is held in a module-level
-singleton for the lifetime of the process.
+Discovery happens on first use of `get_registry()` and the result is
+held in a module-level singleton for the lifetime of the process.
 """
 
 from __future__ import annotations
@@ -28,6 +35,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+# Internal experts bundled with pearscarf itself. These are always
+# registered on startup, regardless of DB state. They have no row in
+# the `experts` table and don't go through the install pipeline.
+_INTERNAL_EXPERTS: tuple[str, ...] = ("pearscarf.records",)
 
 
 @dataclass
@@ -80,12 +92,46 @@ class Registry:
     # --- Discovery ---
 
     def _load(self) -> None:
-        """Load experts. Prefer DB registrations, fall back to filesystem scan."""
+        """Load experts. Internal first; then DB rows, falling back to filesystem."""
+        self._load_internal()
         rows = self._db_rows()
         if rows:
             self._load_from_db(rows)
             return
         self._load_from_filesystem()
+
+    def _load_internal(self) -> None:
+        """Register internal experts bundled with pearscarf core.
+
+        These have no `experts` row and don't go through `psc install`.
+        Manifest lives at `<package>/manifest.yaml`; package is resolved
+        via importlib so editable / installed pearscarf both work.
+        """
+        import importlib.util
+
+        for package_name in _INTERNAL_EXPERTS:
+            try:
+                spec = importlib.util.find_spec(package_name)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[registry] internal {package_name}: find_spec failed: {exc}")
+                continue
+            if not spec or not spec.submodule_search_locations:
+                print(f"[registry] internal {package_name}: package not found")
+                continue
+
+            package_dir = Path(next(iter(spec.submodule_search_locations)))
+            manifest_path = package_dir / "manifest.yaml"
+            if not manifest_path.is_file():
+                print(f"[registry] internal {package_name}: manifest missing at {manifest_path}")
+                continue
+
+            try:
+                expert = self._parse_manifest(package_dir, manifest_path)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[registry] internal {package_name}: failed to parse manifest: {exc}")
+                continue
+
+            self._register(expert)
 
     def _db_rows(self) -> list[dict]:
         """Return enabled expert rows from the DB. Empty list on any failure.
