@@ -562,6 +562,56 @@ def submit_record(body: str, url: str, op_area: str = "reality") -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Tool 8 — get_record_status
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Look up the lifecycle stage of a previously-submitted record. Returns "
+        "one of: `received` (pearscarf has the body, processing not started), "
+        "`evaluating` (pearscarf is deciding whether to extract), `extracting` "
+        "(extractor is running), `indexed` (facts are in the graph and queryable), "
+        "`rejected` (pearscarf chose not to extract), `needs_review` (pearscarf "
+        "couldn't decide and queued the record for human review). Pair with "
+        "`submit_record` to confirm a submission has reached `indexed`. Returns "
+        "`{error: 'not_found'}` if no record exists with that id."
+    )
+)
+def get_record_status(record_id: str) -> dict:
+    """Return the user-facing stage of a record."""
+    from pearscarf.storage import store
+
+    record = store.get_record(record_id)
+    if record is None:
+        return {"error": "not_found", "record_id": record_id}
+
+    classification = record.get("classification")
+    indexed = bool(record.get("indexed"))
+
+    if indexed:
+        stage = "indexed"
+    elif classification == store.NOISE:
+        stage = "rejected"
+    elif classification == store.UNCERTAIN:
+        stage = "needs_review"
+    elif classification == store.RELEVANT:
+        stage = "extracting"
+    elif classification == store.TRIAGING:
+        stage = "evaluating"
+    else:
+        stage = "received"
+
+    return {
+        "record_id": record_id,
+        "stage": stage,
+        "classification": classification,
+        "indexed": indexed,
+        "created_at": _iso(record.get("created_at")),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Resource — records format spec
 # ---------------------------------------------------------------------------
 
