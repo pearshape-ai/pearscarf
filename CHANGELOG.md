@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.6
+- Add the `get_record_status` MCP tool. Returns a user-facing stage (`received` / `evaluating` / `extracting` / `indexed` / `rejected` / `needs_review`) so submitters can poll until their record is queryable.
+
 ## 1.29.5
 - Add the `submit_record` MCP tool. Submissions go through the standard pipeline (save → triage → extraction); the records expert's `extraction.md` handles body structure on the extractor side.
 
