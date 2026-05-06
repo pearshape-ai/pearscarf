@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.5
+- Add the `submit_record` MCP tool. Submissions go through the standard pipeline (save → triage → extraction); the records expert's `extraction.md` handles body structure on the extractor side.
+
 ## 1.29.4
 - Manifests declare every expert path explicitly (`knowledge`, `extraction`, `ingester`, `tools`); the registry no longer hardcodes folder or file conventions.
 
