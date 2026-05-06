@@ -31,6 +31,7 @@ from datetime import datetime
 from fastmcp import FastMCP
 
 from pearscarf.config import MCP_HOST, MCP_PORT
+from pearscarf.knowledge import KNOWLEDGE_DIR
 from pearscarf.query import context_query
 from pearscarf.storage import graph, vectorstore
 from pearscarf.storage.db import _get_conn, init_db
@@ -525,6 +526,27 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
         "direct_facts": result.get("direct_facts", []),
         "path": result.get("path", []),
     }
+
+
+# ---------------------------------------------------------------------------
+# Resource — records format spec
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource(
+    uri="pearscarf://format/record",
+    name="records format spec",
+    description=(
+        "PearScarf records format spec — describes the body shape clients use to "
+        "submit records via the records expert (Title / Id / Date / anchor / "
+        "## For humans / ## For agents) and the author discipline. Fetch this "
+        "before submitting a record if you don't already have the format in context."
+    ),
+    mime_type="text/markdown",
+)
+def records_format_spec() -> str:
+    """Serve the records format spec from `pearscarf/knowledge/records/format.md`."""
+    return (KNOWLEDGE_DIR / "records" / "format.md").read_text()
 
 
 # ---------------------------------------------------------------------------
