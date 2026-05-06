@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.1
+- Register the `records` expert at startup via a new internal-experts discovery path in `pearscarf/registry.py`. Runs unconditionally before the existing DB-driven and filesystem-scan paths; resolves the bundled `pearscarf.records` package via importlib, parses its manifest, and registers it without a row in the `experts` table. `psc expert list` now shows `records` alongside operator-installed experts.
+
 ## 1.29.0
 - Scaffold the `records` expert package at `pearscarf/records/`. Manifest declares name and description; knowledge dir reserved at `pearscarf/knowledge/records/`. The expert is the default MCP record-submission surface (always-installed, hard-coded registered, no DB row); runtime registration is wired in the next patch. Minor bump marks the start of the records-ingestion cycle.
 
