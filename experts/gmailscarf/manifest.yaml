@@ -1,5 +1,5 @@
 name: gmailscarf
-version: 0.1.5
+version: 0.1.6
 source_type: gmail
 author: pearshape-ai
 description: Gmail expert for PearScarf — polls and writes back via the Gmail API
@@ -14,6 +14,8 @@ schemas:
 
 dedup_key: message_id
 
+knowledge: knowledge
+extraction: knowledge/extraction.md
 tools: gmail_connect.py
 ingester: gmail_ingest.py
 

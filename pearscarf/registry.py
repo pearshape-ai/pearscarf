@@ -51,7 +51,7 @@ class Expert:
     source_type: str
     description: str
     path: Path
-    knowledge_dir: Path
+    knowledge_dir: Path | None
     extraction_path: Path | None
     ingester_path: Path | None
     ingester_module: str
@@ -203,23 +203,14 @@ class Registry:
         if not name or not source_type:
             raise ValueError("manifest missing required field: name or source_type")
 
-        knowledge_dir = package_dir / "knowledge"
-        extraction_md = knowledge_dir / "extraction.md"
-        # Resolve the ingester entry point — a module with a start(ctx) function.
-        entry_rel = data.get("ingester")
-        ingester_path: Path | None = None
-        ingester_module = ""
-        if entry_rel:
-            ingester_path = package_dir / entry_rel
-            entry_no_ext = Path(entry_rel).with_suffix("")
-            ingester_module = f"{name}." + entry_no_ext.as_posix().replace("/", ".")
+        # All paths come from the manifest. No conventions. Each path is
+        # relative to the package dir; absent means the expert doesn't have it.
+        knowledge_dir = self._resolve_path(package_dir, data.get("knowledge"))
+        extraction_path = self._resolve_path(package_dir, data.get("extraction"), must_exist=True)
+        ingester_path = self._resolve_path(package_dir, data.get("ingester"))
 
-        # Resolve the tools entry point (optional)
-        tools_rel = data.get("tools")
-        tools_module = ""
-        if tools_rel:
-            tools_no_ext = Path(tools_rel).with_suffix("")
-            tools_module = f"{name}." + tools_no_ext.as_posix().replace("/", ".")
+        ingester_module = self._module_for(name, data.get("ingester"))
+        tools_module = self._module_for(name, data.get("tools"))
 
         return Expert(
             name=str(name),
@@ -228,7 +219,7 @@ class Registry:
             description=str(data.get("description", "")),
             path=package_dir,
             knowledge_dir=knowledge_dir,
-            extraction_path=extraction_md if extraction_md.is_file() else None,
+            extraction_path=extraction_path,
             ingester_path=ingester_path,
             ingester_module=ingester_module,
             tools_module=tools_module,
@@ -236,6 +227,31 @@ class Registry:
             record_types=[str(rt) for rt in (data.get("record_types") or [])],
             relevancy_check=str(data.get("relevancy_check") or ""),
         )
+
+    @staticmethod
+    def _resolve_path(
+        package_dir: Path, rel: str | None, *, must_exist: bool = False
+    ) -> Path | None:
+        """Resolve a manifest-declared relative path against the package dir.
+
+        When `must_exist` is True, returns None if the resolved path doesn't
+        point at a file on disk — used for entries (e.g. `extraction`) that
+        downstream consumers treat as "present iff non-None."
+        """
+        if not rel:
+            return None
+        resolved = (package_dir / rel).resolve()
+        if must_exist and not resolved.is_file():
+            return None
+        return resolved
+
+    @staticmethod
+    def _module_for(name: str, rel: str | None) -> str:
+        """Compute the dotted Python module path for a manifest entry-point file."""
+        if not rel:
+            return ""
+        no_ext = Path(rel).with_suffix("")
+        return f"{name}." + no_ext.as_posix().replace("/", ".")
 
     def _register(self, expert: Expert) -> None:
         self._by_source[expert.source_type] = expert
@@ -320,6 +336,8 @@ class Registry:
                 parts.append(entity_file.read_text())
 
             for expert in self.all():
+                if expert.knowledge_dir is None:
+                    continue
                 for entry in expert.new_entity_types:
                     type_name = entry.get("name") if isinstance(entry, dict) else None
                     if not type_name:

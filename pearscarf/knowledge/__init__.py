@@ -98,7 +98,7 @@ def load_relevancy_guidance(expert_name: str) -> str | None:
     from pearscarf.registry import get_registry
 
     expert = get_registry().get_by_name(expert_name)
-    if expert is None:
+    if expert is None or expert.knowledge_dir is None:
         return None
     path = expert.knowledge_dir / "relevancy.md"
     return path.read_text() if path.is_file() else None
