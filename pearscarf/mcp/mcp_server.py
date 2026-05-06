@@ -528,6 +528,40 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Tool 7 — submit_record
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Submit a record into PearScarf. The record body follows the format "
+        "described at the `pearscarf://format/record` resource — a markdown "
+        "shape with `Title:` / `Id:` / `Date:` / scope-anchor / `## For humans` "
+        "(brief prose) / `## For agents` (a YAML list of plain-language facts "
+        "under `facts:`). Provide a non-empty `url` pointing to where the "
+        "record is persisted (becomes `source_url` on every fact extracted) "
+        "and an `op_area` of `reality` (default — observed/shipped) or "
+        "`intention` (planned/committed). Returns `{record_id, status: "
+        '"queued"}`; the record flows through the existing triage and '
+        "extraction pipeline. Fetch the format resource first if you don't "
+        "already have the format in context."
+    )
+)
+def submit_record(body: str, url: str, op_area: str = "reality") -> dict:
+    """Submit a record into PearScarf via the records expert."""
+    from pearscarf.records import RecordSubmissionError, ingest_record
+
+    try:
+        record_id = ingest_record(body, url, op_area)
+    except RecordSubmissionError as exc:
+        return {"error": "INVALID_RECORD", "message": str(exc)}
+
+    if record_id is None:
+        return {"status": "duplicate", "message": "id already exists"}
+    return {"record_id": record_id, "status": "queued"}
+
+
+# ---------------------------------------------------------------------------
 # Resource — records format spec
 # ---------------------------------------------------------------------------
 

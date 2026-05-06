@@ -1,12 +1,13 @@
 name: records
-version: 0.1.1
+version: 0.1.2
 source_type: mcp
 author: pearshape-ai
 description: Default record-capture expert. Records arrive via MCP submission; pearscarf labels, entity-resolves, and writes the graph. No ingester — submissions are push-based, not polled.
 
 relevancy_check: skip
 
-record_types: []
+record_types:
+  - record
 schemas: {}
 
 new_entity_types: []
@@ -14,6 +15,7 @@ identifier_patterns: []
 
 # Internal expert: prompts live under pearscarf/knowledge/, not co-located with the package.
 knowledge: ../knowledge/records
+extraction: ../knowledge/records/extraction.md
 
-# dedup_key, tools, eval, extraction — wired in later iterations.
+# dedup_key, tools, eval — wired in later iterations.
 # No `ingester` field — records is push-based via MCP, not polled.
