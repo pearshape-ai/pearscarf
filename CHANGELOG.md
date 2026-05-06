@@ -1,10 +1,13 @@
 # Changelog
 
+## 1.29.2
+- Add the records-format spec at `pearscarf/knowledge/records/format.md` — describes the body shape clients use to submit records and the author discipline for writing facts.
+
 ## 1.29.1
-- Register the `records` expert at startup via a new internal-experts discovery path in `pearscarf/registry.py`. Runs unconditionally before the existing DB-driven and filesystem-scan paths; resolves the bundled `pearscarf.records` package via importlib, parses its manifest, and registers it without a row in the `experts` table. `psc expert list` now shows `records` alongside operator-installed experts.
+- Register the `records` internal expert at startup; `psc expert list` includes it alongside operator-installed experts.
 
 ## 1.29.0
-- Scaffold the `records` expert package at `pearscarf/records/`. Manifest declares name and description; knowledge dir reserved at `pearscarf/knowledge/records/`. The expert is the default MCP record-submission surface (always-installed, hard-coded registered, no DB row); runtime registration is wired in the next patch. Minor bump marks the start of the records-ingestion cycle.
+- Add the `records` internal expert package — the default MCP record-submission surface bundled with pearscarf.
 
 ## 1.28.11
 - Refresh README front-matter messaging. New tagline ("Shared operational brain for teams of AI coworkers") replaces the prior "self-improving context engine for teams of agents" framing. New lead emphasises a knowledge graph of the work your team has actually done, sourced from the systems where the work lives, rather than from chat history. New §1 "Your operation isn't in the chat" makes the chat-vs-records distinction explicit. New §2 closing line describes PearScarf as a multi-agent, self-evolving system with conversational and MCP interfaces. No code or behaviour changes.
