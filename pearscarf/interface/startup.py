@@ -80,6 +80,23 @@ def start_system(
             except Exception as exc:
                 log_fn(f"{expert.name} tools failed: {exc}")
 
+        # Internal expert (push-driven, no polling, no agent): instantiate
+        # the handler with the same expert_ctx and register it on the
+        # registry under each record_type so callers (e.g. MCP) can
+        # retrieve it via get_connect — same dict the tools branch uses.
+        # `internal_package` returns None for external experts; presence
+        # of a package path is what makes an expert internal.
+        package_name = registry.internal_package(expert.name)
+        if package_name:
+            try:
+                module = importlib.import_module(package_name)
+                handler = module.get_handler(expert_ctx)
+                for rt in expert.record_types:
+                    registry.register_connect(rt, handler)
+                log_fn(f"{expert.name} handler initialized.")
+            except Exception as exc:
+                log_fn(f"{expert.name} init failed: {exc}")
+
         # Start expert bot if tools + agent.md exist
         connect = registry.get_connect(expert.record_types[0]) if expert.record_types else None
         if connect is not None and expert.knowledge_dir is not None:

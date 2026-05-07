@@ -549,10 +549,21 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
 )
 def submit_record(body: str, url: str, op_area: str = "reality") -> dict:
     """Submit a record into PearScarf via the records expert."""
-    from pearscarf.records import RecordSubmissionError, ingest_record
+    from pearscarf.records import RecordSubmissionError
+    from pearscarf.registry import get_registry
 
+    handler = get_registry().get_connect("record")
+    if handler is None:
+        return {
+            "error": "SERVER_NOT_STARTED",
+            "message": (
+                "MCP server is running in read-only mode — the records "
+                "expert is not initialized. Submitting records requires "
+                "the full pearscarf system (e.g. `psc dev` / `psc run`)."
+            ),
+        }
     try:
-        record_id = ingest_record(body, url, op_area)
+        record_id = handler.ingest(body, url, op_area)
     except RecordSubmissionError as exc:
         return {"error": "INVALID_RECORD", "message": str(exc)}
 
