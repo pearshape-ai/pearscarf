@@ -85,6 +85,11 @@ class Registry:
         self._by_name: dict[str, Expert] = {}
         self._by_record_type: dict[str, Expert] = {}
         self._connects: dict[str, Any] = {}
+        # Python module path for each internal expert, resolved during
+        # `_load_internal`. Used by startup to importlib-load the package
+        # and call its `get_handler(ctx)` factory. Presence in this map
+        # means the expert is internal; absence means it's external.
+        self._internal_packages: dict[str, str] = {}
         self._core_cache: dict[str, str] | None = None
         self._schema_cache: str | None = None
         self._load()
@@ -132,6 +137,7 @@ class Registry:
                 continue
 
             self._register(expert)
+            self._internal_packages[expert.name] = package_name
 
     def _db_rows(self) -> list[dict]:
         """Return enabled expert rows from the DB. Empty list on any failure.
@@ -300,6 +306,16 @@ class Registry:
     def get_connect(self, record_type: str) -> Any | None:
         """Look up the cached connect instance for a record_type."""
         return self._connects.get(record_type)
+
+    def internal_package(self, expert_name: str) -> str | None:
+        """Python module path if `expert_name` is an internal expert, else None.
+
+        Resolved during `_load_internal` from `_INTERNAL_EXPERTS`. Startup
+        uses this to import the package and call its `get_handler(ctx)`
+        factory; absence means the expert is external (its lifecycle is
+        the polling-Consumer / agent-bot path, not push-driven init).
+        """
+        return self._internal_packages.get(expert_name)
 
     # --- Prompt assembly ---
 

@@ -372,7 +372,12 @@ def mcp(ctx):
 
 @mcp.command("start")
 def mcp_start():
-    """Run MCP server standalone in the foreground."""
+    """Run MCP server standalone in the foreground.
+
+    Read-only mode: no expert contexts are built. Write tools (e.g.
+    `submit_record`) error with "server not started" because the records
+    expert handler is only initialized by `start_system()`.
+    """
     from pearscarf.mcp.mcp_server import MCPServer
 
     MCPServer().run_foreground()
