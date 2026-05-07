@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.8
+- `psc mcp start` initializes the records expert before launching the FastMCP server, mirroring the per-expert init pattern (each process hosting an expert builds its own `ExpertContext`); `submit_record` now works against a standalone MCP container, not just the monolith.
+
 ## 1.29.7
 - Records expert is initialized at startup via `start_system`: `build_context` builds its `ExpertContext`, the package's `get_handler(ctx)` factory returns a `RecordsExpert` instance, and the registry caches it under record_type `record` (same dict the tools branch uses). MCP `submit_record` retrieves the instance via `registry.get_connect`; standalone `psc mcp start` runs read-only and returns `SERVER_NOT_STARTED` for write tools. The registry exposes `internal_package(expert_name)` — populated during `_load_internal` from the existing `_INTERNAL_EXPERTS` list — so `start_system` can identify and import internal experts without polluting the manifest-derived `Expert` dataclass.
 

@@ -555,11 +555,11 @@ def submit_record(body: str, url: str, op_area: str = "reality") -> dict:
     handler = get_registry().get_connect("record")
     if handler is None:
         return {
-            "error": "SERVER_NOT_STARTED",
+            "error": "RECORDS_NOT_INITIALIZED",
             "message": (
-                "MCP server is running in read-only mode — the records "
-                "expert is not initialized. Submitting records requires "
-                "the full pearscarf system (e.g. `psc dev` / `psc run`)."
+                "Records expert is not registered in this MCP process. "
+                "Records init normally runs at MCP startup; if you see this "
+                "error, check the MCP container logs for an init failure."
             ),
         }
     try:

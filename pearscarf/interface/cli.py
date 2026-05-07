@@ -374,11 +374,31 @@ def mcp(ctx):
 def mcp_start():
     """Run MCP server standalone in the foreground.
 
-    Read-only mode: no expert contexts are built. Write tools (e.g.
-    `submit_record`) error with "server not started" because the records
-    expert handler is only initialized by `start_system()`.
+    Initializes the records expert in this process before launching MCP —
+    records is the expert MCP serves writes for, so its `ExpertContext`
+    lives here, mirroring how each per-expert container (linearscarf,
+    gmailscarf, …) builds its own context for its expert before launching
+    its ingester.
     """
+    import importlib
+
+    from pearscarf.expert_context import build_context
     from pearscarf.mcp.mcp_server import MCPServer
+    from pearscarf.registry import get_registry
+
+    registry = get_registry()
+    expert = registry.get_by_name("records")
+    package_name = registry.internal_package("records") if expert else None
+    if expert and package_name:
+        try:
+            ctx = build_context(expert.name, bus=None, expert_version=expert.version)
+            module = importlib.import_module(package_name)
+            handler = module.get_handler(ctx)
+            for rt in expert.record_types:
+                registry.register_connect(rt, handler)
+            click.echo(f"{expert.name} handler initialized.")
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"{expert.name} init failed: {exc}", err=True)
 
     MCPServer().run_foreground()
 
