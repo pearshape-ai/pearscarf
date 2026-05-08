@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.11
+- Add a "What a record is for" section to the records format spec (`pearscarf/knowledge/records/format.md`, served as MCP resource `pearscarf://format/record`). Frames the graph as shared operational reality and codifies three non-negotiable rules for every fact in every record — one dimension per record, work-only facts, and consumer-perspective framing ("state what is now true; not how it was made true") with the consumer-facing handle (CLI flag, MCP tool, resource URI, env var, config-file shape, contract clause) included by name. Includes a side-by-side example and edge-shape framing guidance (state-change wording biases `TRANSITIONED` with the changed entity as subject; decision/usage wording biases `ASSERTED` with the actor as subject) so authors can self-check before each fact lands.
+
 ## 1.29.10
 - Add `--debug` flag to `psc extraction start`. Dumps per-record agent prompts, conversation, and result JSON to `data/debug/<record_id>/` so operators can inspect what the extractor saw and produced.
 

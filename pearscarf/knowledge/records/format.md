@@ -4,6 +4,39 @@
 
 This spec describes the body shape of a record submitted to PearScarf via the MCP `submit_record` tool. Authors (humans or agents) write records following this shape; PearScarf parses each record, labels its facts, entity-resolves the subjects, and writes them to the graph. Authors capture *what reality is*; PearScarf decides *how the graph represents it*.
 
+## What a record is for
+
+PearScarf's graph is **shared operational reality** — every agent across the operation reads it, not just the producer or the producer's peers. A record is the surface where each operator's domain-bound work becomes shared truth. The author lives in their domain (code, design, customer interactions, deploy infrastructure, brand voice, contracts) and naturally first-drafts from there; the discipline is to lift one level above the domain before each fact lands in `## For agents`.
+
+**Three non-negotiable rules** apply to every fact in every record. They are not optional and not opinion — every author writing to this graph (human or agent) follows them on every fact, every time:
+
+1. **One dimension per record.** A record touches a single domain. When two domains are involved — even causally linked ones (e.g. a product change *and* the deploy of that change) — write two records, one per domain.
+
+2. **Work-only facts.** Every fact must be true *as a result of the work this record captures.* Standing policies, default profiles, background state, or generally-true claims belong in separate ingest records. Test: would the fact have been true an hour before the record's `Date`? If yes, it does not belong here.
+
+3. **State what is now true; not how it was made true.** The work is the producer's domain artifact — a code path, a deployed config, a contract clause, a brand-voice decision. The fact is the *operational delta* in shared reality — what is now possible, what someone in another role can rely on, what is removed as a manual step. The implementation is not the change; it is the proof of the change in the producer's medium. Test: could an agent outside the producing domain act on this fact? If only the author's peers can, the framing is too internal — strip the file paths, code identifiers, prompt-section names, ticket IDs, internal jargon, and ask whether a substantive operational claim remains.
+
+   **Include the consumer-facing handle the consumer uses to act on the delta** — a CLI flag (`--debug`), an MCP tool (`submit_record`), a resource URI (`pearscarf://format/record`), an env var (`DEPLOYMENT_VOCAB_PATH`), a config-file shape (`vocab.yaml`), a contract section reference. The handle is *part of* the delta, not the mechanism behind it. Strip-test each specific term in the fact: would the consumer ever type, call, fetch, or reference this thing? Keep what passes; strip what doesn't.
+
+A fact that violates any of these three rules is not ready for the graph. Fix the fact before submitting — the curator deduplicates, but does not catch framing problems. **There is no exception for "small" records, "obvious" facts, or "I'll fix it later" — the discipline applies on every fact, every time.**
+
+Two takes on the same engineering change:
+
+❌ Domain-private:
+> *PearScarf 1.29.9 surfaces `deployment_vocab` entity types in the regular extraction prompt; the vocab was previously only injected for seed-mode prompts.*
+
+✅ Shared reality:
+> *PearScarf 1.29.9 lets operators add their own entity types to extraction by declaring them in a `vocab.yaml` file (pointed to by the `DEPLOYMENT_VOCAB_PATH` env var) — records mentioning operator-declared types are now resolved by name across all extraction, not just on seeds.*
+
+The second is the operational delta — readable by any agent in the graph, actionable for release copy, decision-support, downstream tooling. The first describes how the producer made the delta happen, useful only to other engineers.
+
+**Pick framing for the edge shape you want.** The same change can be written two ways and land as different graph edges:
+
+- *State-change* framing (`X became Y`, `X is now Y`, `X transitioned to Y`) biases the extractor toward `TRANSITIONED` with the changed entity as the subject and the affected party as the target.
+- *Decision/usage* framing (`Actor decided X`, `Actor uses Y`, `Actor adopted Y`) biases toward `ASSERTED` with the actor as the subject and the object of the action as the target.
+
+Both can land as two-entity edges. Pick the framing whose subject-target direction is the one you'd want to read on the resulting fact — the LLM follows the framing more reliably than it second-guesses it.
+
 ## Body shape
 
 Every record's content is markdown with this exact top-to-bottom structure (the file or surface holding the content — `.md` file, Linear issue body, blog post, notion page — is the author's choice):
