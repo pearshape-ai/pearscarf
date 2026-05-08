@@ -1,4 +1,4 @@
-__version__ = "1.29.8"
+__version__ = "1.29.9"
 
 # Make installed expert packages importable from the experts/ folder.
 # Temporary — replaced by the registry-driven discovery in a follow-up.

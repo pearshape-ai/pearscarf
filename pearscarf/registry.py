@@ -362,6 +362,17 @@ class Registry:
                     if md_path.is_file():
                         parts.append(md_path.read_text())
 
+            # Deployment-vocab entity types — declared per-deployment in
+            # vocab.yaml (loaded via DEPLOYMENT_VOCAB_PATH). Rendered with
+            # the same `**name**\n<description>` shape as core / expert
+            # entity files. Empty vocab (no DEPLOYMENT_VOCAB_PATH) is a
+            # no-op — backward-compatible with deployments that don't set it.
+            from pearscarf.deployment_vocab import get_vocab
+
+            for vt in get_vocab().entity_types:
+                desc = (vt.description or "").strip()
+                parts.append(f"**{vt.name}**\n{desc}\n" if desc else f"**{vt.name}**\n")
+
             # Normalization follows entity types
             parts.append(self._core_parts()["normalization"])
 

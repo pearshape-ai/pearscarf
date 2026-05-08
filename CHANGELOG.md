@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.9
+- Surface `deployment_vocab` entity types in the regular extraction prompt — previously the vocab was only injected for seed-mode prompts, so operator-declared types never reached `resolve_entity`. Step 1 of the extractor agent is now generic, referring to the "Entity Types" section instead of enumerating canonical types — so deployment- or expert-declared types are recognized without prompt edits.
+
 ## 1.29.8
 - `psc mcp start` initializes the records expert before launching the FastMCP server, mirroring the per-expert init pattern (each process hosting an expert builds its own `ExpertContext`); `submit_record` now works against a standalone MCP container, not just the monolith.
 
