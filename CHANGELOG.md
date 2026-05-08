@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.10
+- Add `--debug` flag to `psc extraction start`. Dumps per-record agent prompts, conversation, and result JSON to `data/debug/<record_id>/` so operators can inspect what the extractor saw and produced.
+
 ## 1.29.9
 - Surface `deployment_vocab` entity types in the regular extraction prompt — previously the vocab was only injected for seed-mode prompts, so operator-declared types never reached `resolve_entity`. Step 1 of the extractor agent is now generic, referring to the "Entity Types" section instead of enumerating canonical types — so deployment- or expert-declared types are recognized without prompt edits.
 

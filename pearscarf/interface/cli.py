@@ -591,12 +591,18 @@ def extraction(ctx) -> None:
 
 
 @extraction.command("start")
-def extraction_start() -> None:
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    help="Write per-record agent dumps (system prompt, conversation, result) to data/debug/.",
+)
+def extraction_start(debug: bool) -> None:
     """Start the extraction consumer in the foreground."""
     from pearscarf.extraction import Extraction
 
     click.echo("Extraction starting...")
-    Extraction().run_foreground()
+    Extraction(debug_dir="data/debug" if debug else None).run_foreground()
 
 
 @cli.group(invoke_without_command=True)
