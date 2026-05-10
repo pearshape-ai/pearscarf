@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.30.1
+- Wire pytest into CI. New `.github/workflows/test.yml` runs `uv run pytest tests/unit/` on every PR and push to `main`, alongside the existing lint workflow. Test failures now block merges.
+
 ## 1.30.0
 - Add `pytest` as a dev dependency and seed the test harness at `tests/unit/`. First test file (`test_deployment_vocab.py`) covers the YAML → `DeploymentVocab` transformation in `pearscarf/deployment_vocab.py:get_vocab()` — eight tests across env-var unset, entity_types only, fact_types only, both populated, optional descriptions, multiple edge-label keys, and missing-file error. Opens the 1.30.x line for the test/quality buildout.
 
