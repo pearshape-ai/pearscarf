@@ -120,6 +120,7 @@ psc dev --poll                 # Local-dev monolith: Discord frontend + all serv
 ## Docs
 
 - [Getting Started](docs/getting-started.md) — installation, credentials, first run
+- [Examples & Usage](docs/examples-usage.md) — three patterns: agents pushing records, polling external systems, adding your own source
 - [Architecture](docs/architecture.md) — system design, expert contract, startup flow, prompt composition
 - [Building an Expert](docs/expert_guide.md) — step-by-step guide to creating a new expert
 - [Deployment Vocabulary](docs/deployment-vocab.md) — declare deployment-specific entity types and fact_types via `vocab.yaml`

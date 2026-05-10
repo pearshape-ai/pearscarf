@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29.13
+- Add `docs/examples-usage.md` — three-pattern guide to using PearScarf: agents pushing records via the bundled `submit_record` MCP tool, polling external systems via the built-in source experts (linearscarf / gmailscarf / githubscarf), and adding a new source expert. Includes a worked example per pattern and an `op_area` (reality vs intention) explanation. Cross-linked from README.
+
 ## 1.29.12
 - Add `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, full text in-repo) with reports routed to GitHub issues. Standard OSS hygiene signal — community standards and enforcement guidelines now codified in the repo.
 
