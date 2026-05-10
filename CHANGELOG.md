@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.30.2
+- Add unit tests for the rest of the non-DB-touching transformation surface — five files covering `tools.py` (`BaseTool.to_api_schema`, `ToolRegistry`), `agents/llm_client.py` (`resolve_provider`, `_normalize_anthropic_stop`, `_normalize_openai_stop`), `knowledge/__init__.py` (`load`, `load_onboarding_block`, `onboarding_summary` with override and default paths), `records/__init__.py` (`RecordsExpert.ingest` validation paths with mocked storage), and `registry.py` (`schema_fragment` and `_render_deployment_section_seed` with patched `_db_rows` for DB isolation). 47 new tests total; full suite (55 tests) runs in ~0.3s.
+
 ## 1.30.1
 - Wire pytest into CI. New `.github/workflows/test.yml` runs `uv run pytest tests/unit/` on every PR and push to `main`, alongside the existing lint workflow. Test failures now block merges.
 
