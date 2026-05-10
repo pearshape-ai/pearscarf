@@ -16,4 +16,4 @@ jobs:
           python-version: "3.12"
       - run: uv sync --group dev
       - name: pytest
-        run: uv run pytest tests/unit/ -v --cov=pearscarf --cov-report=term-missing
+        run: uv run pytest tests/unit/ -v --cov=pearscarf --cov-report=term-missing --cov-fail-under=40

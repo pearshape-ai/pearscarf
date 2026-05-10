@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.31.0
+- Unit-test buildout — coverage 7% → 45%, with a CI-enforced floor of 40% (`--cov-fail-under=40`). 237 new tests across data-transformation layers (storage/store, storage/graph, storage/db, storage/vectorstore, storage/neo4j_client), graph access/query tools, consumer code paths (extraction, triage, session_consumer), LLM client invoke methods, MCP server handlers, CLI commands (`mcp`, `triage`, `extraction`, `assistant`, `erase-all`, `memory`), eval scoring helpers, and small utilities (log, status, tracing, tracked_call, query/context_query, expert_context, experts/ingest, expert_bot). Tests mirror source layout under `tests/unit/` and share boundary mocks (`mock_postgres_cursor`, `mock_neo4j_session`, `mock_qdrant_client`, `mock_anthropic_client`, `mock_openai_client`) from `tests/unit/conftest.py`. Existing tests (records, knowledge, llm_client) reorganized into the new layout.
+
 ## 1.30.4
 - Add a "Submission discipline" section to the records format spec (`pearscarf/knowledge/records/format.md`, served as MCP resource `pearscarf://format/record`). Codifies three non-negotiable rules every author follows on every submission — sync from the shared store before drafting, persist the record to the store immediately after writing, submit to PearScarf only after persistence completes. Written in store-agnostic terms (git repo, wiki, document store, artifact bucket all valid); the operator's choice of store and its organization belongs in the operator's own crew/onboarding documentation, not in this public spec. The `url` field documentation drops a lingering operator-specific reference, replaced with store-agnostic phrasing — "any resolvable URL (a github file, a wiki page, a blog post)".
 
