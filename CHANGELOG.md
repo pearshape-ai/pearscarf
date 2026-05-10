@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.30.0
+- Add `pytest` as a dev dependency and seed the test harness at `tests/unit/`. First test file (`test_deployment_vocab.py`) covers the YAML → `DeploymentVocab` transformation in `pearscarf/deployment_vocab.py:get_vocab()` — eight tests across env-var unset, entity_types only, fact_types only, both populated, optional descriptions, multiple edge-label keys, and missing-file error. Opens the 1.30.x line for the test/quality buildout.
+
 ## 1.29.13
 - Add `docs/examples-usage.md` — three-pattern guide to using PearScarf: agents pushing records via the bundled `submit_record` MCP tool, polling external systems via the built-in source experts (linearscarf / gmailscarf / githubscarf), and adding a new source expert. Includes a worked example per pattern and an `op_area` (reality vs intention) explanation. Cross-linked from README.
 
