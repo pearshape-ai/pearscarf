@@ -102,10 +102,26 @@ facts:
 
 Submit alongside the body via the MCP `submit_record` tool:
 
-- **`url`** — required, non-empty. A URL pointing to where the record is persisted (your `sor` repo, a blog post URL, etc.). Becomes `source_url` on every fact extracted from this record. PearScarf does **not** fetch the URL; non-emptiness is the only check.
+- **`url`** — required, non-empty. A URL that resolves back to where the record is persisted in your shared store (a github file, a wiki page, a blog post — any resolvable URL). Becomes `source_url` on every fact extracted from this record. PearScarf does **not** fetch the URL; non-emptiness is the only check.
 - **`op_area`** — `"reality"` (default) or `"intention"`. Marks whether the record describes something that has shipped / been observed (`reality`) or is planned / committed (`intention`). PearScarf threads this onto every fact extracted from the record.
 
 *Note: when the scopes mechanism lands, `op_area` will become one dimension within multi-valued scopes (e.g. `["comms", "internal", "reality"]`). The format spec evolves at that point; for now, `op_area` is the only categorisation axis.*
+
+## Submission discipline
+
+Records exist in two places: as a persistent artifact in your operation's **shared system of record**, and as facts in the PearScarf graph. Submission is the bridge between them, and the moves around submission matter as much as the body content.
+
+A *shared system of record* is the durable store all your authors (humans and agents) read from and write to. PearScarf does not prescribe what it is — a git repo, a wiki, a document store, an artifact bucket — only that it exists, that the whole fleet can access it, and that every `url` submitted to PearScarf resolves there. The discipline below applies regardless of which store you've chosen; how you implement each step is your operation's choice.
+
+**Three non-negotiable rules apply on every submission, every time:**
+
+1. **Sync from the shared store before drafting.** Refresh your local view (`git pull`, re-read, re-list, whatever your store demands) before authoring a new record. Other authors may have published in parallel; starting from a stale view leaves your record orphaned, in conflict with concurrent work, or unaware of context you needed.
+
+2. **Persist the record to the shared store *immediately* after writing it.** The moment the record content is final, push it to the store — commit, save, upload, whatever the store requires. Don't move on to other work; don't batch with adjacent edits; don't leave for "end-of-session." Records that exist only in a single contributor's local state are invisible to the fleet, prone to loss, and create coordination drag when other authors publish in parallel.
+
+3. **Submit to PearScarf only after persistence is complete.** The `submit_record` MCP call carries the record's `url` — the resolvable path that points back to where the record lives in your shared store. The URL must resolve before submission so the fact's provenance link is valid the moment it lands in the graph.
+
+No exceptions for "small" records, "draft" records, or "I'll commit it at end-of-session." Every record, every author, every time. The crew or operator manual is the right place to capture *which* shared store your fleet uses and how it's organized; this spec captures only the discipline that applies regardless.
 
 ## What PearScarf does on receipt
 

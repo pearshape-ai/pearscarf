@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.30.4
+- Add a "Submission discipline" section to the records format spec (`pearscarf/knowledge/records/format.md`, served as MCP resource `pearscarf://format/record`). Codifies three non-negotiable rules every author follows on every submission — sync from the shared store before drafting, persist the record to the store immediately after writing, submit to PearScarf only after persistence completes. Written in store-agnostic terms (git repo, wiki, document store, artifact bucket all valid); the operator's choice of store and its organization belongs in the operator's own crew/onboarding documentation, not in this public spec. The `url` field documentation drops a lingering operator-specific reference, replaced with store-agnostic phrasing — "any resolvable URL (a github file, a wiki page, a blog post)".
+
 ## 1.30.3
 - Add `pytest-cov` as a dev dependency. CI test job now reports coverage per file with `--cov=pearscarf --cov-report=term-missing`, surfacing untested modules and uncovered lines on every PR. No threshold enforcement yet — coverage is informational while the test suite grows.
 
