@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.31.1
+- Fix `pearscarf/log.py:_ensure_dir` to create parent directories. The mkdir call lacked `parents=True`, so on a fresh checkout (or any environment where `data/` didn't already exist) the first log write raised `FileNotFoundError`. Surfaced as 7 test failures in CI on the 1.31.0 commit; passes locally because dev environments always had `data/` pre-existing. Coverage stays at 45% (43% in CI's stricter run).
+
 ## 1.31.0
 - Unit-test buildout — coverage 7% → 45%, with a CI-enforced floor of 40% (`--cov-fail-under=40`). 237 new tests across data-transformation layers (storage/store, storage/graph, storage/db, storage/vectorstore, storage/neo4j_client), graph access/query tools, consumer code paths (extraction, triage, session_consumer), LLM client invoke methods, MCP server handlers, CLI commands (`mcp`, `triage`, `extraction`, `assistant`, `erase-all`, `memory`), eval scoring helpers, and small utilities (log, status, tracing, tracked_call, query/context_query, expert_context, experts/ingest, expert_bot). Tests mirror source layout under `tests/unit/` and share boundary mocks (`mock_postgres_cursor`, `mock_neo4j_session`, `mock_qdrant_client`, `mock_anthropic_client`, `mock_openai_client`) from `tests/unit/conftest.py`. Existing tests (records, knowledge, llm_client) reorganized into the new layout.
 

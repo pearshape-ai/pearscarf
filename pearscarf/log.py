@@ -13,7 +13,7 @@ _initialized = False
 def _ensure_dir() -> None:
     global _initialized
     if not _initialized:
-        _LOGS_DIR.mkdir(exist_ok=True)
+        _LOGS_DIR.mkdir(parents=True, exist_ok=True)
         _initialized = True
 
 
