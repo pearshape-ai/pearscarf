@@ -28,6 +28,7 @@ _KNOWLEDGE_MAP: dict[str, tuple[str, str | None]] = {
     "seed_guidance": ("ingest/seed_guidance.md", None),
     "triage_agent": ("triage/agent.md", None),
     "triage_op_area_inference": ("triage/op_area_inference.md", None),
+    "curator_judge": ("curator/judge.md", None),
     "onboarding": ("onboarding.md", "ONBOARDING_PROMPT_PATH"),
 }
 

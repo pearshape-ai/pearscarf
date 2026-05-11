@@ -1105,6 +1105,77 @@ def set_edge_confidence(edge_id: str, confidence: str) -> None:
         )
 
 
+def get_supersession_siblings(edge_id: str, exclude_record_id: str | None = None) -> list[dict]:
+    """Get non-stale sibling edges that might be superseded by `edge_id`.
+
+    Siblings: every non-stale edge from the same `from_id` (subject) as the
+    given edge, excluding the edge itself. `edge_label`, `to_id`, and
+    `fact_type` are deliberately not filtered — the LLM judge decides whether
+    each sibling describes the same underlying claim as the trigger. That
+    catches:
+
+    - Day-different supersession (old commitment to Day(2026-05-04) vs new
+      commitment to Day(2026-05-05) for the same subject).
+    - Fact-type aliasing (e.g. `commitment` vs `promise` vs `decision` on the
+      same relationship).
+    - Cross-edge-label supersession (e.g. an `AFFILIATED/vendor` claim being
+      contradicted by a `TRANSITIONED/status_change` that ends the
+      relationship; or an `ASSERTED/commitment` being moot after a
+      `TRANSITIONED/completion` already occurred).
+
+    When `exclude_record_id` is provided, also excludes edges that share that
+    record_id in their `source_record_ids`. Curation passes the current
+    record_id here so a record's own newly-written edges are never candidate
+    supersedors of each other — the author wrote them together as one atomic
+    submission, intending the set to coexist.
+
+    Ordered by `source_at` descending (newest source event first). Used by
+    Curation's supersession scan to find candidate stale targets.
+    """
+    with get_session() as session:
+        result = session.run(
+            "MATCH (a)-[r]->() WHERE elementId(r) = $eid "
+            "WITH a "
+            "MATCH (a)-[s]->(c) "
+            "WHERE (s.stale IS NULL OR s.stale = false) "
+            "AND elementId(s) <> $eid "
+            "AND ($exclude_record_id IS NULL "
+            "  OR NOT $exclude_record_id IN coalesce(s.source_record_ids, [])) "
+            "RETURN elementId(s) AS edge_id, type(s) AS edge_label, "
+            "s.fact_type AS fact_type, s.fact AS fact, "
+            "s.confidence AS confidence, s.source_at AS source_at, "
+            "s.recorded_at AS recorded_at, s.created_at AS created_at, "
+            "s.source_record AS source_record, "
+            "s.valid_until AS valid_until, "
+            "elementId(a) AS from_id, a.name AS from_name, "
+            "elementId(c) AS to_id, c.name AS to_name, "
+            "labels(c) AS to_labels "
+            "ORDER BY s.source_at DESC",
+            eid=edge_id,
+            exclude_record_id=exclude_record_id,
+        )
+        return [
+            {
+                "edge_id": r["edge_id"],
+                "edge_label": r["edge_label"],
+                "fact_type": r["fact_type"] or "",
+                "fact": r["fact"] or "",
+                "confidence": r["confidence"] or "",
+                "source_at": r["source_at"] or "",
+                "recorded_at": r["recorded_at"] or "",
+                "created_at": r["created_at"] or "",
+                "source_record": r["source_record"] or "",
+                "valid_until": r["valid_until"] or "",
+                "from_id": r["from_id"],
+                "from_name": r["from_name"] or "",
+                "to_id": r["to_id"],
+                "to_name": r["to_name"] or "",
+                "to_labels": r["to_labels"] or [],
+            }
+            for r in result
+        ]
+
+
 # --- Path and conflict queries ---
 
 
