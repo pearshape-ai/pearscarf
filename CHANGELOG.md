@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.32.0
+- Curator now does LLM-judged supersession. After extraction enqueues a record, the curator scans each edge that record wrote, finds non-stale siblings from the same subject (any `edge_label`, any `fact_type`, any target — the LLM judge decides whether each sibling describes the same underlying claim), and asks the judge to label each (trigger, sibling) pair as `trigger_supersedes_sibling`, `sibling_supersedes_trigger`, or `coexist`. Superseded edges are marked `stale=true` with `replaced_by` pointing to the survivor. The judge is symmetric — it also catches backfilled historical facts where the trigger itself should be staled by an existing sibling. A record's own edges are excluded from each other's sibling pools — the author wrote them as one atomic submission, so they coexist by construction. Judge calls are tracked via `tracked_call` (one row per call in `llm_calls`) and wrapped in `trace_span`/`trace_child` for LangSmith observability. 18 unit tests in `tests/unit/test_curation.py` cover both directions, the source-record exclusion, and prompt formatting.
+
 ## 1.31.1
 - Fix `pearscarf/log.py:_ensure_dir` to create parent directories. The mkdir call lacked `parents=True`, so on a fresh checkout (or any environment where `data/` didn't already exist) the first log write raised `FileNotFoundError`. Surfaced as 7 test failures in CI on the 1.31.0 commit; passes locally because dev environments always had `data/` pre-existing. Coverage stays at 45% (43% in CI's stricter run).
 
