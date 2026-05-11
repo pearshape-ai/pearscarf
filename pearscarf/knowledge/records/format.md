@@ -93,6 +93,7 @@ facts:
 ### Author discipline
 
 - **One fact = one graph fact.** Each sentence states *one* event, decision, observation, or affiliation. Don't fragment a single concept across multiple sentences; don't merge two unrelated assertions into one sentence.
+- **Distinct facts within a record.** Two facts in the same record must not share both subject and underlying claim. If they do — e.g. *"X decided to create the AI coworkers category"* and *"X chose 'AI coworkers' as the headline term"* — they are either one fact (merge — pack the nuance into a single contextual sentence) or you need to make their claims structurally distinct (different subjects, different aspects, different anchored targets). The curator treats a record's facts as an atomic coherent set and won't adjudicate between them; downstream readers will struggle with overlapping claims regardless.
 - **Subject-first prose.** Start each fact with the subject entity by name (`PearScarf`, `Linda`, `Acme Corp`). The first concrete entity in the sentence is the most reliably resolved by PearScarf's entity resolver.
 - **Plain language; no graph terminology.** Never use words like `edge_label`, `fact_type`, `TRANSITIONED`, `ASSERTED`, `target`, etc. PearScarf decides those. Author writes natural sentences.
 - **Pack contextual nuance into the sentence.** A claim like *"PearScarf 1.28.2 ships an `op_area` property — values 'reality' and 'intention', default 'reality', additive."* is one rich fact. Don't decompose into five sentence-fragments.

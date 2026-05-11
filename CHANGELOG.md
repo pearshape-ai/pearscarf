@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.32.1
+- Add a "Distinct facts within a record" rule to the records format spec (`pearscarf/knowledge/records/format.md`, served as MCP resource `pearscarf://format/record`). Two facts in the same record must not share both subject and underlying claim — overlapping facts (e.g. "X decided to create category Y" + "X chose Y as the headline term") are either one fact to be merged with the nuance packed inline, or they need structurally distinct claims. Companion to the curator's source-record exclusion shipped in 1.32.0: the curator won't adjudicate same-record edges, so author-side distinctness is the upstream cure for muddy facts.
+
 ## 1.32.0
 - Curator now does LLM-judged supersession. After extraction enqueues a record, the curator scans each edge that record wrote, finds non-stale siblings from the same subject (any `edge_label`, any `fact_type`, any target — the LLM judge decides whether each sibling describes the same underlying claim), and asks the judge to label each (trigger, sibling) pair as `trigger_supersedes_sibling`, `sibling_supersedes_trigger`, or `coexist`. Superseded edges are marked `stale=true` with `replaced_by` pointing to the survivor. The judge is symmetric — it also catches backfilled historical facts where the trigger itself should be staled by an existing sibling. A record's own edges are excluded from each other's sibling pools — the author wrote them as one atomic submission, so they coexist by construction. Judge calls are tracked via `tracked_call` (one row per call in `llm_calls`) and wrapped in `trace_span`/`trace_child` for LangSmith observability. 18 unit tests in `tests/unit/test_curation.py` cover both directions, the source-record exclusion, and prompt formatting.
 
