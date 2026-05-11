@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.33.0
+- Record full per-turn agentic reasoning in `llm_calls`. Three new columns — `input_messages` (JSONB, the messages array sent to the LLM that turn), `response_text` (TEXT, the LLM's natural-language reply between tool calls), `response_tool_calls` (JSONB, the full `[{id, name, input}]` tool-call objects with arguments) — turn every multi-turn agent run into a queryable conversational trace via `WHERE record_id = X ORDER BY run_id, turn_index`. Migration is idempotent (`ALTER TABLE ADD COLUMN IF NOT EXISTS`), backward-compatible (new columns nullable), and writes are best-effort (observability failures swallowed). Previously these columns were missing, so for multi-turn flows like extraction the conversation between tool calls was unreconstructable from the DB alone.
+
 ## 1.32.1
 - Add a "Distinct facts within a record" rule to the records format spec (`pearscarf/knowledge/records/format.md`, served as MCP resource `pearscarf://format/record`). Two facts in the same record must not share both subject and underlying claim — overlapping facts (e.g. "X decided to create category Y" + "X chose Y as the headline term") are either one fact to be merged with the nuance packed inline, or they need structurally distinct claims. Companion to the curator's source-record exclusion shipped in 1.32.0: the curator won't adjudicate same-record edges, so author-side distinctness is the upstream cure for muddy facts.
 

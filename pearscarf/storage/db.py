@@ -221,6 +221,15 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     error TEXT
 );
 
+-- Agentic-reasoning capture (added post-1.32.x). Each turn stores the messages
+-- sent in (input_messages), the LLM's natural-language reply (response_text),
+-- and the structured tool-call inputs (response_tool_calls — full {id, name,
+-- input} objects, complementing the lighter `tool_calls` names list above).
+-- These columns are nullable so older rows remain valid.
+ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS input_messages JSONB;
+ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS response_text TEXT;
+ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS response_tool_calls JSONB;
+
 CREATE INDEX IF NOT EXISTS idx_llm_calls_consumer_time ON llm_calls(consumer, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_run ON llm_calls(run_id);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_record ON llm_calls(record_id) WHERE record_id IS NOT NULL;

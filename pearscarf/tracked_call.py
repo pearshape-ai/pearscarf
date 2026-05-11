@@ -114,6 +114,7 @@ def tracked_call(client: Any, agent_name: str, **invoke_kwargs: Any) -> Any:
     prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
     model = invoke_kwargs.get("model", "")
     provider = getattr(client, "provider_name", "unknown")
+    input_messages = invoke_kwargs.get("messages") or []
 
     start = time.monotonic()
     try:
@@ -126,6 +127,7 @@ def tracked_call(client: Any, agent_name: str, **invoke_kwargs: Any) -> Any:
             model=model,
             system_prompt=system_prompt,
             prompt_hash=prompt_hash,
+            input_messages=input_messages,
             response=None,
             latency_ms=latency_ms,
             error=str(exc),
@@ -139,6 +141,7 @@ def tracked_call(client: Any, agent_name: str, **invoke_kwargs: Any) -> Any:
         model=model,
         system_prompt=system_prompt,
         prompt_hash=prompt_hash,
+        input_messages=input_messages,
         response=response,
         latency_ms=latency_ms,
         error=None,
@@ -160,6 +163,7 @@ def _log_call(
     model: str,
     system_prompt: str,
     prompt_hash: str,
+    input_messages: list,
     response: Any,
     latency_ms: int,
     error: str | None,
@@ -184,6 +188,12 @@ def _log_call(
         stop_reason = response.stop_reason or "unknown"
         tool_names = [tc.name for tc in response.tool_calls]
         tool_calls = tool_names if tool_names else None
+        response_text = response.text or ""
+        response_tool_calls = (
+            [{"id": tc.id, "name": tc.name, "input": tc.input} for tc in response.tool_calls]
+            if response.tool_calls
+            else None
+        )
     else:
         input_tokens = 0
         output_tokens = 0
@@ -191,6 +201,8 @@ def _log_call(
         cache_read = 0
         stop_reason = "error"
         tool_calls = None
+        response_text = ""
+        response_tool_calls = None
 
     with _get_conn() as conn:
         # Dedup-upsert the prompt body.
@@ -203,8 +215,9 @@ def _log_call(
             "runtime_id, consumer, agent_name, pearscarf_version, "
             "run_id, turn_index, provider, model, prompt_hash, stop_reason, tool_calls, "
             "input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, "
-            "latency_ms, record_id, session_id, error"
-            ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "latency_ms, record_id, session_id, error, "
+            "input_messages, response_text, response_tool_calls"
+            ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 runtime_id,
                 consumer,
@@ -225,6 +238,9 @@ def _log_call(
                 record_id,
                 session_id,
                 error,
+                Jsonb(input_messages) if input_messages else None,
+                response_text,
+                Jsonb(response_tool_calls) if response_tool_calls is not None else None,
             ),
         )
         conn.commit()
