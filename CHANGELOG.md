@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.35.1
+- Add `scripts/benchmark.sh <dataset-path> [--debug] [--no-reset]` — runs an ER eval against the isolated test stack, lands the report at `$BENCHMARK_DEBUG_DIR/<timestamp>.log` (default `data/test/benchmark-debug/`), and routes `psc eval --debug-dir` output to the same directory when `--debug` is set.
+
 ## 1.35.0
 - Add an isolated test stack and an integration-test harness. `scripts/test-stack.sh` brings up postgres + neo4j + qdrant on alt host ports under docker compose project `pearscarf-test`, `env/.test.env.example` documents the config, and `tests/integration/` hosts tests gated by `@pytest.mark.integration` (opt-in via `pytest --integration`). The first integration test covers the 1.34.0 op_area rename migration; CI continues to run unit tests only.
 
