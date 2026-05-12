@@ -43,6 +43,11 @@ path = "pearscarf/__init__.py"
 [tool.pyright]
 extraPaths = ["experts"]
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: requires the isolated test stack (postgres + neo4j + qdrant). Opt-in via `pytest --integration`.",
+]
+
 [dependency-groups]
 dev = [
     "ruff>=0.13.0",
