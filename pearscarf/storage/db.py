@@ -237,6 +237,14 @@ CREATE INDEX IF NOT EXISTS idx_llm_calls_session ON llm_calls(session_id) WHERE 
 CREATE INDEX IF NOT EXISTS idx_llm_calls_version_time ON llm_calls(pearscarf_version, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_model_time ON llm_calls(provider, model, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_runtime ON llm_calls(runtime_id);
+
+-- 1.34.0 op_area rename. Legacy records with metadata.op_area='intention' went
+-- through the old extraction path and their facts already live in the (now
+-- reality-only) graph — align the record-level marker with the new vocabulary.
+-- Idempotent: affects only rows where metadata->>'op_area' = 'intention'.
+UPDATE records
+SET metadata = jsonb_set(metadata, '{op_area}', '"reality"')
+WHERE metadata->>'op_area' = 'intention';
 """
 
 

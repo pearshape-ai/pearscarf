@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pearscarf.expert_context import ExpertContext
 
-VALID_OP_AREAS = ("reality", "intention")
+VALID_OP_AREAS = ("reality", "intent")
 
 _ID_RE = re.compile(r"^Id:\s*(\S.+?)\s*$", re.MULTILINE)
 _DATE_RE = re.compile(r"^Date:\s*\S", re.MULTILINE)

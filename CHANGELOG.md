@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.34.0
+- Graph becomes reality-only. `create_fact_edge` no longer accepts or writes an `op_area` property; extraction stops threading it onto edges; `query_facts` drops its `op_area` filter; `get_schema` no longer reports `op_areas`. The triage `infer_op_area` branch and the `triage/op_area_inference.md` prompt are deleted along with the orphan `store.set_op_area` helper. `op_area` remains as a record-level routing field with the value renamed from `intention` to `intent` — `op_area="intent"` records are persisted but skip extraction (a dedicated intent surface is coming separately).
+
 ## 1.33.0
 - Record full per-turn agentic reasoning in `llm_calls`. Three new columns — `input_messages` (JSONB, the messages array sent to the LLM that turn), `response_text` (TEXT, the LLM's natural-language reply between tool calls), `response_tool_calls` (JSONB, the full `[{id, name, input}]` tool-call objects with arguments) — turn every multi-turn agent run into a queryable conversational trace via `WHERE record_id = X ORDER BY run_id, turn_index`. Migration is idempotent (`ALTER TABLE ADD COLUMN IF NOT EXISTS`), backward-compatible (new columns nullable), and writes are best-effort (observability failures swallowed). Previously these columns were missing, so for multi-turn flows like extraction the conversation between tool calls was unreconstructable from the DB alone.
 

@@ -51,19 +51,17 @@ Any MCP client calls:
 submit_record(
     body=record_body_markdown,
     url="https://your-system.com/path/to/this-record",
-    op_area="reality",  # or "intention" — see below
+    op_area="reality",  # routing — see below
 )
 # returns: {"record_id": "record_xxxxx", "status": "queued"}
 ```
 
-**`op_area`** is a two-valued axis that PearScarf threads onto every fact extracted from the record:
+**`op_area`** is record-level routing.
 
-- **`reality`** — observed, shipped, deployed, signed, sent. Things that have *happened*. *"PearScarf 1.29.0 shipped MCP-based record ingestion."* *"Acme renewed for 2027."* *"Linda posted the launch tweet at 14:00."*
-- **`intention`** — planned, committed, drafted, agreed-but-not-yet-done. Things that are *stated as future*. *"We'll ship audit logs by end of Q3."* *"Acme committed to upgrading by Q2."* *"Linda will draft a follow-up by Friday."*
+- **`reality`** (default) — the record describes something observed, shipped, deployed, signed, sent. PearScarf triages and extracts it, and its facts land in the graph. The graph is reality-only.
+- **`intent`** — the record describes a plan or commitment, not an observed fact. PearScarf persists the record but skips the graph. A dedicated submission surface for intents is coming separately; for now, `op_area="intent"` records are accepted but do not yet have a downstream consumer beyond persistence.
 
-The distinction is structural. A query like *"what shipped this quarter"* filters by `op_area=reality`; *"what are we committed to"* filters by `op_area=intention`. Without it, agents conflate plans with deliveries — a planned launch reads as already-shipped, a postponed deadline still looks active. Default is `reality`; switch to `intention` for forward-looking records.
-
-Then poll `get_record_status(record_id)` until `status == "indexed"` — at that point the facts are in the graph and queryable via the read tools.
+Poll `get_record_status(record_id)` until `status == "indexed"` — at that point reality facts are in the graph and queryable via the read tools.
 
 ### Worked example
 

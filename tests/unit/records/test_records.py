@@ -101,7 +101,7 @@ def test_valid_input_calls_storage_with_correct_args() -> None:
     )
 
 
-def test_valid_input_with_intention_op_area() -> None:
+def test_valid_input_with_intent_op_area() -> None:
     expert, save_record = _expert_with_mock_storage()
-    expert.ingest(VALID_BODY, "https://example.com/x", "intention")
-    assert save_record.call_args.kwargs["metadata"]["op_area"] == "intention"
+    expert.ingest(VALID_BODY, "https://example.com/x", "intent")
+    assert save_record.call_args.kwargs["metadata"]["op_area"] == "intent"

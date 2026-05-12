@@ -96,7 +96,7 @@ facts:
 - **Distinct facts within a record.** Two facts in the same record must not share both subject and underlying claim. If they do — e.g. *"X decided to create the AI coworkers category"* and *"X chose 'AI coworkers' as the headline term"* — they are either one fact (merge — pack the nuance into a single contextual sentence) or you need to make their claims structurally distinct (different subjects, different aspects, different anchored targets). The curator treats a record's facts as an atomic coherent set and won't adjudicate between them; downstream readers will struggle with overlapping claims regardless.
 - **Subject-first prose.** Start each fact with the subject entity by name (`PearScarf`, `Linda`, `Acme Corp`). The first concrete entity in the sentence is the most reliably resolved by PearScarf's entity resolver.
 - **Plain language; no graph terminology.** Never use words like `edge_label`, `fact_type`, `TRANSITIONED`, `ASSERTED`, `target`, etc. PearScarf decides those. Author writes natural sentences.
-- **Pack contextual nuance into the sentence.** A claim like *"PearScarf 1.28.2 ships an `op_area` property — values 'reality' and 'intention', default 'reality', additive."* is one rich fact. Don't decompose into five sentence-fragments.
+- **Pack contextual nuance into the sentence.** A claim that bundles what shipped, the values it accepts, the default, and that it's purely additive into one rich sentence is one fact. Don't decompose into five sentence-fragments.
 - **Typically 1–2 facts per record.** If you find yourself writing 5+, the granularity is too fine — fold related fragments back into single contextual sentences.
 
 ## Submit-time fields
@@ -104,9 +104,7 @@ facts:
 Submit alongside the body via the MCP `submit_record` tool:
 
 - **`url`** — required, non-empty. A URL that resolves back to where the record is persisted in your shared store (a github file, a wiki page, a blog post — any resolvable URL). Becomes `source_url` on every fact extracted from this record. PearScarf does **not** fetch the URL; non-emptiness is the only check.
-- **`op_area`** — `"reality"` (default) or `"intention"`. Marks whether the record describes something that has shipped / been observed (`reality`) or is planned / committed (`intention`). PearScarf threads this onto every fact extracted from the record.
-
-*Note: when the scopes mechanism lands, `op_area` will become one dimension within multi-valued scopes (e.g. `["comms", "internal", "reality"]`). The format spec evolves at that point; for now, `op_area` is the only categorisation axis.*
+- **`op_area`** — record-level routing. `"reality"` (default) sends the record through triage + extraction so its facts land in the graph. `"intent"` persists the record but skips the graph — intents are operational plans, not observed reality. A dedicated submission surface for intents is coming separately; for now, `op_area="intent"` records are accepted but do not yet have a consumer beyond persistence.
 
 ## Submission discipline
 
@@ -164,26 +162,25 @@ Submit-time: `url: "https://github.com/.../20260501-tagline-decision.md"`, `op_a
 ### Product change
 
 ````
-Title: Add op_area property to fact edges
+Title: Curator now does LLM-judged supersession
 
-Id: 20260429-op-area-property
-Date: 2026-04-29
+Id: 20260510-curator-llm-judge
+Date: 2026-05-10
 
-Shipped in pearscarf 1.28.2.
+Shipped in pearscarf 1.32.0.
 
 ## For humans
 
-Until 1.28.2 every fact in the graph was implicitly "things observed" — there was no structural way to distinguish facts about reality (what shipped, deployed, observed) from facts about intention (what's planned, committed). With multiple agent sessions writing to the same graph, conflating the two caused drift.
+Until 1.32.0 the curator only marked exact-duplicate edges stale; sibling facts about the same underlying claim sat side-by-side in the graph. With multiple agent sessions writing similar facts in different phrasings, drift accumulated and downstream queries returned overlapping noise.
 
-PearScarf 1.28.2 adds an `op_area` property on every fact edge written by `graph.create_fact_edge`. Default is `"reality"`; `"intention"` is the explicit opt-in. The change is purely additive — existing callers inherit the default.
+PearScarf 1.32.0 adds an LLM judge inside the curator. After extraction enqueues a record, the curator scans each new edge, finds non-stale siblings from the same subject (regardless of edge_label or fact_type), and asks the judge to label each pair as `trigger_supersedes_sibling`, `sibling_supersedes_trigger`, or `coexist`. Superseded edges are marked `stale=true` with `replaced_by` pointing to the survivor. A record's own edges are excluded from each other's sibling pools — they coexist by construction.
 
 ## For agents
 
 ```yaml
 facts:
-  - "PearScarf 1.28.2 ships an `op_area` property on every fact edge written by `graph.create_fact_edge` — values 'reality' (observed/shipped/deployed) and 'intention' (planned/committed/drafted), default 'reality', purely additive."
-  - "PearScarf chose `op_area` as the dedicated separator for reality vs intention to keep multi-agent graph writes from drifting; without it, a planned launch read as already-shipped and a postponed objective looked completed."
+  - "PearScarf 1.32.0 ships LLM-judged supersession in the curator — each new edge is paired against same-subject sibling edges across all edge_labels and fact_types; the judge labels each pair as trigger_supersedes_sibling, sibling_supersedes_trigger, or coexist; the loser is marked stale=true with replaced_by pointing to the survivor."
 ```
 ````
 
-Submit-time: `url: "https://github.com/.../20260429-op-area-property.md"`, `op_area: "reality"`.
+Submit-time: `url: "https://github.com/.../20260510-curator-llm-judge.md"`, `op_area: "reality"`.
