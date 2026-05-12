@@ -149,6 +149,22 @@ def tracked_call(client: Any, agent_name: str, **invoke_kwargs: Any) -> Any:
     return response
 
 
+def _to_jsonable(obj: Any) -> Any:
+    """Coerce Anthropic SDK Pydantic models (and nested structures) to JSON-safe values.
+
+    `Jsonb(...)` calls `json.dumps`, which can't serialize SDK objects like
+    `TextBlock` or `ToolUseBlock`. Walks lists/dicts so an assistant message
+    whose `content` is a list of SDK blocks lands as a dict-of-dicts.
+    """
+    if hasattr(obj, "model_dump") and callable(obj.model_dump):
+        return obj.model_dump()
+    if isinstance(obj, list | tuple):
+        return [_to_jsonable(item) for item in obj]
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    return obj
+
+
 def _safe_log(**kwargs: Any) -> None:
     try:
         _log_call(**kwargs)
@@ -238,9 +254,11 @@ def _log_call(
                 record_id,
                 session_id,
                 error,
-                Jsonb(input_messages) if input_messages else None,
+                Jsonb(_to_jsonable(input_messages)) if input_messages else None,
                 response_text,
-                Jsonb(response_tool_calls) if response_tool_calls is not None else None,
+                Jsonb(_to_jsonable(response_tool_calls))
+                if response_tool_calls is not None
+                else None,
             ),
         )
         conn.commit()

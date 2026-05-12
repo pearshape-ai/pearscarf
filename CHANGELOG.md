@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.35.2
+- Fix `llm_calls` observability silently dropping multi-turn agent traces. `tracked_call._log_call` now converts SDK Pydantic models (e.g. Anthropic's `TextBlock` / `ToolUseBlock`) to plain dicts via `model_dump` before the JSONB write, so the `input_messages` and `response_tool_calls` columns persist instead of raising `TypeError: ... not JSON serializable` and being swallowed by best-effort error handling. Provider-agnostic — duck-types on `model_dump` and handles any Pydantic-style object.
+
 ## 1.35.1
 - Add `scripts/benchmark.sh <dataset-path> [--debug] [--no-reset]` — runs an ER eval against the isolated test stack, lands the report at `$BENCHMARK_DEBUG_DIR/<timestamp>.log` (default `data/test/benchmark-debug/`), and routes `psc eval --debug-dir` output to the same directory when `--debug` is set.
 
