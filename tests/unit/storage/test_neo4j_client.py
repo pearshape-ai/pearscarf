@@ -32,6 +32,25 @@ def test_get_driver_lazy_inits_via_GraphDatabase_driver() -> None:
     assert neo4j_client._driver == "FAKE_DRIVER"
 
 
+def test_get_driver_disables_unrecognized_notifications() -> None:
+    """Driver init must opt out of UNRECOGNIZED-classification notifications.
+
+    Without this, every `MATCH (n:Label)` against a label with zero nodes
+    logs a WARNING — floods output on empty/wiped graphs.
+    """
+    from neo4j import NotificationDisabledClassification
+
+    neo4j_client._driver = None
+    with patch("pearscarf.storage.neo4j_client.GraphDatabase") as gdb:
+        gdb.driver.return_value = "FAKE_DRIVER"
+        neo4j_client.get_driver()
+
+    kwargs = gdb.driver.call_args.kwargs
+    assert NotificationDisabledClassification.UNRECOGNIZED in kwargs.get(
+        "notifications_disabled_classifications", []
+    )
+
+
 def test_close_resets_driver_and_invokes_close() -> None:
     fake_driver = MagicMock()
     neo4j_client._driver = fake_driver
