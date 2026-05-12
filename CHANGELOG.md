@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.35.4
+- `scripts/test-stack.sh up` and `reset` now block until postgres + neo4j are accepting connections (cypher-shell `RETURN 1` succeeds), with 60s/120s timeouts respectively. Eliminates the race where the script returned while Neo4j was still initializing — benchmarks or integration tests that ran immediately after `reset` would fail to connect to bolt and silently produce stale results.
+
 ## 1.35.3
 - Silence Neo4j `UNRECOGNIZED`-classification notifications at the driver level. `MATCH (n:Label) RETURN count(n)` against a freshly-wiped graph was logging one WARNING per missing label per call (Person / Company / Project / Event / Repository / …) — flooded output on every test reset and benchmark run. The driver now passes `notifications_disabled_classifications=[UNRECOGNIZED]`. Typo detection of label/property names happens at static-analysis time anyway.
 

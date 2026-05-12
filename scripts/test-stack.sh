@@ -40,9 +40,39 @@ wipe_data() {
   done
 }
 
+wait_ready() {
+  # `docker compose up -d` returns once containers start, not once their services
+  # are accepting connections. Postgres needs a few seconds; Neo4j with APOC needs
+  # 30-60s on first start. Block until both are bolt/SQL ready or time out.
+  local start
+
+  echo "test-stack: waiting for postgres..." >&2
+  start=$SECONDS
+  until compose exec -T postgres pg_isready -U "${POSTGRES_USER:-pearscarf}" -d "${POSTGRES_DB:-pearscarf}" >/dev/null 2>&1; do
+    if [ $((SECONDS - start)) -ge 60 ]; then
+      echo "test-stack: postgres not ready after 60s" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+
+  echo "test-stack: waiting for neo4j..." >&2
+  start=$SECONDS
+  until compose exec -T neo4j cypher-shell -u neo4j -p "${NEO4J_PASSWORD:-password}" "RETURN 1" >/dev/null 2>&1; do
+    if [ $((SECONDS - start)) -ge 120 ]; then
+      echo "test-stack: neo4j not ready after 120s" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+
+  echo "test-stack: ready" >&2
+}
+
 case "${1:-}" in
   up)
     compose up -d "${SERVICES[@]}"
+    wait_ready
     ;;
   down)
     compose down -v
@@ -52,6 +82,7 @@ case "${1:-}" in
     compose down -v
     wipe_data
     compose up -d "${SERVICES[@]}"
+    wait_ready
     ;;
   ps)
     compose ps
