@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from unittest.mock import MagicMock
@@ -10,6 +11,50 @@ import pytest
 
 from pearscarf import tracked_call as tc_mod
 from pearscarf.agents.llm_client import LLMResponse, LLMUsage
+from pearscarf.tracked_call import _to_jsonable
+
+# ---- _to_jsonable ----
+
+
+class _FakeSDKBlock:
+    """Mimics an Anthropic SDK Pydantic block (TextBlock / ToolUseBlock)."""
+
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def model_dump(self) -> dict:
+        return dict(self._payload)
+
+
+def test_to_jsonable_converts_sdk_model_via_model_dump() -> None:
+    block = _FakeSDKBlock({"type": "text", "text": "hello"})
+    assert _to_jsonable(block) == {"type": "text", "text": "hello"}
+
+
+def test_to_jsonable_walks_message_list_with_sdk_blocks() -> None:
+    messages = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": [_FakeSDKBlock({"type": "text", "text": "back"})],
+        },
+    ]
+    out = _to_jsonable(messages)
+    # The whole thing must now be json-serializable.
+    json.dumps(out)
+    assert out[0] == {"role": "user", "content": "hi"}
+    assert out[1] == {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "back"}],
+    }
+
+
+def test_to_jsonable_passes_primitives_through() -> None:
+    assert _to_jsonable("x") == "x"
+    assert _to_jsonable(7) == 7
+    assert _to_jsonable(None) is None
+    assert _to_jsonable([1, 2, 3]) == [1, 2, 3]
+    assert _to_jsonable({"a": 1}) == {"a": 1}
 
 
 @pytest.fixture
