@@ -101,7 +101,8 @@ def test_valid_input_calls_storage_with_correct_args() -> None:
     )
 
 
-def test_valid_input_with_intent_op_area() -> None:
-    expert, save_record = _expert_with_mock_storage()
-    expert.ingest(VALID_BODY, "https://example.com/x", "intent")
-    assert save_record.call_args.kwargs["metadata"]["op_area"] == "intent"
+def test_ingest_rejects_intent_op_area() -> None:
+    """submit_record is reality-only; intents go through submit_intent."""
+    expert, _ = _expert_with_mock_storage()
+    with pytest.raises(RecordSubmissionError, match="submit_intent"):
+        expert.ingest(VALID_BODY, "https://example.com/x", "intent")
