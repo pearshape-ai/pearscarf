@@ -615,6 +615,196 @@ def get_record_status(record_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Intent tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Submit an intent — a record describing a planned action / commitment. "
+        "Intent records persist but skip extraction; they never reach the graph. "
+        "Body is free-form prose; the canonical shape lives at the "
+        "`pearscarf://format/intent` resource. Optional `parent_record_id` "
+        "(another intent_id) makes this a sub-intent. Optional `intent_type` "
+        "is a freeform tag (e.g. 'milestone', 'task'). Optional `set_by` is "
+        "the agent/operator submitting. Returns `{intent_id, status: 'todo'}`."
+    )
+)
+def submit_intent(
+    body: str,
+    parent_record_id: str | None = None,
+    intent_type: str | None = None,
+    set_by: str | None = None,
+) -> dict:
+    """Submit an intent record and create its initial sidecar state row."""
+    from pearscarf.registry import get_registry
+    from pearscarf.storage.intents import IntentError
+
+    handler = get_registry().get_connect("record")
+    if handler is None:
+        return {
+            "error": "RECORDS_NOT_INITIALIZED",
+            "message": (
+                "Records expert is not registered in this MCP process. "
+                "Check the MCP container logs for an init failure."
+            ),
+        }
+    try:
+        intent_id = handler.ingest_intent(
+            body=body,
+            parent_record_id=parent_record_id,
+            intent_type=intent_type,
+            set_by=set_by,
+        )
+    except IntentError as exc:
+        return {"error": "INVALID_INTENT", "message": str(exc)}
+    return {"intent_id": intent_id, "status": "todo"}
+
+
+@mcp.tool(
+    description=(
+        "List intents matching filters. `status` matches sidecar status "
+        "(proposed / in_progress / done / cancelled). `parent` filters direct "
+        "children of a given intent id. `type` filters by intent_type. `since` "
+        "is an ISO timestamp on the intent's created_at. Returns body + state "
+        "per match, newest first."
+    )
+)
+def query_intents(
+    status: str | None = None,
+    parent: str | None = None,
+    type: str | None = None,
+    since: str | None = None,
+    limit: int = 50,
+) -> dict:
+    """Filtered list of intents."""
+    from pearscarf.storage import intents
+
+    rows = intents.query_intents(
+        status=status,
+        parent_record_id=parent,
+        intent_type=type,
+        since=since,
+        limit=limit,
+    )
+    return {
+        "intents": [_normalize_intent(i) for i in rows],
+        "count": len(rows),
+    }
+
+
+@mcp.tool(
+    description=(
+        "Fetch one intent by id. Returns body + status + parent_record_id + "
+        "intent_type + audit fields. With `with_children=True`, includes direct "
+        "children (depth 1)."
+    )
+)
+def get_intent(id: str, with_children: bool = False) -> dict:
+    """Single intent by id, optionally with direct children."""
+    from pearscarf.storage import intents
+
+    intent = intents.get_intent(id, with_children=with_children)
+    if intent is None:
+        return {"error": "not_found", "intent_id": id}
+    result = _normalize_intent(intent)
+    if with_children:
+        result["children"] = [_normalize_intent(c) for c in intent.get("children", [])]
+    return result
+
+
+@mcp.tool(
+    description=(
+        "Recursive walk from a root intent. Returns the root with nested "
+        "`children` lists at every level. Use for 'what's left under epic X' "
+        "progress views."
+    )
+)
+def get_intent_tree(root_id: str) -> dict:
+    """Full sub-tree rooted at root_id."""
+    from pearscarf.storage import intents
+
+    root = intents.get_intent_tree(root_id)
+    if root is None:
+        return {"error": "not_found", "intent_id": root_id}
+    return _normalize_intent_tree(root)
+
+
+@mcp.tool(
+    description=(
+        "Set the status of an intent. `status` must be one of "
+        "todo | in_progress | done | cancelled. `set_by` tags who flipped it "
+        "(agent name, operator handle); stored on the sidecar audit field."
+    )
+)
+def set_intent_status(id: str, status: str, set_by: str | None = None) -> dict:
+    from pearscarf.storage import intents
+    from pearscarf.storage.intents import IntentError
+
+    try:
+        intents.set_intent_status(id, status, set_by)
+    except IntentError as exc:
+        return {"error": "INVALID_INTENT", "message": str(exc)}
+    return {"intent_id": id, "status": status}
+
+
+@mcp.tool(
+    description=(
+        "Re-parent an intent. `parent_id=null` makes it top-level. Rejects "
+        "re-parents that would form a cycle. `set_by` tags who reorganized."
+    )
+)
+def set_intent_parent(id: str, parent_id: str | None, set_by: str | None = None) -> dict:
+    from pearscarf.storage import intents
+    from pearscarf.storage.intents import IntentError
+
+    try:
+        intents.set_intent_parent(id, parent_id, set_by)
+    except IntentError as exc:
+        return {"error": "INVALID_INTENT", "message": str(exc)}
+    return {"intent_id": id, "parent_record_id": parent_id}
+
+
+@mcp.tool(
+    description=(
+        "Set or clear the intent's freeform `intent_type` tag (e.g. "
+        "'milestone', 'task'). Pass null to clear. `set_by` tags the author."
+    )
+)
+def set_intent_type(id: str, intent_type: str | None, set_by: str | None = None) -> dict:
+    from pearscarf.storage import intents
+    from pearscarf.storage.intents import IntentError
+
+    try:
+        intents.set_intent_type(id, intent_type, set_by)
+    except IntentError as exc:
+        return {"error": "INVALID_INTENT", "message": str(exc)}
+    return {"intent_id": id, "intent_type": intent_type}
+
+
+def _normalize_intent(intent: dict) -> dict:
+    """Shape an intent record for MCP responses — ISO timestamps + stable keys."""
+    return {
+        "intent_id": intent["id"],
+        "body": intent.get("body") or "",
+        "status": intent.get("status"),
+        "parent_record_id": intent.get("parent_record_id"),
+        "intent_type": intent.get("intent_type"),
+        "source": intent.get("source") or "",
+        "created_at": _iso(intent.get("created_at")),
+        "set_at": _iso(intent.get("set_at")),
+        "set_by": intent.get("set_by") or "",
+    }
+
+
+def _normalize_intent_tree(node: dict) -> dict:
+    """Recursively normalize a tree of intents."""
+    out = _normalize_intent(node)
+    out["children"] = [_normalize_intent_tree(c) for c in node.get("children", [])]
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Resource — records format spec
 # ---------------------------------------------------------------------------
 
@@ -638,6 +828,27 @@ def records_format_spec() -> str:
     if expert is None or expert.knowledge_dir is None:
         raise FileNotFoundError("records expert not registered")
     return (expert.knowledge_dir / "format.md").read_text()
+
+
+@mcp.resource(
+    uri="pearscarf://format/intent",
+    name="intent format spec",
+    description=(
+        "PearScarf intent format spec — describes the body shape clients use to "
+        "submit intents via `submit_intent`, what / who / why / acceptance "
+        "framing, and the author discipline that separates committed plans "
+        "from exploratory thoughts. Fetch before submitting an intent."
+    ),
+    mime_type="text/markdown",
+)
+def intent_format_spec() -> str:
+    """Serve the intent format spec from pearscarf/knowledge/intents/format.md."""
+    from pathlib import Path
+
+    import pearscarf
+
+    path = Path(pearscarf.__file__).parent / "knowledge" / "intents" / "format.md"
+    return path.read_text()
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.36.0
+- Add an intent submission surface. Records with `op_area="intent"` skip the graph and live alongside a new `intent_details` sidecar (status / parent_record_id / intent_type / audit). Seven MCP tools cover the surface — `submit_intent`, `query_intents`, `get_intent`, `get_intent_tree`, `set_intent_status`, `set_intent_parent` (cycle-checked), `set_intent_type`. Body conventions are served at `pearscarf://format/intent`. `submit_record` becomes reality-only; intents must go through `submit_intent` so the sidecar row is created atomically with the records row.
+
 ## 1.35.4
 - `scripts/test-stack.sh up` and `reset` now block until postgres + neo4j are accepting connections (cypher-shell `RETURN 1` succeeds), with 60s/120s timeouts respectively. Eliminates the race where the script returned while Neo4j was still initializing — benchmarks or integration tests that ran immediately after `reset` would fail to connect to bolt and silently produce stale results.
 

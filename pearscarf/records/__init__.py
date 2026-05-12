@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pearscarf.expert_context import ExpertContext
 
-VALID_OP_AREAS = ("reality", "intent")
+VALID_OP_AREAS = ("reality",)
 
 _ID_RE = re.compile(r"^Id:\s*(\S.+?)\s*$", re.MULTILINE)
 _DATE_RE = re.compile(r"^Date:\s*\S", re.MULTILINE)
@@ -35,13 +35,20 @@ class RecordsExpert:
         self._ctx = ctx
 
     def ingest(self, body: str, url: str, op_area: str = "reality") -> str | None:
-        """Validate the submission-time guards and save through ctx.storage."""
+        """Validate the submission-time guards and save through ctx.storage.
+
+        Reality records only. Intents go through `ingest_intent` so the
+        sidecar state row is created atomically with the records row.
+        """
         if not body or not body.strip():
             raise RecordSubmissionError("body is empty")
         if not url or not url.strip():
             raise RecordSubmissionError("url is required and must be non-empty")
         if op_area not in VALID_OP_AREAS:
-            raise RecordSubmissionError(f"op_area must be one of {VALID_OP_AREAS}, got {op_area!r}")
+            raise RecordSubmissionError(
+                f"op_area must be one of {VALID_OP_AREAS}, got {op_area!r}. "
+                "Use `submit_intent` for intent records."
+            )
 
         id_match = _ID_RE.search(body)
         if id_match is None:
@@ -55,6 +62,23 @@ class RecordsExpert:
             content=body,
             metadata={"op_area": op_area, "source_url": url},
             dedup_key=id_match.group(1).strip(),
+        )
+
+    def ingest_intent(
+        self,
+        body: str,
+        parent_record_id: str | None = None,
+        intent_type: str | None = None,
+        set_by: str | None = None,
+    ) -> str:
+        """Submit an intent — record + sidecar row created atomically."""
+        from pearscarf.storage import intents
+
+        return intents.submit_intent(
+            body=body,
+            parent_record_id=parent_record_id,
+            intent_type=intent_type,
+            set_by=set_by,
         )
 
 
