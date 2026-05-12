@@ -183,7 +183,6 @@ def test_create_fact_edge_passes_props_and_returns_id(neo4j_session: MagicMock) 
         source_type="email",
         source_at="2026-03-21T00:00:00+00:00",
         valid_until=None,
-        op_area="reality",
     )
     assert rid == "edge-7"
     kwargs = neo4j_session.run.call_args.kwargs
@@ -191,24 +190,8 @@ def test_create_fact_edge_passes_props_and_returns_id(neo4j_session: MagicMock) 
     props = kwargs["props"]
     assert props["fact"] == "Alice works at Acme."
     assert props["fact_type"] == "employee"
-    assert props["op_area"] == "reality"
+    assert "op_area" not in props
     assert props["source_record_ids"] == ["email_001"]
-
-
-def test_create_fact_edge_default_op_area_is_reality(neo4j_session: MagicMock) -> None:
-    neo4j_session.run.return_value = _result(single={"rid": "edge-8"})
-    graph.create_fact_edge(
-        from_node_id="a",
-        to_node_id="b",
-        edge_label="asserted",
-        fact_type="commitment",
-        fact="x",
-        confidence="stated",
-        source_record="r1",
-        source_type="email",
-    )
-    props = neo4j_session.run.call_args.kwargs["props"]
-    assert props["op_area"] == "reality"
 
 
 # ---- find_exact_dup_edge ----

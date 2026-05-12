@@ -1,4 +1,4 @@
-"""Tests for `pearscarf.triage` — classification dispatch + op_area inference."""
+"""Tests for `pearscarf.triage` — classification dispatch."""
 
 from __future__ import annotations
 
@@ -31,29 +31,17 @@ def patched_conn(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 # ---- ClassifyTriageTool ----
 
 
-def test_classify_tool_schema_omits_op_area_by_default() -> None:
+def test_classify_tool_schema() -> None:
     tool = ClassifyTriageTool()
-    assert "op_area" not in tool.input_schema["properties"]
-    assert "op_area" not in tool.input_schema["required"]
-
-
-def test_classify_tool_schema_includes_op_area_when_inferred() -> None:
-    tool = ClassifyTriageTool(infer_op_area=True)
-    assert "op_area" in tool.input_schema["properties"]
-    assert "op_area" in tool.input_schema["required"]
+    assert tool.input_schema["properties"]["classification"]["enum"] == [
+        store.RELEVANT,
+        store.NOISE,
+        store.UNCERTAIN,
+    ]
+    assert tool.input_schema["required"] == ["classification", "reasoning"]
 
 
 def test_classify_tool_execute_records_result() -> None:
-    tool = ClassifyTriageTool(infer_op_area=True)
-    tool.execute(classification="relevant", reasoning="why", op_area="reality")
-    assert tool.result == {
-        "classification": "relevant",
-        "reasoning": "why",
-        "op_area": "reality",
-    }
-
-
-def test_classify_tool_execute_omits_op_area_when_not_inferred() -> None:
     tool = ClassifyTriageTool()
     tool.execute(classification="noise", reasoning="trivial")
     assert tool.result == {"classification": "noise", "reasoning": "trivial"}
@@ -84,7 +72,7 @@ def test_reset_stale_triaging_runs_update(patched_conn: MagicMock) -> None:
     assert "UPDATE records SET classification" in sql
 
 
-# ---- Triage._process: op_area branching ----
+# ---- Triage._process ----
 
 
 def _stub_prompt_loaders(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,7 +81,7 @@ def _stub_prompt_loaders(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(triage_mod, "load_relevancy_guidance", lambda en: None)
 
 
-def test_process_explicit_op_area_skips_inference(
+def test_process_writes_classification(
     monkeypatch: pytest.MonkeyPatch, patched_conn: MagicMock
 ) -> None:
     _stub_prompt_loaders(monkeypatch)
@@ -105,7 +93,6 @@ def test_process_explicit_op_area_skips_inference(
             captured["registry"] = k.get("tool_registry") or (a[0] if a else None)
 
         def run(self, msg):
-            # Simulate the agent calling classify with no op_area
             classify = next(t for t in captured["registry"]._tools.values() if t.name == "classify")
             classify.execute(classification=store.RELEVANT, reasoning="r")
 
@@ -115,10 +102,6 @@ def test_process_explicit_op_area_skips_inference(
     monkeypatch.setattr(
         "pearscarf.storage.store.set_classification",
         lambda rid, cl: set_calls.append((rid, cl)),
-    )
-    monkeypatch.setattr(
-        "pearscarf.storage.store.set_op_area",
-        lambda rid, op: set_calls.append(("op_area", rid, op)),
     )
 
     record = {
@@ -131,41 +114,6 @@ def test_process_explicit_op_area_skips_inference(
     Triage()._process(record)
 
     assert ("rec_1", store.RELEVANT) in set_calls
-    # explicit op_area means no set_op_area write
-    assert all(c[0] != "op_area" for c in set_calls)
-
-
-def test_process_no_op_area_triggers_inference_path(
-    monkeypatch: pytest.MonkeyPatch, patched_conn: MagicMock
-) -> None:
-    _stub_prompt_loaders(monkeypatch)
-
-    captured: dict = {}
-
-    class FakeAgent:
-        def __init__(self, *a, **k):
-            captured["registry"] = k.get("tool_registry") or a[0]
-
-        def run(self, msg):
-            classify = next(t for t in captured["registry"]._tools.values() if t.name == "classify")
-            classify.execute(classification=store.RELEVANT, reasoning="r", op_area="intention")
-
-    monkeypatch.setattr(triage_mod, "TriageAgent", FakeAgent)
-
-    set_calls: list = []
-    monkeypatch.setattr(
-        "pearscarf.storage.store.set_classification",
-        lambda rid, cl: set_calls.append((rid, cl)),
-    )
-    monkeypatch.setattr(
-        "pearscarf.storage.store.set_op_area",
-        lambda rid, op: set_calls.append(("op_area", rid, op)),
-    )
-
-    record = {"id": "rec_2", "type": "email", "content": "x", "metadata": {}, "expert_name": "gm"}
-    Triage()._process(record)
-
-    assert ("op_area", "rec_2", "intention") in set_calls
 
 
 def test_process_marks_uncertain_when_classify_not_called(

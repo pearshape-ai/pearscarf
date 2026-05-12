@@ -255,7 +255,6 @@ class Extraction(Consumer):
         record_type: str,
         source_at: str,
         valid_until: str | None,
-        op_area: str,
     ) -> None:
         """Write a fact edge with literal dup check."""
         existing = graph.find_exact_dup_edge(
@@ -287,7 +286,6 @@ class Extraction(Consumer):
             record_type,
             source_at=source_at,
             valid_until=valid_until,
-            op_area=op_area,
         )
 
     def _embed_record(self, record: dict, content: str) -> None:
@@ -538,11 +536,6 @@ class Extraction(Consumer):
             or str(record.get("created_at", ""))
             or _now()
         )
-        # op_area routes facts into reality vs intention. Reality is the default
-        # because every record source today is reality-bound; ingesters that
-        # produce intention records (commitments, plans) set the marker
-        # explicitly on `metadata.op_area`.
-        op_area = str(metadata.get("op_area") or "reality")
 
         # Seed records have their own commit path (entities + aliases in one go)
         if record_type == "ingest":
@@ -580,7 +573,6 @@ class Extraction(Consumer):
                     record_type,
                     source_at,
                     valid_until,
-                    op_area,
                 )
             else:
                 day_date = graph.utc_to_local_date(source_at)
@@ -596,7 +588,6 @@ class Extraction(Consumer):
                     record_type,
                     source_at,
                     valid_until,
-                    op_area,
                 )
 
         return entity_id_map
@@ -609,6 +600,15 @@ class Extraction(Consumer):
         record_type = record["type"]
         self._current_record_id = record_id
         self._current_record_type = record_type
+
+        # Intent records do not enter the graph — the graph is reality-only.
+        # Mark indexed so the queue moves on; routing into the intent
+        # surface is handled separately (out of the extraction path).
+        metadata = record.get("metadata") or {}
+        if metadata.get("op_area") == "intent":
+            log.write(self.name, "--", "action", f"{record_id}: intent — skipping extraction")
+            self._mark_indexed(record_id)
+            return
 
         log.write(self.name, "--", "action", f"processing {record_id}")
 

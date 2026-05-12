@@ -16,7 +16,7 @@
 
 PearScarf is the shared operational brain for your AI coworkers — a knowledge graph of the work your team has actually done, sourced from the systems where the work lives, not from what someone said about it in a thread. Every coworker reads from the same view; none of them rebuild context on every run.
 
-It separates **observed reality** (what shipped, what's true now) from **stated intention** (commitments, plans, goals) — so coworkers don't confuse a promise with a delivery.
+It separates **observed reality** (what shipped, what's true now) from **stated intent** (commitments, plans, goals) — so coworkers don't confuse a promise with a delivery.
 
 ## Your operation isn't in the chat
 

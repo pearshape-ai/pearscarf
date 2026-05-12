@@ -42,7 +42,7 @@ def test_get_schema_returns_vocabulary(patched_conn: MagicMock) -> None:
     assert "AFFILIATED" in schema["edge_labels"]
     assert "AFFILIATED" in schema["fact_types"]
     assert schema["source_types"] == ["email", "issue"]
-    assert schema["op_areas"] == ["reality", "intention"]
+    assert "op_areas" not in schema
 
 
 # ---- search ----
@@ -231,7 +231,7 @@ def test_submit_record_returns_queued_with_record_id(
     registry = MagicMock()
     registry.get_connect.return_value = handler
     monkeypatch.setattr("pearscarf.registry.get_registry", lambda: registry)
-    out = mcp_server.submit_record("body", "https://x", op_area="intention")
+    out = mcp_server.submit_record("body", "https://x", op_area="intent")
     assert out == {"record_id": "rec_123", "status": "queued"}
 
 

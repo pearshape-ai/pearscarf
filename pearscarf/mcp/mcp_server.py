@@ -3,11 +3,11 @@
 Tool surface (6 tools, dynamic primitives + bundles):
 
 - get_schema: vocabulary introspection — entity_types, edge_labels, fact_types,
-  source_types, op_areas. Call once at task start to know the vocabulary.
+  source_types. Call once at task start to know the vocabulary.
 - search: semantic similarity search across records (Qdrant + records join),
   with optional record_type / source / since filters.
 - query_facts: parameterized graph query — subject / target / edge_label /
-  fact_type / op_area / source_type / since / until / include_stale.
+  fact_type / source_type / since / until / include_stale.
 - query_records: parameterized records query — type / source / expert /
   classification / since / until / metadata field matchers.
 - get_entity_context: high-value bundle — facts + connections + recent records
@@ -82,8 +82,8 @@ def _iso(dt: datetime | None) -> str:
 @mcp.tool(
     description=(
         "Return this deployment's vocabulary — entity types, edge labels, "
-        "fact_types, source_types, and op_areas. Call this once at the start "
-        "of a task so you know what to filter on in query_facts and query_records. "
+        "fact_types, and source_types. Call this once at the start of a task "
+        "so you know what to filter on in query_facts and query_records. "
         "The fact_types map is keyed by edge_label and lists the canonical "
         "fact_types each edge accepts (deployment-vocab additions included)."
     )
@@ -107,7 +107,6 @@ def get_schema() -> dict:
         "edge_labels": edge_labels,
         "fact_types": fact_types,
         "source_types": source_types,
-        "op_areas": ["reality", "intention"],
     }
 
 
@@ -193,10 +192,9 @@ def search(
 @mcp.tool(
     description=(
         "Parameterized graph query. Filter facts by subject (entity name), target "
-        "(entity name or the literal '(Day)'), edge_label, fact_type, op_area "
-        "('reality' or 'intention'), source_type, time range (since/until on source_at), "
-        "and stale flag. Use after get_schema to know the vocabulary. Returns matching "
-        "facts ordered by source_at descending. "
+        "(entity name or the literal '(Day)'), edge_label, fact_type, source_type, "
+        "time range (since/until on source_at), and stale flag. Use after get_schema "
+        "to know the vocabulary. Returns matching facts ordered by source_at descending. "
         "Examples: open blockers on PearScarf → subject='PearScarf', edge_label='ASSERTED', "
         "fact_type='blocker'. Recent shipping events → edge_label='TRANSITIONED', "
         "fact_type='feature_shipped', since='2026-04-01T00:00:00Z'."
@@ -207,7 +205,6 @@ def query_facts(
     target: str | None = None,
     edge_label: str | None = None,
     fact_type: str | None = None,
-    op_area: str | None = None,
     source_type: str | None = None,
     since: str | None = None,
     until: str | None = None,
@@ -239,10 +236,6 @@ def query_facts(
         where_parts.append("r.fact_type = $fact_type")
         params["fact_type"] = fact_type
 
-    if op_area:
-        where_parts.append("r.op_area = $op_area")
-        params["op_area"] = op_area
-
     if source_type:
         where_parts.append("r.source_type = $source_type")
         params["source_type"] = source_type
@@ -267,7 +260,7 @@ def query_facts(
         "r.fact_type AS fact_type, r.fact AS fact, "
         "r.confidence AS confidence, r.source_record AS source_record, "
         "r.source_type AS source_type, r.source_at AS source_at, "
-        "r.op_area AS op_area, r.stale AS stale, r.valid_until AS valid_until, "
+        "r.stale AS stale, r.valid_until AS valid_until, "
         "elementId(a) AS subject_id, a.name AS subject_name, labels(a) AS subject_labels, "
         "elementId(b) AS target_id, b.name AS target_name, b.date AS target_date, "
         "labels(b) AS target_labels "
@@ -291,7 +284,6 @@ def query_facts(
                 "fact_type": r.get("fact_type") or "",
                 "fact": r.get("fact"),
                 "confidence": r.get("confidence") or "",
-                "op_area": r.get("op_area") or "",
                 "source_at": r.get("source_at") or "",
                 "source_record": r.get("source_record") or "",
                 "source_type": r.get("source_type") or "",
@@ -309,7 +301,6 @@ def query_facts(
             "target": target,
             "edge_label": edge_label,
             "fact_type": fact_type,
-            "op_area": op_area,
             "source_type": source_type,
             "since": since,
             "until": until,
@@ -539,11 +530,12 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
         "shape with `Title:` / `Id:` / `Date:` / scope-anchor / `## For humans` "
         "(brief prose) / `## For agents` (a YAML list of plain-language facts "
         "under `facts:`). Provide a non-empty `url` pointing to where the "
-        "record is persisted (becomes `source_url` on every fact extracted) "
-        "and an `op_area` of `reality` (default — observed/shipped) or "
-        "`intention` (planned/committed). Returns `{record_id, status: "
-        '"queued"}`; the record flows through the existing triage and '
-        "extraction pipeline. Fetch the format resource first if you don't "
+        "record is persisted (becomes `source_url` on every fact extracted). "
+        "`op_area` is a record-level routing field: `reality` (default) sends "
+        "the record through triage + extraction to the graph; `intent` "
+        "persists the record but skips the graph (a dedicated submission "
+        "surface for intents is coming separately). Returns `{record_id, "
+        'status: "queued"}`. Fetch the format resource first if you don\'t '
         "already have the format in context."
     )
 )

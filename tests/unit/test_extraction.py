@@ -148,82 +148,33 @@ def test_validate_extraction_clean_returns_empty() -> None:
     assert Extraction()._validate_extraction(record, extraction) == []
 
 
-# ---- _commit_extraction op_area routing ----
+# ---- _process_record: intent records skip extraction ----
 
 
-def test_commit_extraction_uses_metadata_op_area(
-    monkeypatch: pytest.MonkeyPatch,
+def test_process_record_skips_intent(
+    monkeypatch: pytest.MonkeyPatch, patched_conn: MagicMock
 ) -> None:
-    captured: dict = {}
+    """Records with op_area=intent are marked indexed without running the extractor."""
+    extractor_called = {"value": False}
 
-    def fake_create_entity(et, name, md):
-        return f"node_{name}"
-
-    def fake_find_dup(*a, **k):
+    def fake_run_extractor(self, record, content):
+        extractor_called["value"] = True
         return None
 
-    def fake_create_edge(*a, **k):
-        captured["op_area"] = k.get("op_area")
-        return "edge-1"
-
-    monkeypatch.setattr("pearscarf.extraction.graph.create_entity", fake_create_entity)
-    monkeypatch.setattr("pearscarf.extraction.graph.find_exact_dup_edge", fake_find_dup)
-    monkeypatch.setattr("pearscarf.extraction.graph.create_fact_edge", fake_create_edge)
-    monkeypatch.setattr("pearscarf.extraction.graph.utc_to_local_date", lambda x: "2026-03-21")
-    monkeypatch.setattr("pearscarf.extraction.graph.get_or_create_day", lambda d: "day-1")
+    monkeypatch.setattr(Extraction, "_run_extractor_agent", fake_run_extractor)
 
     record = {
-        "id": "r1",
-        "type": "email",
-        "metadata": {"op_area": "intention"},
-        "created_at": "2026-03-21T00:00:00+00:00",
+        "id": "r_intent",
+        "type": "record",
+        "metadata": {"op_area": "intent"},
+        "content": "Title: foo\n\nId: foo\nDate: 2026-05-12\n",
     }
-    extraction = _ext(
-        entities=[{"name": "Alice", "type": "person", "resolved_to": "new"}],
-        facts=[
-            {
-                "edge_label": "ASSERTED",
-                "fact_type": "commitment",
-                "fact": "Alice will ship.",
-                "from_entity": "Alice",
-                "to_entity": None,
-                "confidence": "stated",
-            }
-        ],
-    )
-    Extraction()._commit_extraction(record, extraction)
-    assert captured["op_area"] == "intention"
+    Extraction()._process_record(record)
 
-
-def test_commit_extraction_default_op_area_is_reality(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict = {}
-    monkeypatch.setattr("pearscarf.extraction.graph.create_entity", lambda *a, **k: "node_1")
-    monkeypatch.setattr("pearscarf.extraction.graph.find_exact_dup_edge", lambda *a, **k: None)
-    monkeypatch.setattr(
-        "pearscarf.extraction.graph.create_fact_edge",
-        lambda *a, **k: captured.setdefault("op_area", k.get("op_area")) or "e1",
-    )
-    monkeypatch.setattr("pearscarf.extraction.graph.utc_to_local_date", lambda x: "2026-03-21")
-    monkeypatch.setattr("pearscarf.extraction.graph.get_or_create_day", lambda d: "day-1")
-
-    record = {"id": "r1", "type": "email", "created_at": "2026-03-21T00:00:00+00:00"}
-    extraction = _ext(
-        entities=[{"name": "Alice", "type": "person", "resolved_to": "new"}],
-        facts=[
-            {
-                "edge_label": "ASSERTED",
-                "fact_type": "commitment",
-                "fact": "Alice will ship.",
-                "from_entity": "Alice",
-                "to_entity": None,
-                "confidence": "stated",
-            }
-        ],
-    )
-    Extraction()._commit_extraction(record, extraction)
-    assert captured["op_area"] == "reality"
+    assert extractor_called["value"] is False
+    # _mark_indexed runs an UPDATE on the records table.
+    sql_calls = [c.args[0] for c in patched_conn.execute.call_args_list]
+    assert any("UPDATE records SET indexed = TRUE" in s for s in sql_calls)
 
 
 # ---- _embed_record error swallowing ----

@@ -120,13 +120,6 @@ def test_mark_relevant_uses_relevant_label(patched_store_conn: MagicMock) -> Non
     assert args[0] == store.RELEVANT
 
 
-def test_set_op_area_merges_metadata(patched_store_conn: MagicMock) -> None:
-    store.set_op_area("email_001", "intention")
-    sql = patched_store_conn.execute.call_args.args[0]
-    assert "metadata = COALESCE" in sql
-    patched_store_conn.commit.assert_called_once()
-
-
 # ---- MCP keys ----
 
 
