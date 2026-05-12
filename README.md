@@ -141,6 +141,20 @@ scripts/test-stack.sh down
 
 Integration tests live under `tests/integration/` and are marked `@pytest.mark.integration` — a bare `pytest` run skips them. CI continues to run unit tests only (`pytest tests/unit/`).
 
+### Benchmarks against the test stack
+
+`scripts/benchmark.sh` runs an ER eval against the test stack and lands the report (and optionally per-record LLM traces) under `data/test/benchmark-debug/`.
+
+```bash
+# requires a real ANTHROPIC_API_KEY in env/.test.env
+scripts/benchmark.sh /path/to/eval/dataset                 # one shot
+scripts/benchmark.sh /path/to/eval/dataset --debug         # plus LLM prompts/responses
+scripts/benchmark.sh /path/to/eval/dataset --no-reset      # run against current stack state
+BENCHMARK_DEBUG_DIR=/tmp/bench scripts/benchmark.sh …      # override artifact location
+```
+
+Each run captures stdout/stderr to `<BENCHMARK_DEBUG_DIR>/<timestamp>.log`. In debug mode, `psc eval --debug-dir <BENCHMARK_DEBUG_DIR>` writes a sibling `<dataset>_v<ver>_<timestamp>/` containing every LLM prompt and response.
+
 ## Docs
 
 - [Getting Started](docs/getting-started.md) — installation, credentials, first run
