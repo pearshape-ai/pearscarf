@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.35.3
+- Silence Neo4j `UNRECOGNIZED`-classification notifications at the driver level. `MATCH (n:Label) RETURN count(n)` against a freshly-wiped graph was logging one WARNING per missing label per call (Person / Company / Project / Event / Repository / …) — flooded output on every test reset and benchmark run. The driver now passes `notifications_disabled_classifications=[UNRECOGNIZED]`. Typo detection of label/property names happens at static-analysis time anyway.
+
 ## 1.35.2
 - Fix `llm_calls` observability silently dropping multi-turn agent traces. `tracked_call._log_call` now converts SDK Pydantic models (e.g. Anthropic's `TextBlock` / `ToolUseBlock`) to plain dicts via `model_dump` before the JSONB write, so the `input_messages` and `response_tool_calls` columns persist instead of raising `TypeError: ... not JSON serializable` and being swallowed by best-effort error handling. Provider-agnostic — duck-types on `model_dump` and handles any Pydantic-style object.
 
