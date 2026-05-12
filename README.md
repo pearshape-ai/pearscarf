@@ -117,6 +117,30 @@ psc dev --poll                 # Local-dev monolith: Discord frontend + all serv
 | `psc mcp start` | Run MCP server standalone |
 | `psc erase-all` | Wipe all system state |
 
+## Local testing
+
+Two pearscarf stacks run side by side: the dev stack (`docker compose up`) and an isolated test stack on alt ports for repeatable integration tests.
+
+```bash
+# one-time: copy the example config
+cp env/.test.env.example env/.test.env
+
+# bring up the isolated test stack — postgres / neo4j / qdrant on alt ports,
+# under docker compose project name `pearscarf-test`
+scripts/test-stack.sh up
+
+# run integration tests against it
+uv run pytest --integration
+
+# wipe state + restart for a clean run
+scripts/test-stack.sh reset
+
+# tear it down (removes volumes + bind-mount data)
+scripts/test-stack.sh down
+```
+
+Integration tests live under `tests/integration/` and are marked `@pytest.mark.integration` — a bare `pytest` run skips them. CI continues to run unit tests only (`pytest tests/unit/`).
+
 ## Docs
 
 - [Getting Started](docs/getting-started.md) — installation, credentials, first run

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.35.0
+- Add an isolated test stack and an integration-test harness. `scripts/test-stack.sh` brings up postgres + neo4j + qdrant on alt host ports under docker compose project `pearscarf-test`, `env/.test.env.example` documents the config, and `tests/integration/` hosts tests gated by `@pytest.mark.integration` (opt-in via `pytest --integration`). The first integration test covers the 1.34.0 op_area rename migration; CI continues to run unit tests only.
+
 ## 1.34.0
 - Graph becomes reality-only. `create_fact_edge` no longer accepts or writes an `op_area` property; extraction stops threading it onto edges; `query_facts` drops its `op_area` filter; `get_schema` no longer reports `op_areas`. The triage `infer_op_area` branch and the `triage/op_area_inference.md` prompt are deleted along with the orphan `store.set_op_area` helper. `op_area` remains as a record-level routing field with the value renamed from `intention` to `intent` — `op_area="intent"` records are persisted but skip extraction (a dedicated intent surface is coming separately).
 

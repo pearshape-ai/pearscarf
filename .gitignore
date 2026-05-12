@@ -8,7 +8,8 @@ coverage.xml
 
 .venv/
 venv/
-env/
+env/*
+!env/*.example
 
 dist/
 build/
