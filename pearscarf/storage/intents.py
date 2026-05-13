@@ -29,21 +29,29 @@ def submit_intent(
     body: str,
     parent_record_id: str | None = None,
     intent_type: str | None = None,
+    owner: str | None = None,
+    owner_role: str | None = None,
+    depends_on: list[str] | None = None,
     set_by: str | None = None,
 ) -> str:
     """Atomically insert the records row + initial `intent_details` row.
 
     Returns the new intent record id. Raises `IntentError` for invalid
-    `parent_record_id` (missing or not an intent) or cycle.
+    `parent_record_id` (missing or cancelled), missing `depends_on` ids,
+    or any sidecar constraint violation.
     """
     init_db()
 
     if not body or not body.strip():
         raise IntentError("body is empty")
 
+    deps = list(depends_on or [])
+
     with _get_conn() as conn:
         if parent_record_id is not None:
             _assert_parent_eligible(conn, parent_record_id)
+        if deps:
+            _assert_dependencies_exist(conn, deps)
 
         record_id = _next_intent_id()
         conn.execute(
@@ -64,9 +72,19 @@ def submit_intent(
         )
         conn.execute(
             "INSERT INTO intent_details "
-            "(intent_record_id, status, parent_record_id, intent_type, set_by) "
-            "VALUES (%s, %s, %s, %s, %s)",
-            (record_id, "todo", parent_record_id, intent_type, set_by),
+            "(intent_record_id, status, parent_record_id, intent_type, "
+            "owner, owner_role, depends_on, set_by) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (
+                record_id,
+                "todo",
+                parent_record_id,
+                intent_type,
+                owner,
+                owner_role,
+                deps,
+                set_by,
+            ),
         )
         conn.commit()
         return record_id
@@ -123,6 +141,8 @@ def query_intents(
     status: str | None = None,
     parent_record_id: str | None = None,
     intent_type: str | None = None,
+    owner: str | None = None,
+    owner_role: str | None = None,
     since: str | None = None,
     limit: int = 50,
 ) -> list[dict]:
@@ -139,6 +159,12 @@ def query_intents(
     if intent_type:
         where_parts.append("d.intent_type = %s")
         params.append(intent_type)
+    if owner:
+        where_parts.append("d.owner = %s")
+        params.append(owner)
+    if owner_role:
+        where_parts.append("d.owner_role = %s")
+        params.append(owner_role)
     if since:
         where_parts.append("r.created_at >= %s")
         params.append(since)
@@ -184,19 +210,52 @@ def set_intent_type(record_id: str, intent_type: str | None, set_by: str | None 
     _update_sidecar(record_id, "intent_type", intent_type, set_by)
 
 
+def set_intent_owner(record_id: str, owner: str | None, set_by: str | None = None) -> None:
+    _update_sidecar(record_id, "owner", owner, set_by)
+
+
+def set_intent_owner_role(
+    record_id: str, owner_role: str | None, set_by: str | None = None
+) -> None:
+    _update_sidecar(record_id, "owner_role", owner_role, set_by)
+
+
+def set_intent_dependencies(
+    record_id: str, depends_on: list[str], set_by: str | None = None
+) -> None:
+    """Replace the depends_on array. Rejects cycles and missing referent intents."""
+    init_db()
+    deps = list(depends_on or [])
+    with _get_conn() as conn:
+        if deps:
+            _assert_dependencies_exist(conn, deps)
+            if _would_form_dep_cycle(conn, record_id, deps):
+                raise IntentError(f"setting dependencies {deps} on {record_id} would form a cycle")
+        result = conn.execute(
+            "UPDATE intent_details SET depends_on = %s, set_at = now(), set_by = %s "
+            "WHERE intent_record_id = %s",
+            (deps, set_by, record_id),
+        )
+        if result.rowcount == 0:
+            raise IntentError(f"no intent with id {record_id!r}")
+        conn.commit()
+
+
 # --- internals ---
 
 
 _SELECT_INTENT_BY_ID = (
     "SELECT r.id, r.type, r.source, r.created_at, r.raw, r.content, r.metadata, "
-    "d.status, d.parent_record_id, d.intent_type, d.set_at, d.set_by "
+    "d.status, d.parent_record_id, d.intent_type, "
+    "d.owner, d.owner_role, d.depends_on, d.set_at, d.set_by "
     "FROM records r JOIN intent_details d ON d.intent_record_id = r.id "
     "WHERE r.id = %s"
 )
 
 _SELECT_INTENT_LIST = (
     "SELECT r.id, r.type, r.source, r.created_at, r.raw, r.content, r.metadata, "
-    "d.status, d.parent_record_id, d.intent_type, d.set_at, d.set_by "
+    "d.status, d.parent_record_id, d.intent_type, "
+    "d.owner, d.owner_role, d.depends_on, d.set_at, d.set_by "
     "FROM records r JOIN intent_details d ON d.intent_record_id = r.id"
 )
 
@@ -209,6 +268,9 @@ def _row_to_intent(row) -> dict:
         "status": d.get("status"),
         "parent_record_id": d.get("parent_record_id"),
         "intent_type": d.get("intent_type"),
+        "owner": d.get("owner"),
+        "owner_role": d.get("owner_role"),
+        "depends_on": list(d.get("depends_on") or []),
         "created_at": d.get("created_at"),
         "set_at": d.get("set_at"),
         "set_by": d.get("set_by"),
@@ -241,6 +303,41 @@ def _assert_parent_eligible(conn, parent_record_id: str) -> None:
         raise IntentError(
             f"parent intent {parent_record_id!r} is cancelled — un-cancel it before adding children"
         )
+
+
+def _assert_dependencies_exist(conn, deps: list[str]) -> None:
+    """Every referenced intent must exist (status not checked)."""
+    rows = conn.execute(
+        "SELECT intent_record_id FROM intent_details WHERE intent_record_id = ANY(%s)",
+        (deps,),
+    ).fetchall()
+    found = {r["intent_record_id"] for r in rows}
+    missing = [d for d in deps if d not in found]
+    if missing:
+        raise IntentError(f"dependency intents not found: {missing}")
+
+
+def _would_form_dep_cycle(conn, record_id: str, new_deps: list[str]) -> bool:
+    """Walk depends_on from each candidate dep. Cycle if record_id is reachable."""
+    for dep in new_deps:
+        if dep == record_id:
+            return True
+        stack: list[str] = [dep]
+        seen: set[str] = set()
+        while stack:
+            current = stack.pop()
+            if current == record_id:
+                return True
+            if current in seen:
+                continue
+            seen.add(current)
+            row = conn.execute(
+                "SELECT depends_on FROM intent_details WHERE intent_record_id = %s",
+                (current,),
+            ).fetchone()
+            if row:
+                stack.extend(row["depends_on"] or [])
+    return False
 
 
 def _would_form_cycle(conn, record_id: str, proposed_parent: str) -> bool:

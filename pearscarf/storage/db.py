@@ -246,14 +246,16 @@ UPDATE records
 SET metadata = jsonb_set(metadata, '{op_area}', '"reality"')
 WHERE metadata->>'op_area' = 'intention';
 
--- 1.36.0 intent sidecar. Holds mutable per-intent state (status, parent,
--- type, last-set audit) for records submitted as op_area='intent'. Records
--- themselves stay immutable.
+-- Intent sidecar. Holds mutable per-intent state for records submitted as
+-- op_area='intent'. Records themselves stay immutable.
 CREATE TABLE IF NOT EXISTS intent_details (
     intent_record_id TEXT PRIMARY KEY REFERENCES records(id),
     status TEXT NOT NULL DEFAULT 'todo',
     parent_record_id TEXT REFERENCES records(id),
     intent_type TEXT,
+    owner TEXT,
+    owner_role TEXT,
+    depends_on TEXT[] NOT NULL DEFAULT '{}',
     set_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     set_by TEXT
 );
@@ -261,6 +263,10 @@ CREATE TABLE IF NOT EXISTS intent_details (
 CREATE INDEX IF NOT EXISTS idx_intent_details_status ON intent_details(status);
 CREATE INDEX IF NOT EXISTS idx_intent_details_parent
     ON intent_details(parent_record_id) WHERE parent_record_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_intent_details_owner
+    ON intent_details(owner) WHERE owner IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_intent_details_owner_role
+    ON intent_details(owner_role) WHERE owner_role IS NOT NULL;
 """
 
 

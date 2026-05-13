@@ -69,6 +69,9 @@ class RecordsExpert:
         body: str,
         parent_record_id: str | None = None,
         intent_type: str | None = None,
+        owner: str | None = None,
+        owner_role: str | None = None,
+        depends_on: list[str] | None = None,
         set_by: str | None = None,
     ) -> str:
         """Submit an intent — record + sidecar row created atomically."""
@@ -78,6 +81,9 @@ class RecordsExpert:
             body=body,
             parent_record_id=parent_record_id,
             intent_type=intent_type,
+            owner=owner,
+            owner_role=owner_role,
+            depends_on=depends_on,
             set_by=set_by,
         )
 

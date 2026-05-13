@@ -37,6 +37,9 @@ Pass alongside the body via the MCP `submit_intent` tool:
 
 - **`parent_record_id`** *(optional)* — the intent id of a parent intent, making this a sub-intent. The intent must exist and have been submitted with op_area=intent. Null / omitted means top-level.
 - **`intent_type`** *(optional)* — freeform tag, e.g. `"milestone"`, `"task"`. There is no enum; the system does not interpret the value. Keep the vocabulary small in any given operation.
+- **`owner`** *(optional)* — specific agent identity that should pick up this intent (e.g. `"hex"`). The orchestrator uses this for routing.
+- **`owner_role`** *(optional)* — role tag describing the *function* the agent serves (e.g. `"head-eng"`, `"sre"`). Survives swapping individual agents; the orchestrator can match any agent in that role when `owner` is unset.
+- **`depends_on`** *(optional)* — list of other intent ids that must reach status `done` before this intent is eligible for dispatch. Forms a DAG. Cycles are rejected. Missing referent intents are rejected. Default: empty.
 - **`set_by`** *(optional)* — who's submitting (agent name, operator handle). Stored on the sidecar audit field; surfaced in `query_intents` and `get_intent`.
 
 ## What PearScarf does on receipt
