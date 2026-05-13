@@ -527,10 +527,15 @@ class Extraction(Consumer):
         record_type = record["type"]
         entity_id_map: dict[str, str] = {}
 
-        # Derive source_at from metadata
+        # Derive source_at from metadata. Records expert parses the body's
+        # `Date:` line into `metadata.source_at` at ingest, which is what we
+        # want here. Source-specific experts (gmailscarf / linearscarf) set
+        # their own per-source-type fields; the row's `created_at` is the
+        # last-resort fallback (insert time).
         metadata = record.get("metadata") or {}
         source_at = (
-            str(metadata.get("received_at", ""))
+            str(metadata.get("source_at", ""))
+            or str(metadata.get("received_at", ""))
             or str(metadata.get("linear_created_at", ""))
             or str(metadata.get("created_at", ""))
             or str(record.get("created_at", ""))

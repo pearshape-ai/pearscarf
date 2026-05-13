@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.36.2
+- Parse the body's `Date:` line at records-expert ingest into `metadata.source_at`, which extraction now reads first in its source_at fallback chain — so the body's timestamp drives `source_at` on every extracted fact instead of falling through to the records-row insert time. The format spec now recommends ISO 8601 datetime with timezone (e.g. `2026-05-12T14:33:51Z`); date-only `YYYY-MM-DD` is still accepted and treated as midnight UTC; naive datetimes (no timezone) are rejected at submit time so a zone is never silently guessed.
+
 ## 1.36.1
 - Add intent routing + dependencies. `intent_details` gains three columns: `owner` (specific agent identity, e.g. `hex`), `owner_role` (function tag, e.g. `head-eng`), and `depends_on TEXT[]` (DAG dependencies — every referenced intent must reach `status=done` before the dependent intent is eligible for dispatch). `submit_intent` and `query_intents` accept and surface these fields; three new MCP tools — `set_intent_owner`, `set_intent_owner_role`, `set_intent_dependencies` (cycle-checked, missing-referent-checked) — round out the mutation surface. The previous query-intents tool description was also corrected from `proposed` → `todo` (vocabulary drift since 1.36.0).
 
