@@ -626,14 +626,22 @@ def get_record_status(record_id: str) -> dict:
         "Body is free-form prose; the canonical shape lives at the "
         "`pearscarf://format/intent` resource. Optional `parent_record_id` "
         "(another intent_id) makes this a sub-intent. Optional `intent_type` "
-        "is a freeform tag (e.g. 'milestone', 'task'). Optional `set_by` is "
-        "the agent/operator submitting. Returns `{intent_id, status: 'todo'}`."
+        "is a freeform tag (e.g. 'milestone', 'task'). Optional `owner` pins "
+        "the intent to a specific agent identity (e.g. 'hex'); optional "
+        "`owner_role` tags it by function (e.g. 'head-eng') so an orchestrator "
+        "can match agents in that role. Optional `depends_on` is a list of "
+        "other intent ids that must reach status='done' before this one is "
+        "eligible for dispatch. Optional `set_by` is the agent/operator "
+        "submitting. Returns `{intent_id, status: 'todo'}`."
     )
 )
 def submit_intent(
     body: str,
     parent_record_id: str | None = None,
     intent_type: str | None = None,
+    owner: str | None = None,
+    owner_role: str | None = None,
+    depends_on: list[str] | None = None,
     set_by: str | None = None,
 ) -> dict:
     """Submit an intent record and create its initial sidecar state row."""
@@ -654,6 +662,9 @@ def submit_intent(
             body=body,
             parent_record_id=parent_record_id,
             intent_type=intent_type,
+            owner=owner,
+            owner_role=owner_role,
+            depends_on=depends_on,
             set_by=set_by,
         )
     except IntentError as exc:
@@ -664,16 +675,19 @@ def submit_intent(
 @mcp.tool(
     description=(
         "List intents matching filters. `status` matches sidecar status "
-        "(proposed / in_progress / done / cancelled). `parent` filters direct "
-        "children of a given intent id. `type` filters by intent_type. `since` "
-        "is an ISO timestamp on the intent's created_at. Returns body + state "
-        "per match, newest first."
+        "(todo / in_progress / done / cancelled). `parent` filters direct "
+        "children of a given intent id. `type` filters by intent_type. "
+        "`owner` filters by specific agent identity. `owner_role` filters by "
+        "the role tag (e.g. 'head-eng'). `since` is an ISO timestamp on the "
+        "intent's created_at. Returns body + state per match, newest first."
     )
 )
 def query_intents(
     status: str | None = None,
     parent: str | None = None,
     type: str | None = None,
+    owner: str | None = None,
+    owner_role: str | None = None,
     since: str | None = None,
     limit: int = 50,
 ) -> dict:
@@ -684,6 +698,8 @@ def query_intents(
         status=status,
         parent_record_id=parent,
         intent_type=type,
+        owner=owner,
+        owner_role=owner_role,
         since=since,
         limit=limit,
     )
@@ -782,6 +798,59 @@ def set_intent_type(id: str, intent_type: str | None, set_by: str | None = None)
     return {"intent_id": id, "intent_type": intent_type}
 
 
+@mcp.tool(
+    description=(
+        "Set or clear the intent's `owner` (specific agent identity, e.g. 'hex'). "
+        "Pass null to clear. `set_by` tags who made the change."
+    )
+)
+def set_intent_owner(id: str, owner: str | None, set_by: str | None = None) -> dict:
+    from pearscarf.storage import intents
+    from pearscarf.storage.intents import IntentError
+
+    try:
+        intents.set_intent_owner(id, owner, set_by)
+    except IntentError as exc:
+        return {"error": "INVALID_INTENT", "message": str(exc)}
+    return {"intent_id": id, "owner": owner}
+
+
+@mcp.tool(
+    description=(
+        "Set or clear the intent's `owner_role` (function tag, e.g. 'head-eng'). "
+        "Pass null to clear. `set_by` tags who made the change."
+    )
+)
+def set_intent_owner_role(id: str, owner_role: str | None, set_by: str | None = None) -> dict:
+    from pearscarf.storage import intents
+    from pearscarf.storage.intents import IntentError
+
+    try:
+        intents.set_intent_owner_role(id, owner_role, set_by)
+    except IntentError as exc:
+        return {"error": "INVALID_INTENT", "message": str(exc)}
+    return {"intent_id": id, "owner_role": owner_role}
+
+
+@mcp.tool(
+    description=(
+        "Replace the intent's `depends_on` array — the list of intent ids that "
+        "must reach status='done' before this intent is eligible for dispatch. "
+        "Pass `[]` to clear all deps. Rejects missing referent intents and "
+        "cycles. `set_by` tags who made the change."
+    )
+)
+def set_intent_dependencies(id: str, depends_on: list[str], set_by: str | None = None) -> dict:
+    from pearscarf.storage import intents
+    from pearscarf.storage.intents import IntentError
+
+    try:
+        intents.set_intent_dependencies(id, depends_on, set_by)
+    except IntentError as exc:
+        return {"error": "INVALID_INTENT", "message": str(exc)}
+    return {"intent_id": id, "depends_on": depends_on}
+
+
 def _normalize_intent(intent: dict) -> dict:
     """Shape an intent record for MCP responses — ISO timestamps + stable keys."""
     return {
@@ -790,6 +859,9 @@ def _normalize_intent(intent: dict) -> dict:
         "status": intent.get("status"),
         "parent_record_id": intent.get("parent_record_id"),
         "intent_type": intent.get("intent_type"),
+        "owner": intent.get("owner"),
+        "owner_role": intent.get("owner_role"),
+        "depends_on": list(intent.get("depends_on") or []),
         "source": intent.get("source") or "",
         "created_at": _iso(intent.get("created_at")),
         "set_at": _iso(intent.get("set_at")),

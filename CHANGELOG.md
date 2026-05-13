@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.36.1
+- Add intent routing + dependencies. `intent_details` gains three columns: `owner` (specific agent identity, e.g. `hex`), `owner_role` (function tag, e.g. `head-eng`), and `depends_on TEXT[]` (DAG dependencies — every referenced intent must reach `status=done` before the dependent intent is eligible for dispatch). `submit_intent` and `query_intents` accept and surface these fields; three new MCP tools — `set_intent_owner`, `set_intent_owner_role`, `set_intent_dependencies` (cycle-checked, missing-referent-checked) — round out the mutation surface. The previous query-intents tool description was also corrected from `proposed` → `todo` (vocabulary drift since 1.36.0).
+
 ## 1.36.0
 - Add an intent submission surface. Records with `op_area="intent"` skip the graph and live alongside a new `intent_details` sidecar (status / parent_record_id / intent_type / audit). Seven MCP tools cover the surface — `submit_intent`, `query_intents`, `get_intent`, `get_intent_tree`, `set_intent_status`, `set_intent_parent` (cycle-checked), `set_intent_type`. Body conventions are served at `pearscarf://format/intent`. `submit_record` becomes reality-only; intents must go through `submit_intent` so the sidecar row is created atomically with the records row.
 

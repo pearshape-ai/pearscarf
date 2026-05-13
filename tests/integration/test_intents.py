@@ -160,3 +160,98 @@ def test_set_intent_parent_rejects_cancelled_parent(clean_db) -> None:
     intents.set_intent_status(b, "cancelled")
     with pytest.raises(IntentError, match="cancelled"):
         intents.set_intent_parent(a, b)
+
+
+# --- 1.36.1: owner / owner_role / depends_on ---
+
+
+def test_submit_intent_stores_owner_and_role(clean_db) -> None:
+    iid = intents.submit_intent(body="x", owner="hex", owner_role="head-eng")
+    got = intents.get_intent(iid)
+    assert got["owner"] == "hex"
+    assert got["owner_role"] == "head-eng"
+
+
+def test_submit_intent_stores_depends_on(clean_db) -> None:
+    a = intents.submit_intent(body="a")
+    b = intents.submit_intent(body="b")
+    c = intents.submit_intent(body="c", depends_on=[a, b])
+    got = intents.get_intent(c)
+    assert sorted(got["depends_on"]) == sorted([a, b])
+
+
+def test_submit_intent_rejects_missing_dependency(clean_db) -> None:
+    with pytest.raises(IntentError, match="dependency intents not found"):
+        intents.submit_intent(body="x", depends_on=["intent_nope"])
+
+
+def test_submit_intent_default_depends_on_is_empty(clean_db) -> None:
+    iid = intents.submit_intent(body="x")
+    got = intents.get_intent(iid)
+    assert got["depends_on"] == []
+
+
+def test_set_intent_owner_updates_sidecar(clean_db) -> None:
+    iid = intents.submit_intent(body="x")
+    intents.set_intent_owner(iid, "hex", set_by="operator")
+    assert intents.get_intent(iid)["owner"] == "hex"
+    intents.set_intent_owner(iid, None, set_by="operator")
+    assert intents.get_intent(iid)["owner"] is None
+
+
+def test_set_intent_owner_role_updates_sidecar(clean_db) -> None:
+    iid = intents.submit_intent(body="x")
+    intents.set_intent_owner_role(iid, "head-eng", set_by="operator")
+    assert intents.get_intent(iid)["owner_role"] == "head-eng"
+
+
+def test_set_intent_dependencies_replaces_list(clean_db) -> None:
+    a = intents.submit_intent(body="a")
+    b = intents.submit_intent(body="b")
+    target = intents.submit_intent(body="target")
+
+    intents.set_intent_dependencies(target, [a], set_by="operator")
+    assert intents.get_intent(target)["depends_on"] == [a]
+
+    intents.set_intent_dependencies(target, [a, b], set_by="operator")
+    assert sorted(intents.get_intent(target)["depends_on"]) == sorted([a, b])
+
+    intents.set_intent_dependencies(target, [], set_by="operator")
+    assert intents.get_intent(target)["depends_on"] == []
+
+
+def test_set_intent_dependencies_rejects_cycle(clean_db) -> None:
+    """a → b → c → a would cycle on dispatch."""
+    a = intents.submit_intent(body="a")
+    b = intents.submit_intent(body="b")
+    c = intents.submit_intent(body="c")
+    intents.set_intent_dependencies(b, [a])
+    intents.set_intent_dependencies(c, [b])
+    with pytest.raises(IntentError, match="cycle"):
+        intents.set_intent_dependencies(a, [c])
+
+
+def test_set_intent_dependencies_rejects_missing(clean_db) -> None:
+    a = intents.submit_intent(body="a")
+    with pytest.raises(IntentError, match="dependency intents not found"):
+        intents.set_intent_dependencies(a, ["intent_nope"])
+
+
+def test_query_intents_filters_by_owner(clean_db) -> None:
+    a = intents.submit_intent(body="a", owner="hex")
+    b = intents.submit_intent(body="b", owner="anton")
+    c = intents.submit_intent(body="c", owner="hex")
+
+    hex_intents = intents.query_intents(owner="hex")
+    assert {i["id"] for i in hex_intents} == {a, c}
+    anton_intents = intents.query_intents(owner="anton")
+    assert {i["id"] for i in anton_intents} == {b}
+
+
+def test_query_intents_filters_by_owner_role(clean_db) -> None:
+    e1 = intents.submit_intent(body="x", owner_role="head-eng")
+    intents.submit_intent(body="y", owner_role="sre")
+    e2 = intents.submit_intent(body="z", owner_role="head-eng")
+
+    eng = intents.query_intents(owner_role="head-eng")
+    assert {i["id"] for i in eng} == {e1, e2}
