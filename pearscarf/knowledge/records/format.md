@@ -45,7 +45,7 @@ Every record's content is markdown with this exact top-to-bottom structure (the 
 Title: <single-line title — what this record captures>
 
 Id: <unique record identifier — stable across moves; e.g. 20260501-tagline-decision>
-Date: <YYYY-MM-DD; the source-event date>
+Date: <ISO 8601 datetime with timezone, e.g. 2026-05-12T14:33:51Z>
 
 <Anchor line — convention varies by scope; comms records use "Shipped in pearscarf X.Y.Z."; design records use a doc-reference like "Designed in lab/design/...".>
 
@@ -62,7 +62,7 @@ Date: <YYYY-MM-DD; the source-event date>
 
 - **`Title`** — single-line, plain text. The record's headline.
 - **`Id`** — unique, stable identifier. Same `Id` submitted again is the same record (PearScarf dedups on this). Format is your choice; date-prefixed slugs work well (e.g. `20260501-tagline-decision`).
-- **`Date`** — `YYYY-MM-DD`. The source-event date. Becomes `source_at` on every fact extracted from this record.
+- **`Date`** — ISO 8601 datetime with explicit timezone (`2026-05-12T14:33:51Z` or `2026-05-12T07:33:51-07:00`). The source-event time. Becomes `source_at` on every fact extracted from this record — curation orders facts by this value, so include the time, not just the day, to disambiguate same-day records. Date-only `YYYY-MM-DD` is still accepted and is treated as `T00:00:00Z`, but the typed value gives the curator finer ordering. Naive datetimes (no `Z` or offset) are rejected at submit time.
 - **Anchor line** — a short scope-specific anchor immediately under `Date`. Comms records typically use *"Shipped in pearscarf X.Y.Z."*; design records use *"Designed in <path>."*. Conventions are by scope, not by format.
 - **`## For humans`** — brief narrative. Discipline below.
 - **`## For agents`** — a YAML list under the key `facts:`. Each entry is a plain-language sentence stating one graph fact. Discipline below.
@@ -127,7 +127,7 @@ No exceptions for "small" records, "draft" records, or "I'll commit it at end-of
 1. Parses the record's body — title, id, date, anchor, sections.
 2. Validates required fields are present.
 3. For each entry under `facts:`, picks an edge label and fact_type, finds-or-creates the subject entity, and writes the fact edge to the graph.
-4. Sets `source_at` from `Date`, `recorded_at` to now, `source_record` to the record id, and `source_url` from the submit's `url`.
+4. Sets `source_at` from the body's `Date:` value (parsed at ingest into `metadata.source_at`), `recorded_at` to now, `source_record` to the record id, and `source_url` from the submit's `url`.
 5. Returns `{record_id, status: "queued"}` to the client. Use `get_record_status(record_id)` to check when extraction completes.
 
 ## Examples
@@ -138,7 +138,7 @@ No exceptions for "small" records, "draft" records, or "I'll commit it at end-of
 Title: Lock PearScarf tagline as "Shared operational brain for teams of AI coworkers"
 
 Id: 20260501-tagline-decision
-Date: 2026-05-01
+Date: 2026-05-01T15:30:00Z
 
 Shipped in pearscarf 1.28.11.
 
@@ -165,7 +165,7 @@ Submit-time: `url: "https://github.com/.../20260501-tagline-decision.md"`, `op_a
 Title: Curator now does LLM-judged supersession
 
 Id: 20260510-curator-llm-judge
-Date: 2026-05-10
+Date: 2026-05-10T18:42:00Z
 
 Shipped in pearscarf 1.32.0.
 

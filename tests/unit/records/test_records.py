@@ -96,7 +96,11 @@ def test_valid_input_calls_storage_with_correct_args() -> None:
         record_type="record",
         raw=VALID_BODY,
         content=VALID_BODY,
-        metadata={"op_area": "reality", "source_url": "https://example.com/x"},
+        metadata={
+            "op_area": "reality",
+            "source_url": "https://example.com/x",
+            "source_at": "2026-05-10T00:00:00+00:00",
+        },
         dedup_key="test-record-20260510",
     )
 
@@ -106,3 +110,44 @@ def test_ingest_rejects_intent_op_area() -> None:
     expert, _ = _expert_with_mock_storage()
     with pytest.raises(RecordSubmissionError, match="submit_intent"):
         expert.ingest(VALID_BODY, "https://example.com/x", "intent")
+
+
+# ---- Date parsing ----
+
+
+def _body_with_date(date_value: str) -> str:
+    return VALID_BODY.replace("Date: 2026-05-10", f"Date: {date_value}")
+
+
+def test_date_with_utc_z_is_parsed_with_time() -> None:
+    expert, save_record = _expert_with_mock_storage()
+    expert.ingest(_body_with_date("2026-05-12T14:33:51Z"), "https://x", "reality")
+    metadata = save_record.call_args.kwargs["metadata"]
+    assert metadata["source_at"] == "2026-05-12T14:33:51+00:00"
+
+
+def test_date_with_offset_is_preserved() -> None:
+    expert, save_record = _expert_with_mock_storage()
+    expert.ingest(_body_with_date("2026-05-12T07:33:51-07:00"), "https://x", "reality")
+    metadata = save_record.call_args.kwargs["metadata"]
+    # The offset stays — Postgres will canonicalize at insert.
+    assert metadata["source_at"] == "2026-05-12T07:33:51-07:00"
+
+
+def test_date_only_becomes_midnight_utc() -> None:
+    expert, save_record = _expert_with_mock_storage()
+    expert.ingest(_body_with_date("2026-05-12"), "https://x", "reality")
+    metadata = save_record.call_args.kwargs["metadata"]
+    assert metadata["source_at"] == "2026-05-12T00:00:00+00:00"
+
+
+def test_naive_datetime_rejected() -> None:
+    expert, _ = _expert_with_mock_storage()
+    with pytest.raises(RecordSubmissionError, match="must include a timezone"):
+        expert.ingest(_body_with_date("2026-05-12T14:33:51"), "https://x", "reality")
+
+
+def test_garbage_date_rejected() -> None:
+    expert, _ = _expert_with_mock_storage()
+    with pytest.raises(RecordSubmissionError, match="not a valid ISO 8601"):
+        expert.ingest(_body_with_date("yesterday afternoon"), "https://x", "reality")

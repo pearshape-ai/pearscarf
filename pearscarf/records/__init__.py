@@ -8,6 +8,7 @@ its record_type so the MCP server can retrieve it via `get_connect`.
 from __future__ import annotations
 
 import re
+from datetime import UTC, date, datetime, time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,11 +17,41 @@ if TYPE_CHECKING:
 VALID_OP_AREAS = ("reality",)
 
 _ID_RE = re.compile(r"^Id:\s*(\S.+?)\s*$", re.MULTILINE)
-_DATE_RE = re.compile(r"^Date:\s*\S", re.MULTILINE)
+_DATE_RE = re.compile(r"^Date:\s*(\S.+?)\s*$", re.MULTILINE)
 
 
 class RecordSubmissionError(ValueError):
     """Raised when a submission fails the at-the-door guards."""
+
+
+def _parse_record_date(raw: str) -> datetime:
+    """Parse the body's `Date:` value into a timezone-aware datetime.
+
+    Accepts any ISO 8601 form Python 3.12's `datetime.fromisoformat` handles
+    — full datetime (`2026-05-12T14:33:51Z`, `2026-05-12T14:33:51-07:00`,
+    `2026-05-12 14:33:51+00:00`), or date-only (`2026-05-12`, treated as
+    midnight UTC). Datetimes with a time portion but no timezone are
+    rejected so we never silently guess a zone.
+    """
+    raw = raw.strip()
+    # Date-only path first — `date.fromisoformat` is strict on `YYYY-MM-DD`
+    # and rejects anything with a time component, so a hit here is unambiguous.
+    try:
+        parsed_date = date.fromisoformat(raw)
+        return datetime.combine(parsed_date, time(0, 0), tzinfo=UTC)
+    except ValueError:
+        pass
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise RecordSubmissionError(
+            f"`Date:` is not a valid ISO 8601 date/datetime: {raw!r}"
+        ) from exc
+    if parsed.tzinfo is None:
+        raise RecordSubmissionError(
+            f"`Date:` must include a timezone (e.g. trailing 'Z' or '+00:00'): {raw!r}"
+        )
+    return parsed
 
 
 class RecordsExpert:
@@ -39,6 +70,10 @@ class RecordsExpert:
 
         Reality records only. Intents go through `ingest_intent` so the
         sidecar state row is created atomically with the records row.
+
+        The body's `Date:` line is parsed into `metadata.source_at` (ISO
+        timestamp string) so extraction can thread it through onto every
+        extracted fact, instead of falling back to the row's insert time.
         """
         if not body or not body.strip():
             raise RecordSubmissionError("body is empty")
@@ -53,14 +88,21 @@ class RecordsExpert:
         id_match = _ID_RE.search(body)
         if id_match is None:
             raise RecordSubmissionError("body missing required `Id:` line")
-        if _DATE_RE.search(body) is None:
+        date_match = _DATE_RE.search(body)
+        if date_match is None:
             raise RecordSubmissionError("body missing required `Date:` line")
+
+        source_at = _parse_record_date(date_match.group(1))
 
         return self._ctx.storage.save_record(
             record_type=self.RECORD_TYPE,
             raw=body,
             content=body,
-            metadata={"op_area": op_area, "source_url": url},
+            metadata={
+                "op_area": op_area,
+                "source_url": url,
+                "source_at": source_at.isoformat(),
+            },
             dedup_key=id_match.group(1).strip(),
         )
 

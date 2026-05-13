@@ -44,7 +44,7 @@ For each entry under `facts:`:
    - Otherwise, the target is the Day node anchored to the record's `Date`.
 5. **Set the fact_text.** Use the sentence as written. Don't paraphrase — the author committed to specific phrasing for a reason. Quote phrases, version numbers, and proper names exactly.
 6. **Set provenance.**
-   - `source_at` = record's `Date` (already on the record's metadata).
+   - `source_at` = the record's body `Date:` value, parsed at ingest into `metadata.source_at` (ISO 8601 datetime, timezone-aware). Same value for every fact extracted from one record.
    - `source_record` = record id.
    - `source_url` = record's `source_url` metadata (from the submit URL).
 
