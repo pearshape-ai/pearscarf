@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.36.3
+- Add `__url__` module attribute pointing to the canonical GitHub repo (`https://github.com/pearshape-ai/pearscarf`) for external introspection tooling.
+
 ## 1.36.2
 - Parse the body's `Date:` line at records-expert ingest into `metadata.source_at`, which extraction now reads first in its source_at fallback chain — so the body's timestamp drives `source_at` on every extracted fact instead of falling through to the records-row insert time. The format spec now recommends ISO 8601 datetime with timezone (e.g. `2026-05-12T14:33:51Z`); date-only `YYYY-MM-DD` is still accepted and treated as midnight UTC; naive datetimes (no timezone) are rejected at submit time so a zone is never silently guessed.
 

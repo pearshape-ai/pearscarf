@@ -1,4 +1,7 @@
-__version__ = "1.36.2"
+__version__ = "1.36.3"
+__url__ = "https://github.com/pearshape-ai/pearscarf"
+
+__all__ = ["__version__", "__url__"]
 
 # Make installed expert packages importable from the experts/ folder.
 # Temporary — replaced by the registry-driven discovery in a follow-up.
