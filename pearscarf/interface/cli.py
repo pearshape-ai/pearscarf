@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 import click
 
-from pearscarf import __version__
+from pearscarf import __url__, __version__
 
 # Reset terminal to sane mode immediately on import.
 # This fixes stale raw mode left by a previous crashed session.
@@ -31,6 +32,20 @@ def _print_version(ctx: click.Context, _param: click.Parameter, value: bool) -> 
 )
 def cli() -> None:
     """pearscarf: Operational infrastructure that grows itself."""
+
+
+@cli.command()
+def info() -> None:
+    """Show installed pearscarf metadata."""
+    import pearscarf
+
+    install_path = Path(pearscarf.__file__).parent.parent.resolve()
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+    click.echo(f"version: {__version__}")
+    click.echo(f"url: {__url__}")
+    click.echo(f"python: {python_version}")
+    click.echo(f"install_path: {install_path}")
 
 
 @cli.command()

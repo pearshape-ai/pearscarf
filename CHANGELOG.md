@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.36.4
+- Add `psc info` CLI subcommand — prints version, GitHub URL, Python version, and install path for quick introspection.
+
 ## 1.36.3
 - Add `__url__` module attribute pointing to the canonical GitHub repo (`https://github.com/pearshape-ai/pearscarf`) for external introspection tooling.
 
