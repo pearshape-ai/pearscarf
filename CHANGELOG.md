@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.37.0
+- Add `install.sh` — a one-command installer that clones the source (or downloads a tarball if `git` isn't available), generates a local `.env` with auto-random DB passwords, and runs `docker compose up -d --build` to bring up postgres + neo4j + qdrant + pearscarf locally. Build-from-source rather than pull-from-registry: no public Docker image to maintain. After health passes, runs a real `get_schema` MCP tool call from inside the container to confirm the MCP layer is genuinely serving — not just that HTTP is alive. Pearscarf MCP stays on the standard `8090`; the installer hard-checks that port at startup and shifts internal-service host ports (postgres, neo4j, qdrant, pgadmin) into the non-standard `3xxxx` range to avoid collisions with locally-running services. Pre-reqs: Docker daemon running, Anthropic + OpenAI API keys collected at install time.
+- Add `uninstall.sh` — companion script that stops + removes all pearscarf containers, deletes their volumes (wiping data), removes the locally-built image, and deletes the install directory. Auto-detects the install when run from inside it; prompts for the path otherwise. Requires typing `wipe` to confirm — destructive, no undo.
+
 ## 1.36.4
 - Add `psc info` CLI subcommand — prints version, GitHub URL, Python version, and install path for quick introspection.
 

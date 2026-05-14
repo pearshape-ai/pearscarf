@@ -53,17 +53,29 @@ experts/gmailscarf/
     └── extraction.md      # source-specific extraction guidance
 ```
 
-## Run via Docker
+## Install
 
-Fastest path from zero to running — full stack in containers:
+One-command install — clones the source, generates a local `.env` with auto-random DB passwords, builds the image, and brings the stack up:
 
 ```bash
-# Fill in env/.env at minimum: ANTHROPIC_API_KEY, POSTGRES_PASSWORD, NEO4J_PASSWORD, DISCORD_BOT_TOKEN
+bash <(curl -fsSL https://raw.githubusercontent.com/pearshape-ai/pearscarf/main/install.sh)
+```
+
+You'll be asked for an Anthropic API key (for extraction) and an OpenAI API key (for embeddings); the installer auto-generates the DB passwords. Pre-req: Docker daemon running. On success, the MCP URL prints to stdout — paste it into [claude-workforce](https://github.com/pearshape-ai/claude-workforce)'s installer to bring up an AI workforce against this PearScarf.
+
+**To uninstall:** `cd` into the install directory and `bash uninstall.sh` (or run the same curl one-liner pattern with `uninstall.sh`). Destructive — stops containers, wipes data + the install directory entirely.
+
+## Run via Docker (manual)
+
+For finer control — full stack in containers, you author the `.env` yourself:
+
+```bash
+# Fill in env/.env at minimum: ANTHROPIC_API_KEY, OPENAI_API_KEY, POSTGRES_PASSWORD, NEO4J_PASSWORD
 docker compose up -d
 docker compose logs -f pearscarf
 ```
 
-This brings up Postgres, Qdrant, Neo4j, and the pearscarf app container running `psc dev --poll` — auto-installs the shipped experts and exposes the MCP server on port 8090.
+This brings up Postgres, Qdrant, Neo4j, and the pearscarf app container — auto-installs the shipped experts and exposes the MCP server on port 8090.
 
 ## Quick start (local dev)
 
