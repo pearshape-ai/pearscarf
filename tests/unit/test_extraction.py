@@ -213,3 +213,97 @@ def test_debug_write_writes_when_debug_dir_set(tmp_path, monkeypatch: pytest.Mon
     monkeypatch.setattr(ext, "_debug_folder_name", lambda rid: "folder")
     ext._debug_write("rec_1", "agent.md", "hello")
     assert (tmp_path / "folder" / "agent.md").read_text() == "hello"
+
+
+# ---- _commit_extraction: source_at threading ----
+
+
+def test_commit_extraction_uses_metadata_source_at(monkeypatch: pytest.MonkeyPatch) -> None:
+    """metadata.source_at flows through to graph.create_fact_edge as source_at."""
+    # Track what source_at value is passed to create_fact_edge
+    captured_source_at = {"value": None}
+
+    def mock_create_fact_edge(*args, **kwargs):
+        captured_source_at["value"] = kwargs.get("source_at")
+
+    # Mock graph functions
+    monkeypatch.setattr("pearscarf.extraction.graph.find_exact_dup_edge", lambda *a, **k: None)
+    monkeypatch.setattr("pearscarf.extraction.graph.create_fact_edge", mock_create_fact_edge)
+    monkeypatch.setattr("pearscarf.extraction.graph.get_or_create_day", lambda d: "day_123")
+    monkeypatch.setattr("pearscarf.extraction.graph.utc_to_local_date", lambda dt: "2026-05-14")
+
+    # Mock _commit_entities to return a simple entity_id_map
+    def mock_commit_entities(self, record, extraction):
+        return {"Alice": "ent_alice"}
+
+    monkeypatch.setattr(Extraction, "_commit_entities", mock_commit_entities)
+
+    record = {
+        "id": "rec_1",
+        "type": "record",
+        "metadata": {"source_at": "2026-05-14T10:00:00Z"},
+        "created_at": "2026-05-14T12:00:00Z",
+    }
+    extraction = _ext(
+        entities=[{"name": "Alice", "type": "person", "resolved_to": "new"}],
+        facts=[
+            {
+                "edge_label": "AFFILIATED",
+                "fact_type": "employee",
+                "fact": "Alice works at Acme.",
+                "from_entity": "Alice",
+                "to_entity": None,
+                "confidence": "stated",
+            }
+        ],
+    )
+
+    Extraction()._commit_extraction(record, extraction)
+
+    # Assert: source_at passed to create_fact_edge should be metadata.source_at
+    assert captured_source_at["value"] == "2026-05-14T10:00:00Z"
+
+
+def test_commit_extraction_falls_back_to_created_at_when_metadata_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When metadata.source_at is absent, fallback chain uses record.created_at."""
+    captured_source_at = {"value": None}
+
+    def mock_create_fact_edge(*args, **kwargs):
+        captured_source_at["value"] = kwargs.get("source_at")
+
+    monkeypatch.setattr("pearscarf.extraction.graph.find_exact_dup_edge", lambda *a, **k: None)
+    monkeypatch.setattr("pearscarf.extraction.graph.create_fact_edge", mock_create_fact_edge)
+    monkeypatch.setattr("pearscarf.extraction.graph.get_or_create_day", lambda d: "day_123")
+    monkeypatch.setattr("pearscarf.extraction.graph.utc_to_local_date", lambda dt: "2026-05-14")
+
+    def mock_commit_entities(self, record, extraction):
+        return {"Alice": "ent_alice"}
+
+    monkeypatch.setattr(Extraction, "_commit_entities", mock_commit_entities)
+
+    record = {
+        "id": "rec_2",
+        "type": "record",
+        "metadata": {},  # No source_at here
+        "created_at": "2026-05-14T12:00:00Z",
+    }
+    extraction = _ext(
+        entities=[{"name": "Alice", "type": "person", "resolved_to": "new"}],
+        facts=[
+            {
+                "edge_label": "AFFILIATED",
+                "fact_type": "employee",
+                "fact": "Alice works at Acme.",
+                "from_entity": "Alice",
+                "to_entity": None,
+                "confidence": "stated",
+            }
+        ],
+    )
+
+    Extraction()._commit_extraction(record, extraction)
+
+    # Assert: source_at should fall back to record.created_at
+    assert captured_source_at["value"] == "2026-05-14T12:00:00Z"
