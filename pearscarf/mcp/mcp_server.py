@@ -30,7 +30,7 @@ from datetime import datetime
 
 from fastmcp import FastMCP
 
-from pearscarf.config import MCP_HOST, MCP_PORT
+from pearscarf.config import MCP_HOST, MCP_HTTP_PORT, MCP_PORT
 from pearscarf.query import context_query
 from pearscarf.storage import graph, vectorstore
 from pearscarf.storage.db import _get_conn, init_db
@@ -929,34 +929,51 @@ def intent_format_spec() -> str:
 
 
 class MCPServer:
-    """Background thread running the FastMCP server."""
+    """Background thread running the FastMCP server with dual transports (SSE + HTTP)."""
 
     def __init__(self) -> None:
-        self._thread: threading.Thread | None = None
+        self._sse_thread: threading.Thread | None = None
+        self._http_thread: threading.Thread | None = None
 
-    def _run(self) -> None:
+    def _run_sse(self) -> None:
         init_db()
         mcp.run(
             transport="sse",
             host=MCP_HOST,
             port=MCP_PORT,
+        )
+
+    def _run_http(self) -> None:
+        init_db()
+        mcp.run(
+            transport="streamable-http",
+            host=MCP_HOST,
+            port=MCP_HTTP_PORT,
         )
 
     def start(self) -> None:
-        """Start MCP server in a background daemon thread."""
-        self._thread = threading.Thread(target=self._run, name="mcp-server", daemon=True)
-        self._thread.start()
+        """Start both SSE and HTTP MCP servers in background daemon threads."""
+        self._sse_thread = threading.Thread(
+            target=self._run_sse, name="mcp-server-sse", daemon=True
+        )
+        self._http_thread = threading.Thread(
+            target=self._run_http, name="mcp-server-http", daemon=True
+        )
+        self._sse_thread.start()
+        self._http_thread.start()
 
     def stop(self) -> None:
-        # FastMCP doesn't expose a clean shutdown — daemon thread dies with process
+        # FastMCP doesn't expose a clean shutdown — daemon threads die with process
         pass
 
     def run_foreground(self) -> None:
-        """Run MCP server in the foreground (blocking)."""
+        """Run both MCP servers in the foreground (blocking) — HTTP in main thread, SSE in background."""
         init_db()
-        print(f"MCP server starting on {MCP_HOST}:{MCP_PORT}")
-        mcp.run(
-            transport="sse",
-            host=MCP_HOST,
-            port=MCP_PORT,
+        print(
+            f"MCP server starting on {MCP_HOST}:{MCP_PORT} (SSE) and {MCP_HOST}:{MCP_HTTP_PORT} (HTTP)"
         )
+        # Start SSE in background thread
+        sse_thread = threading.Thread(target=self._run_sse, name="mcp-server-sse", daemon=False)
+        sse_thread.start()
+        # Run HTTP in main thread (blocking)
+        self._run_http()

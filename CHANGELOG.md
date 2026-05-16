@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.38.0
+- Add streamable HTTP transport for the MCP server mounted alongside the existing SSE transport — MCP now serves on both port 8090 (SSE, legacy) and port 8091 (HTTP, recommended going forward). Streamable HTTP eliminates the session-coupled-to-stream fragility that caused reconnect failures in long-lived clients; new consumers should point at the HTTP URL. `install.sh` now checks both ports at pre-flight, generates `MCP_HTTP_PORT=8091` in `.env`, and validates the HTTP transport post-deploy. Both transports remain active during the transition; SSE will be deprecated in a future release after all consumers migrate.
+
 ## 1.37.1
 - Add regression test for body-Date → fact source_at threading. New unit tests in `test_extraction.py` assert that `_commit_extraction` passes `metadata.source_at` to `graph.create_fact_edge` when present, and falls back to `record.created_at` when absent — locking in the fallback chain so a stale-image build can't silently resurrect the bug where extracted facts carried `recorded_at` instead of the body's timestamp.
 

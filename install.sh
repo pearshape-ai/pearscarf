@@ -103,11 +103,17 @@ ok "Docker daemon: running"
 
 if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:8090 -sTCP:LISTEN >/dev/null 2>&1; then
     fail "port 8090 is already in use"
-    info "PearScarf MCP needs that port. Free it (or stop the conflicting service) and re-run."
+    info "PearScarf MCP SSE needs that port. Free it (or stop the conflicting service) and re-run."
     info "Inspect with: lsof -nP -iTCP:8090 -sTCP:LISTEN"
     exit 1
 fi
-ok "Port 8090 (MCP): free"
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:8091 -sTCP:LISTEN >/dev/null 2>&1; then
+    fail "port 8091 is already in use"
+    info "PearScarf MCP HTTP needs that port. Free it (or stop the conflicting service) and re-run."
+    info "Inspect with: lsof -nP -iTCP:8091 -sTCP:LISTEN"
+    exit 1
+fi
+ok "Ports 8090 (SSE) + 8091 (HTTP): free"
 
 # ---- step 2/7: inputs ------------------------------------------------------
 
@@ -168,11 +174,12 @@ OPENAI_API_KEY=$openai_key
 POSTGRES_PASSWORD=$postgres_password
 NEO4J_PASSWORD=$neo4j_password
 
-# Host port mappings. Pearscarf MCP stays on standard 8090 (the only port
-# external consumers — like claude-workforce — need to reach). Internal
-# services are shifted into the high-3xxxx range so they almost never
-# conflict with locally-running postgres / neo4j / qdrant / pgadmin.
+# Host port mappings. Pearscarf MCP exposes two transports: SSE on 8090
+# (legacy), HTTP on 8091 (recommended). Internal services are shifted into
+# the high-3xxxx range so they almost never conflict with locally-running
+# postgres / neo4j / qdrant / pgadmin.
 MCP_PORT=8090
+MCP_HTTP_PORT=8091
 POSTGRES_PORT=35432
 QDRANT_HTTP_PORT=36333
 QDRANT_GRPC_PORT=36334
@@ -182,7 +189,7 @@ PGADMIN_PORT=35050
 EOF
 chmod 600 "$install_path/.env"
 ok "Wrote $install_path/.env (chmod 600)"
-field "MCP port:" "8090"
+field "MCP ports:" "8090 (SSE), 8091 (HTTP)"
 field "Internal ports:" "35432 (postgres), 36333/36334 (qdrant), 37474/37687 (neo4j), 35050 (pgadmin)"
 
 # ---- step 5/7: build + start ----------------------------------------------
@@ -215,14 +222,14 @@ for i in $(seq 1 60); do
     sleep 1
 done
 
-# (b) Real MCP tool call from inside the container
+# (b) Real MCP tool call from inside the container (using HTTP transport)
 if (cd "$install_path" && docker compose exec -T pearscarf python - <<'PYEOF' >/dev/null 2>&1
 import asyncio
 from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamable_http_client
 
 async def main():
-    async with sse_client("http://localhost:8090/sse") as streams:
+    async with streamable_http_client("http://localhost:8091/mcp") as streams:
         async with ClientSession(*streams) as session:
             await session.initialize()
             await session.call_tool("get_schema", {})
@@ -230,7 +237,7 @@ async def main():
 asyncio.run(asyncio.wait_for(main(), timeout=15))
 PYEOF
 ); then
-    ok "MCP probe (get_schema): responded"
+    ok "MCP probe (get_schema via HTTP): responded"
 else
     fail "MCP did not respond to a get_schema call within 15s."
     info "Health passed but the MCP layer may not be fully ready."
@@ -243,9 +250,10 @@ fi
 step 7 "Done"
 
 printf "\n  ${CYAN}${BOLD}╭──────────────────────────────────────────────────╮${RESET}\n"
-printf "  ${CYAN}${BOLD}│  PearScarf MCP URL                               │${RESET}\n"
+printf "  ${CYAN}${BOLD}│  PearScarf MCP URLs                              │${RESET}\n"
 printf "  ${CYAN}${BOLD}│${RESET}                                                  ${CYAN}${BOLD}│${RESET}\n"
-printf "  ${CYAN}${BOLD}│${RESET}    ${BOLD}http://localhost:8090/sse${RESET}                     ${CYAN}${BOLD}│${RESET}\n"
+printf "  ${CYAN}${BOLD}│${RESET}    ${BOLD}http://localhost:8091/mcp${RESET} (HTTP, recommended) ${CYAN}${BOLD}│${RESET}\n"
+printf "  ${CYAN}${BOLD}│${RESET}    ${BOLD}http://localhost:8090/sse${RESET} (SSE, legacy)       ${CYAN}${BOLD}│${RESET}\n"
 printf "  ${CYAN}${BOLD}╰──────────────────────────────────────────────────╯${RESET}\n\n"
 
 printf "  ${BOLD}Next:${RESET}\n"

@@ -274,3 +274,29 @@ def test_get_record_status_stage_mapping(
     monkeypatch.setattr("pearscarf.storage.store.get_record", lambda rid: record)
     out = mcp_server.get_record_status("r1")
     assert out["stage"] == expected_stage
+
+
+# ---- MCPServer dual-transport ----
+
+
+def test_mcp_server_dual_transport_instantiates() -> None:
+    server = mcp_server.MCPServer()
+    assert server._sse_thread is None
+    assert server._http_thread is None
+
+
+def test_mcp_server_start_launches_both_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Mock init_db and mcp.run so they don't actually block
+    monkeypatch.setattr("pearscarf.mcp.mcp_server.init_db", lambda: None)
+    monkeypatch.setattr("pearscarf.mcp.mcp_server.mcp.run", lambda **kw: None)
+
+    server = mcp_server.MCPServer()
+    server.start()
+
+    assert server._sse_thread is not None
+    assert server._sse_thread.name == "mcp-server-sse"
+    assert server._sse_thread.daemon is True
+
+    assert server._http_thread is not None
+    assert server._http_thread.name == "mcp-server-http"
+    assert server._http_thread.daemon is True
