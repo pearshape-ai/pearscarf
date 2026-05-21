@@ -288,6 +288,20 @@ ALTER TABLE intent_details ALTER COLUMN intent_type SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_intent_details_intent_type
     ON intent_details(intent_type);
+
+-- 1.39.1 runtime envelope. Decouples the orchestrator from agent definitions:
+-- `runtime` selects which adapter dispatches the intent (claude / codex /
+-- hermes / ...); `runtime_config` is an opaque per-runtime JSON blob the
+-- orchestrator passes through to that adapter. Existing rows backfill to
+-- 'claude' + '{}' via column defaults; idempotent on re-init.
+ALTER TABLE intent_details
+    ADD COLUMN IF NOT EXISTS runtime TEXT NOT NULL DEFAULT 'claude';
+
+ALTER TABLE intent_details
+    ADD COLUMN IF NOT EXISTS runtime_config JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_intent_details_runtime
+    ON intent_details(runtime);
 """
 
 

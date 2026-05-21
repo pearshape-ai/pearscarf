@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.39.1
+- Add `runtime` (TEXT) and `runtime_config` (JSONB) fields to `intent_details` — the runtime envelope that decouples the orchestrator from any specific agent stack.
+- `runtime` selects which orchestrator adapter dispatches the intent (default `"claude"`; orchestrator-side registry can add `"codex"`, `"hermes"`, etc.); `runtime_config` is an opaque JSON object the adapter consumes (for `"claude"`: e.g. `chrome_required`, `mcp_servers`, `model`, `prompt_role`).
+- `submit_intent` and `query_intents` accept and surface both fields; `query_intents(runtime="claude")` filters by adapter.
+- Validation at submit time: `runtime` must be a non-empty string, `runtime_config` must be a dict (or null).
+- Schema migration: existing rows backfill to `runtime='claude'`, `runtime_config='{}'` via column defaults; idempotent on re-init.
+
 ## 1.39.0
 - **Breaking:** `intent_type` is now an enum (`"executor"` | `"coordinator"`) describing dispatch lifecycle, replacing the previous free-form tag.
 - `executor` intents run once and complete; `coordinator` intents are parents of children that wake when children complete to re-evaluate against their goal.

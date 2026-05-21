@@ -163,6 +163,52 @@ def test_query_intents_filters_by_intent_type(clean_db) -> None:
     assert {i["id"] for i in execs} == {exe1, exe2}
 
 
+# --- 1.39.1: runtime + runtime_config envelope ---
+
+
+def test_submit_intent_defaults_runtime_to_claude(clean_db) -> None:
+    iid = intents.submit_intent(body="x")
+    got = intents.get_intent(iid)
+    assert got["runtime"] == "claude"
+    assert got["runtime_config"] == {}
+
+
+def test_submit_intent_stores_runtime_config(clean_db) -> None:
+    cfg = {"chrome_required": True, "mcp_servers": ["pearscarf-dogfood"], "model": "sonnet"}
+    iid = intents.submit_intent(body="x", runtime="claude", runtime_config=cfg)
+    got = intents.get_intent(iid)
+    assert got["runtime"] == "claude"
+    assert got["runtime_config"] == cfg
+
+
+def test_submit_intent_accepts_non_claude_runtime(clean_db) -> None:
+    iid = intents.submit_intent(body="x", runtime="codex", runtime_config={"foo": "bar"})
+    got = intents.get_intent(iid)
+    assert got["runtime"] == "codex"
+    assert got["runtime_config"] == {"foo": "bar"}
+
+
+def test_submit_intent_rejects_empty_runtime(clean_db) -> None:
+    with pytest.raises(IntentError, match="runtime must be a non-empty string"):
+        intents.submit_intent(body="x", runtime="")
+
+
+def test_submit_intent_rejects_non_dict_runtime_config(clean_db) -> None:
+    with pytest.raises(IntentError, match="runtime_config must be a dict"):
+        intents.submit_intent(body="x", runtime_config=["not", "a", "dict"])
+
+
+def test_query_intents_filters_by_runtime(clean_db) -> None:
+    c1 = intents.submit_intent(body="c1", runtime="claude")
+    c2 = intents.submit_intent(body="c2")  # default claude
+    cx = intents.submit_intent(body="cx", runtime="codex")
+
+    claudes = intents.query_intents(runtime="claude")
+    assert {i["id"] for i in claudes} == {c1, c2}
+    codexes = intents.query_intents(runtime="codex")
+    assert {i["id"] for i in codexes} == {cx}
+
+
 def test_submit_intent_rejects_cancelled_parent(clean_db) -> None:
     """Adding a child to a cancelled intent is almost always a bug."""
     parent = intents.submit_intent(body="parent")

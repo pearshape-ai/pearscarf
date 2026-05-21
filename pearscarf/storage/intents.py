@@ -34,6 +34,8 @@ def submit_intent(
     owner_role: str | None = None,
     depends_on: list[str] | None = None,
     set_by: str | None = None,
+    runtime: str = "claude",
+    runtime_config: dict | None = None,
 ) -> str:
     """Atomically insert the records row + initial `intent_details` row.
 
@@ -42,9 +44,16 @@ def submit_intent(
     children complete to re-evaluate). Immutable after submit. Validated
     against `VALID_INTENT_TYPES`.
 
+    `runtime` selects which orchestrator adapter dispatches this intent
+    (e.g. `"claude"`, `"codex"`, `"hermes"`). Free-form string — adapters
+    register themselves orchestrator-side. `runtime_config` is an opaque
+    JSON object the orchestrator passes through to that adapter (e.g. for
+    `"claude"`: `chrome_required`, `mcp_servers`, `model`, `prompt_role`).
+
     Returns the new intent record id. Raises `IntentError` for invalid
-    `intent_type`, invalid `parent_record_id` (missing or cancelled),
-    missing `depends_on` ids, or any sidecar constraint violation.
+    `intent_type`, empty `runtime`, non-dict `runtime_config`, invalid
+    `parent_record_id` (missing or cancelled), missing `depends_on` ids,
+    or any sidecar constraint violation.
     """
     init_db()
 
@@ -53,6 +62,14 @@ def submit_intent(
 
     if intent_type not in VALID_INTENT_TYPES:
         raise IntentError(f"intent_type must be one of {VALID_INTENT_TYPES}, got {intent_type!r}")
+
+    if not isinstance(runtime, str) or not runtime.strip():
+        raise IntentError("runtime must be a non-empty string")
+
+    if runtime_config is None:
+        runtime_config = {}
+    if not isinstance(runtime_config, dict):
+        raise IntentError(f"runtime_config must be a dict, got {type(runtime_config).__name__}")
 
     deps = list(depends_on or [])
 
@@ -82,8 +99,8 @@ def submit_intent(
         conn.execute(
             "INSERT INTO intent_details "
             "(intent_record_id, status, parent_record_id, intent_type, "
-            "owner, owner_role, depends_on, set_by) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            "owner, owner_role, depends_on, set_by, runtime, runtime_config) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 record_id,
                 "todo",
@@ -93,6 +110,8 @@ def submit_intent(
                 owner_role,
                 deps,
                 set_by,
+                runtime,
+                Jsonb(runtime_config),
             ),
         )
         conn.commit()
@@ -152,6 +171,7 @@ def query_intents(
     intent_type: str | None = None,
     owner: str | None = None,
     owner_role: str | None = None,
+    runtime: str | None = None,
     since: str | None = None,
     limit: int = 50,
 ) -> list[dict]:
@@ -174,6 +194,9 @@ def query_intents(
     if owner_role:
         where_parts.append("d.owner_role = %s")
         params.append(owner_role)
+    if runtime:
+        where_parts.append("d.runtime = %s")
+        params.append(runtime)
     if since:
         where_parts.append("r.created_at >= %s")
         params.append(since)
@@ -252,7 +275,8 @@ def set_intent_dependencies(
 _SELECT_INTENT_BY_ID = (
     "SELECT r.id, r.type, r.source, r.created_at, r.raw, r.content, r.metadata, "
     "d.status, d.parent_record_id, d.intent_type, "
-    "d.owner, d.owner_role, d.depends_on, d.set_at, d.set_by "
+    "d.owner, d.owner_role, d.depends_on, d.set_at, d.set_by, "
+    "d.runtime, d.runtime_config "
     "FROM records r JOIN intent_details d ON d.intent_record_id = r.id "
     "WHERE r.id = %s"
 )
@@ -260,7 +284,8 @@ _SELECT_INTENT_BY_ID = (
 _SELECT_INTENT_LIST = (
     "SELECT r.id, r.type, r.source, r.created_at, r.raw, r.content, r.metadata, "
     "d.status, d.parent_record_id, d.intent_type, "
-    "d.owner, d.owner_role, d.depends_on, d.set_at, d.set_by "
+    "d.owner, d.owner_role, d.depends_on, d.set_at, d.set_by, "
+    "d.runtime, d.runtime_config "
     "FROM records r JOIN intent_details d ON d.intent_record_id = r.id"
 )
 
@@ -276,6 +301,8 @@ def _row_to_intent(row) -> dict:
         "owner": d.get("owner"),
         "owner_role": d.get("owner_role"),
         "depends_on": list(d.get("depends_on") or []),
+        "runtime": d.get("runtime"),
+        "runtime_config": d.get("runtime_config") or {},
         "created_at": d.get("created_at"),
         "set_at": d.get("set_at"),
         "set_by": d.get("set_by"),
