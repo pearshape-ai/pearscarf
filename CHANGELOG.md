@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.39.2
+- Intent format spec (`pearscarf://format/intent`) codifies the first-line-is-title convention. Authors are now told to lead the body with a single-sentence, ≤120-char actionable title — the line that surfaces in dashboards and list views — with the agent's pickup brief continuing below. No schema change; the discipline is purely in the author's prose. Dashboards (pearscarf-ui) extract this line as the displayed title.
+
 ## 1.39.1
 - Add `runtime` (TEXT) and `runtime_config` (JSONB) fields to `intent_details` — the runtime envelope that decouples the orchestrator from any specific agent stack.
 - `runtime` selects which orchestrator adapter dispatches the intent (default `"claude"`; orchestrator-side registry can add `"codex"`, `"hermes"`, etc.); `runtime_config` is an opaque JSON object the adapter consumes (for `"claude"`: e.g. `chrome_required`, `mcp_servers`, `model`, `prompt_role`).

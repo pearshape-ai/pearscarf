@@ -18,9 +18,13 @@ Two non-negotiable rules apply to every intent:
 
 The body is plain markdown prose. There is no required header structure — intents are not parsed for fields. The discipline is in the prose itself.
 
+### Title convention
+
+**The first non-empty line of the body is the intent's title.** Keep it short (≤ 120 chars), single-sentence, actionable — it's what surfaces in dashboards, list views, and any operator scan over open work. Write it like a commit header: the change in one clean phrase. Everything below the title line is the agent's pickup brief; agents read the whole body (including the title line) as their task. No artificial section headers are required between title and body.
+
 A well-formed intent body addresses, in this order:
 
-- **What** — the intended outcome in one or two sentences. Lead with this.
+- **What (title line)** — the intended outcome in one sentence. This is the first non-empty line and becomes the surfaced title.
 - **Who** — the role or agent owning the work. Omit for containers (intents that exist only to group sub-intents).
 - **Why** — one sentence on motivation. Skip if the parent intent makes it obvious.
 - **Acceptance** — the observable reality fact that means done. Phrase it as something an outside reader could verify after the work lands.
