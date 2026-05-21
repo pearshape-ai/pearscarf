@@ -626,7 +626,9 @@ def get_record_status(record_id: str) -> dict:
         "Body is free-form prose; the canonical shape lives at the "
         "`pearscarf://format/intent` resource. Optional `parent_record_id` "
         "(another intent_id) makes this a sub-intent. Optional `intent_type` "
-        "is a freeform tag (e.g. 'milestone', 'task'). Optional `owner` pins "
+        "is the dispatch lifecycle — `'executor'` (default; runs once, "
+        "completes) or `'coordinator'` (parent of children; wakes when "
+        "children complete). Immutable after submit. Optional `owner` pins "
         "the intent to a specific agent identity (e.g. 'hex'); optional "
         "`owner_role` tags it by function (e.g. 'head-eng') so an orchestrator "
         "can match agents in that role. Optional `depends_on` is a list of "
@@ -638,7 +640,7 @@ def get_record_status(record_id: str) -> dict:
 def submit_intent(
     body: str,
     parent_record_id: str | None = None,
-    intent_type: str | None = None,
+    intent_type: str = "executor",
     owner: str | None = None,
     owner_role: str | None = None,
     depends_on: list[str] | None = None,
@@ -676,10 +678,11 @@ def submit_intent(
     description=(
         "List intents matching filters. `status` matches sidecar status "
         "(todo / in_progress / done / cancelled). `parent` filters direct "
-        "children of a given intent id. `type` filters by intent_type. "
-        "`owner` filters by specific agent identity. `owner_role` filters by "
-        "the role tag (e.g. 'head-eng'). `since` is an ISO timestamp on the "
-        "intent's created_at. Returns body + state per match, newest first."
+        "children of a given intent id. `type` filters by intent_type "
+        "(`'executor'` | `'coordinator'`). `owner` filters by specific agent "
+        "identity. `owner_role` filters by the role tag (e.g. 'head-eng'). "
+        "`since` is an ISO timestamp on the intent's created_at. Returns "
+        "body + state per match, newest first."
     )
 )
 def query_intents(
@@ -779,23 +782,6 @@ def set_intent_parent(id: str, parent_id: str | None, set_by: str | None = None)
     except IntentError as exc:
         return {"error": "INVALID_INTENT", "message": str(exc)}
     return {"intent_id": id, "parent_record_id": parent_id}
-
-
-@mcp.tool(
-    description=(
-        "Set or clear the intent's freeform `intent_type` tag (e.g. "
-        "'milestone', 'task'). Pass null to clear. `set_by` tags the author."
-    )
-)
-def set_intent_type(id: str, intent_type: str | None, set_by: str | None = None) -> dict:
-    from pearscarf.storage import intents
-    from pearscarf.storage.intents import IntentError
-
-    try:
-        intents.set_intent_type(id, intent_type, set_by)
-    except IntentError as exc:
-        return {"error": "INVALID_INTENT", "message": str(exc)}
-    return {"intent_id": id, "intent_type": intent_type}
 
 
 @mcp.tool(

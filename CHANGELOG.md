@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.39.0
+- **Breaking:** `intent_type` is now an enum (`"executor"` | `"coordinator"`) describing dispatch lifecycle, replacing the previous free-form tag.
+- `executor` intents run once and complete; `coordinator` intents are parents of children that wake when children complete to re-evaluate against their goal.
+- `intent_type` is validated at submit time and immutable thereafter — `set_intent_type` (setter + MCP tool) is removed.
+- Schema init backfills existing rows: intents with children become coordinators, leaves become executors.
+- Old descriptive tags (`milestone`, `task`, `feature`, etc.) are discarded; the descriptive framing now lives in `owner_role` (vertical) and the intent body.
+
 ## 1.38.0
 - Add streamable HTTP transport for the MCP server mounted alongside the existing SSE transport — MCP now serves on both port 8090 (SSE, legacy) and port 8091 (HTTP, recommended going forward). Streamable HTTP eliminates the session-coupled-to-stream fragility that caused reconnect failures in long-lived clients; new consumers should point at the HTTP URL. `install.sh` now checks both ports at pre-flight, generates `MCP_HTTP_PORT=8091` in `.env`, and validates the HTTP transport post-deploy. Both transports remain active during the transition; SSE will be deprecated in a future release after all consumers migrate.
 
