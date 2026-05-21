@@ -633,8 +633,13 @@ def get_record_status(record_id: str) -> dict:
         "`owner_role` tags it by function (e.g. 'head-eng') so an orchestrator "
         "can match agents in that role. Optional `depends_on` is a list of "
         "other intent ids that must reach status='done' before this one is "
-        "eligible for dispatch. Optional `set_by` is the agent/operator "
-        "submitting. Returns `{intent_id, status: 'todo'}`."
+        "eligible for dispatch. Optional `runtime` selects which orchestrator "
+        "adapter dispatches the intent (`'claude'` default, also `'codex'`, "
+        "`'hermes'`, etc.); optional `runtime_config` is an opaque JSON "
+        "object the orchestrator passes through to that adapter (for "
+        "`'claude'`: e.g. `chrome_required`, `mcp_servers`, `model`, "
+        "`prompt_role`). Optional `set_by` is the agent/operator submitting. "
+        "Returns `{intent_id, status: 'todo'}`."
     )
 )
 def submit_intent(
@@ -645,6 +650,8 @@ def submit_intent(
     owner_role: str | None = None,
     depends_on: list[str] | None = None,
     set_by: str | None = None,
+    runtime: str = "claude",
+    runtime_config: dict | None = None,
 ) -> dict:
     """Submit an intent record and create its initial sidecar state row."""
     from pearscarf.registry import get_registry
@@ -668,6 +675,8 @@ def submit_intent(
             owner_role=owner_role,
             depends_on=depends_on,
             set_by=set_by,
+            runtime=runtime,
+            runtime_config=runtime_config,
         )
     except IntentError as exc:
         return {"error": "INVALID_INTENT", "message": str(exc)}
@@ -681,8 +690,9 @@ def submit_intent(
         "children of a given intent id. `type` filters by intent_type "
         "(`'executor'` | `'coordinator'`). `owner` filters by specific agent "
         "identity. `owner_role` filters by the role tag (e.g. 'head-eng'). "
-        "`since` is an ISO timestamp on the intent's created_at. Returns "
-        "body + state per match, newest first."
+        "`runtime` filters by the orchestrator-adapter selector (e.g. "
+        "`'claude'`, `'codex'`). `since` is an ISO timestamp on the intent's "
+        "created_at. Returns body + state per match, newest first."
     )
 )
 def query_intents(
@@ -691,6 +701,7 @@ def query_intents(
     type: str | None = None,
     owner: str | None = None,
     owner_role: str | None = None,
+    runtime: str | None = None,
     since: str | None = None,
     limit: int = 50,
 ) -> dict:
@@ -703,6 +714,7 @@ def query_intents(
         intent_type=type,
         owner=owner,
         owner_role=owner_role,
+        runtime=runtime,
         since=since,
         limit=limit,
     )
@@ -848,6 +860,8 @@ def _normalize_intent(intent: dict) -> dict:
         "owner": intent.get("owner"),
         "owner_role": intent.get("owner_role"),
         "depends_on": list(intent.get("depends_on") or []),
+        "runtime": intent.get("runtime"),
+        "runtime_config": intent.get("runtime_config") or {},
         "source": intent.get("source") or "",
         "created_at": _iso(intent.get("created_at")),
         "set_at": _iso(intent.get("set_at")),

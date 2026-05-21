@@ -115,11 +115,14 @@ class RecordsExpert:
         owner_role: str | None = None,
         depends_on: list[str] | None = None,
         set_by: str | None = None,
+        runtime: str = "claude",
+        runtime_config: dict | None = None,
     ) -> str:
         """Submit an intent — record + sidecar row created atomically.
 
         `intent_type` is the dispatch lifecycle (`"executor"` | `"coordinator"`);
-        validated by the storage layer.
+        validated by the storage layer. `runtime` selects the orchestrator
+        adapter; `runtime_config` is an opaque per-runtime JSON object.
         """
         from pearscarf.storage import intents
 
@@ -131,6 +134,8 @@ class RecordsExpert:
             owner_role=owner_role,
             depends_on=depends_on,
             set_by=set_by,
+            runtime=runtime,
+            runtime_config=runtime_config,
         )
 
 
