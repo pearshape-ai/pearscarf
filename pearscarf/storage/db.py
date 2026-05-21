@@ -267,6 +267,27 @@ CREATE INDEX IF NOT EXISTS idx_intent_details_owner
     ON intent_details(owner) WHERE owner IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_intent_details_owner_role
     ON intent_details(owner_role) WHERE owner_role IS NOT NULL;
+
+-- 1.39.0 intent_type repurpose. Was free-form tag (any string); now an enum
+-- ('executor' | 'coordinator') describing dispatch lifecycle. Backfill:
+-- intents that have children become coordinators, leaves become executors.
+-- Old descriptive tags (milestone, task, feature, deploy, etc.) are
+-- discarded. Idempotent — re-running on a backfilled DB updates 0 rows.
+UPDATE intent_details SET intent_type = 'coordinator'
+WHERE intent_record_id IN (
+    SELECT DISTINCT parent_record_id FROM intent_details
+    WHERE parent_record_id IS NOT NULL
+)
+AND (intent_type IS NULL OR intent_type NOT IN ('executor', 'coordinator'));
+
+UPDATE intent_details SET intent_type = 'executor'
+WHERE intent_type IS NULL OR intent_type NOT IN ('executor', 'coordinator');
+
+ALTER TABLE intent_details ALTER COLUMN intent_type SET DEFAULT 'executor';
+ALTER TABLE intent_details ALTER COLUMN intent_type SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_intent_details_intent_type
+    ON intent_details(intent_type);
 """
 
 

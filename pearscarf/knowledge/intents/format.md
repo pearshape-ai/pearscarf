@@ -36,7 +36,7 @@ A well-formed intent body addresses, in this order:
 Pass alongside the body via the MCP `submit_intent` tool:
 
 - **`parent_record_id`** *(optional)* — the intent id of a parent intent, making this a sub-intent. The intent must exist and have been submitted with op_area=intent. Null / omitted means top-level.
-- **`intent_type`** *(optional)* — freeform tag, e.g. `"milestone"`, `"task"`. There is no enum; the system does not interpret the value. Keep the vocabulary small in any given operation.
+- **`intent_type`** *(optional)* — dispatch lifecycle: `"executor"` (default; runs once, completes) or `"coordinator"` (parent of children; wakes when its children complete to re-evaluate against the goal). Immutable after submit. Use `"coordinator"` only when the intent will dispatch sub-intents and needs to wake on their completion; otherwise omit and accept the `"executor"` default.
 - **`owner`** *(optional)* — specific agent identity that should pick up this intent (e.g. `"hex"`). The orchestrator uses this for routing.
 - **`owner_role`** *(optional)* — role tag describing the *function* the agent serves (e.g. `"head-eng"`, `"sre"`). Survives swapping individual agents; the orchestrator can match any agent in that role when `owner` is unset.
 - **`depends_on`** *(optional)* — list of other intent ids that must reach status `done` before this intent is eligible for dispatch. Forms a DAG. Cycles are rejected. Missing referent intents are rejected. Default: empty.
@@ -82,12 +82,12 @@ Why: agents need a dedicated MCP tool that creates the sidecar state row
 atomically — submit_record is reality-only.
 
 Acceptance: pearscarf 1.36.0 ships submit_intent, query_intents,
-get_intent, get_intent_tree, set_intent_status, set_intent_parent,
-set_intent_type; integration tests cover the surface; benchmark suite
-still reports 100% on er-foundations.
+get_intent, get_intent_tree, set_intent_status, set_intent_parent;
+integration tests cover the surface; benchmark suite still reports
+100% on er-foundations.
 ```
 
-Submit-time: `intent_type="task"`, `set_by="hex"`. Omit `parent_record_id` if top-level; pass the epic's intent id if it belongs under one.
+Submit-time: `intent_type="executor"` (default; this is a leaf task), `set_by="hex"`. Omit `parent_record_id` if top-level; pass the epic's intent id if it belongs under one.
 
 ### Container intent (a milestone)
 
@@ -95,4 +95,4 @@ Submit-time: `intent_type="task"`, `set_by="hex"`. Omit `parent_record_id` if to
 Ship the AI-coworker demo on the orchestrator + pearscarf foundation.
 ```
 
-That's it — milestones describe the outcome and let sub-intents carry the detail. Submit-time: `intent_type="milestone"`. Sub-intents (implement / deploy / announce / post) each carry `parent_record_id` pointing at this milestone's intent id.
+That's it — milestones describe the outcome and let sub-intents carry the detail. Submit-time: `intent_type="coordinator"` (because this intent will dispatch sub-intents and needs to wake on their completion). Sub-intents (implement / deploy / announce / post) each carry `parent_record_id` pointing at this coordinator's intent id, and default to `intent_type="executor"`.

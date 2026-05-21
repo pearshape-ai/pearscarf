@@ -15,6 +15,7 @@ from psycopg.types.json import Jsonb
 from pearscarf.storage.db import _get_conn, init_db
 
 VALID_STATUSES = ("todo", "in_progress", "done", "cancelled")
+VALID_INTENT_TYPES = ("executor", "coordinator")
 
 
 class IntentError(ValueError):
@@ -28,7 +29,7 @@ def _next_intent_id() -> str:
 def submit_intent(
     body: str,
     parent_record_id: str | None = None,
-    intent_type: str | None = None,
+    intent_type: str = "executor",
     owner: str | None = None,
     owner_role: str | None = None,
     depends_on: list[str] | None = None,
@@ -36,14 +37,22 @@ def submit_intent(
 ) -> str:
     """Atomically insert the records row + initial `intent_details` row.
 
+    `intent_type` is the dispatch lifecycle — `"executor"` (default; runs
+    once, completes) or `"coordinator"` (parent of children; wakes when
+    children complete to re-evaluate). Immutable after submit. Validated
+    against `VALID_INTENT_TYPES`.
+
     Returns the new intent record id. Raises `IntentError` for invalid
-    `parent_record_id` (missing or cancelled), missing `depends_on` ids,
-    or any sidecar constraint violation.
+    `intent_type`, invalid `parent_record_id` (missing or cancelled),
+    missing `depends_on` ids, or any sidecar constraint violation.
     """
     init_db()
 
     if not body or not body.strip():
         raise IntentError("body is empty")
+
+    if intent_type not in VALID_INTENT_TYPES:
+        raise IntentError(f"intent_type must be one of {VALID_INTENT_TYPES}, got {intent_type!r}")
 
     deps = list(depends_on or [])
 
@@ -204,10 +213,6 @@ def set_intent_parent(
             (parent_record_id, set_by, record_id),
         )
         conn.commit()
-
-
-def set_intent_type(record_id: str, intent_type: str | None, set_by: str | None = None) -> None:
-    _update_sidecar(record_id, "intent_type", intent_type, set_by)
 
 
 def set_intent_owner(record_id: str, owner: str | None, set_by: str | None = None) -> None:

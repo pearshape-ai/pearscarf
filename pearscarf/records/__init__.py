@@ -110,13 +110,17 @@ class RecordsExpert:
         self,
         body: str,
         parent_record_id: str | None = None,
-        intent_type: str | None = None,
+        intent_type: str = "executor",
         owner: str | None = None,
         owner_role: str | None = None,
         depends_on: list[str] | None = None,
         set_by: str | None = None,
     ) -> str:
-        """Submit an intent — record + sidecar row created atomically."""
+        """Submit an intent — record + sidecar row created atomically.
+
+        `intent_type` is the dispatch lifecycle (`"executor"` | `"coordinator"`);
+        validated by the storage layer.
+        """
         from pearscarf.storage import intents
 
         return intents.submit_intent(

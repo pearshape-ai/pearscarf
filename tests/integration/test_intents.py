@@ -20,16 +20,28 @@ pytestmark = pytest.mark.integration
 
 
 def test_submit_intent_creates_record_and_state(clean_db) -> None:
-    iid = intents.submit_intent(body="Ship the launch demo.", intent_type="milestone", set_by="hex")
+    iid = intents.submit_intent(
+        body="Ship the launch demo.", intent_type="coordinator", set_by="hex"
+    )
     assert iid.startswith("intent_")
 
     got = intents.get_intent(iid)
     assert got is not None
     assert got["status"] == "todo"
-    assert got["intent_type"] == "milestone"
+    assert got["intent_type"] == "coordinator"
     assert got["parent_record_id"] is None
     assert got["set_by"] == "hex"
     assert "Ship the launch demo." in got["body"]
+
+
+def test_submit_intent_defaults_to_executor(clean_db) -> None:
+    iid = intents.submit_intent(body="leaf task")
+    assert intents.get_intent(iid)["intent_type"] == "executor"
+
+
+def test_submit_intent_rejects_invalid_intent_type(clean_db) -> None:
+    with pytest.raises(IntentError, match="intent_type must be one of"):
+        intents.submit_intent(body="x", intent_type="milestone")
 
 
 def test_submit_intent_rejects_missing_parent(clean_db) -> None:
@@ -60,10 +72,12 @@ def test_set_intent_status_unknown_intent_raises(clean_db) -> None:
 
 def test_parent_child_tree_walk(clean_db) -> None:
     """Build a 3-level tree, walk via get_intent_tree, verify shape."""
-    root = intents.submit_intent(body="launch demo", intent_type="milestone")
-    impl = intents.submit_intent(body="implement", parent_record_id=root, intent_type="task")
-    deploy = intents.submit_intent(body="deploy", parent_record_id=root, intent_type="task")
-    sub_impl = intents.submit_intent(body="design API", parent_record_id=impl, intent_type="task")
+    root = intents.submit_intent(body="launch demo", intent_type="coordinator")
+    impl = intents.submit_intent(body="implement", parent_record_id=root, intent_type="coordinator")
+    deploy = intents.submit_intent(body="deploy", parent_record_id=root, intent_type="executor")
+    sub_impl = intents.submit_intent(
+        body="design API", parent_record_id=impl, intent_type="executor"
+    )
 
     tree = intents.get_intent_tree(root)
     assert tree is not None
@@ -138,11 +152,15 @@ def test_query_intents_filters_by_parent(clean_db) -> None:
     assert {i["id"] for i in children} == {c1, c2}
 
 
-def test_set_intent_type_clears_with_none(clean_db) -> None:
-    iid = intents.submit_intent(body="x", intent_type="task")
-    intents.set_intent_type(iid, None)
-    got = intents.get_intent(iid)
-    assert got["intent_type"] is None
+def test_query_intents_filters_by_intent_type(clean_db) -> None:
+    coord = intents.submit_intent(body="coord", intent_type="coordinator")
+    exe1 = intents.submit_intent(body="exe1")  # default executor
+    exe2 = intents.submit_intent(body="exe2", intent_type="executor")
+
+    coords = intents.query_intents(intent_type="coordinator")
+    assert {i["id"] for i in coords} == {coord}
+    execs = intents.query_intents(intent_type="executor")
+    assert {i["id"] for i in execs} == {exe1, exe2}
 
 
 def test_submit_intent_rejects_cancelled_parent(clean_db) -> None:
