@@ -47,9 +47,8 @@ EXPERTS_DIR = os.getenv(
 CURATOR_POLL_INTERVAL = int(os.getenv("CURATOR_POLL_INTERVAL", "30"))
 CURATOR_CLAIM_TIMEOUT = int(os.getenv("CURATOR_CLAIM_TIMEOUT", "600"))
 
-# MCP server
-MCP_PORT = int(os.getenv("MCP_PORT", "8090"))
-MCP_HTTP_PORT = int(os.getenv("MCP_HTTP_PORT", "8091"))
+# MCP server. Streamable-HTTP transport only (SSE retired in 1.40.1).
+MCP_PORT = int(os.getenv("MCP_PORT", "8091"))
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 
 # Timezone (for Day node date derivation)
