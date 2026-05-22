@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.40.0
+- MCP server now enforces Bearer-token auth against the `mcp_keys` Postgres table. Every request to a tool route must carry `Authorization: Bearer <raw-key>` matching a non-revoked row; invalid or missing tokens are rejected (401) before any tool runs. The `/health` route is exempt (declared via `@mcp.custom_route`, which sits outside the MCP transport's middleware chain). Implemented as a `fastmcp.server.auth.auth.AuthProvider` (`pearscarf/mcp/auth.py`) that delegates to a new `verify_mcp_key(raw)` helper in `pearscarf.storage.store` — returns the row (id + name) on a match so the request can be attributed to a specific key for audit. The verifier pulls all non-revoked hashes and compares with `hmac.compare_digest` (constant-time) rather than `WHERE key_hash = %s` (which short-circuits on first-byte mismatch); the loop also intentionally doesn't `break` on a match, so total runtime doesn't leak which row matched. Successful validation updates `last_used_at`. Operator workflow stays as before: `psc mcp-keys create <device>` to issue, `psc mcp-keys list` to inspect, `psc mcp-keys revoke <id>` to retire.
+
 ## 1.39.2
 - Intent format spec (`pearscarf://format/intent`) codifies the first-line-is-title convention. Authors are now told to lead the body with a single-sentence, ≤120-char actionable title — the line that surfaces in dashboards and list views — with the agent's pickup brief continuing below. No schema change; the discipline is purely in the author's prose. Dashboards (pearscarf-ui) extract this line as the displayed title.
 

@@ -528,6 +528,7 @@ def get_communications_for_entity(name_or_email: str, since: str | None = None) 
 # --- MCP Keys ---
 
 import hashlib  # noqa: E402
+import hmac  # noqa: E402
 import secrets  # noqa: E402
 
 
@@ -579,22 +580,61 @@ def revoke_mcp_key(key_id: str) -> bool:
 
 
 def validate_mcp_key(raw_key: str) -> bool:
-    """Validate an MCP key. Updates last_used_at if valid."""
+    """Validate an MCP key. Updates last_used_at if valid.
+
+    Kept for callers that only need a bool. New auth code paths should
+    prefer `verify_mcp_key()` so they can attribute the request to a
+    specific key (id + name) for logging.
+    """
+    return verify_mcp_key(raw_key) is not None
+
+
+def verify_mcp_key(raw_key: str) -> dict | None:
+    """Verify an MCP key and return its row (id, name) if valid, else None.
+
+    Pulls all non-revoked hashes and compares in Python with
+    `hmac.compare_digest` rather than relying on SQL `WHERE key_hash = %s`
+    (which short-circuits on first-byte mismatch). The comparison cost is
+    O(N) over non-revoked keys per request — fine at our scale (handful
+    of keys); if the table ever grew large we'd partition by a prefix
+    indicator so each request compared a small bucket.
+
+    Updates `last_used_at` on success.
+    """
     init_db()
-    key_hash = _hash_key(raw_key)
+    if not raw_key:
+        return None
+    candidate_hash = _hash_key(raw_key)
     with _get_conn() as conn:
-        row = conn.execute(
-            "SELECT id FROM mcp_keys WHERE key_hash = %s AND revoked = FALSE",
-            (key_hash,),
-        ).fetchone()
-        if not row:
-            return False
+        rows = conn.execute(
+            "SELECT id, name, key_hash FROM mcp_keys WHERE revoked = FALSE"
+        ).fetchall()
+        matched: dict | None = None
+        for row in rows:
+            if hmac.compare_digest(candidate_hash, row["key_hash"]):
+                matched = {"id": row["id"], "name": row["name"]}
+                # Don't break — keep iterating so the loop's runtime
+                # doesn't leak which row matched.
+        if matched is None:
+            return None
         conn.execute(
             "UPDATE mcp_keys SET last_used_at = now() WHERE id = %s",
-            (row["id"],),
+            (matched["id"],),
         )
         conn.commit()
-        return True
+        return matched
+
+
+def mcp_keys_exist() -> bool:
+    """Return True iff at least one non-revoked MCP key exists. Used by the
+    MCP server to fail closed when keys are configured but to keep the
+    server reachable in fresh-deploy / single-operator setups where no key
+    has been created yet (a `psc mcp-keys list` after-the-fact surfaces the
+    state)."""
+    init_db()
+    with _get_conn() as conn:
+        row = conn.execute("SELECT 1 FROM mcp_keys WHERE revoked = FALSE LIMIT 1").fetchone()
+        return row is not None
 
 
 # --- Expert registration ---

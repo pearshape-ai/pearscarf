@@ -31,11 +31,17 @@ from datetime import datetime
 from fastmcp import FastMCP
 
 from pearscarf.config import MCP_HOST, MCP_HTTP_PORT, MCP_PORT
+from pearscarf.mcp.auth import PearscarfAuthProvider
 from pearscarf.query import context_query
 from pearscarf.storage import graph, vectorstore
 from pearscarf.storage.db import _get_conn, init_db
 
-mcp = FastMCP("PearScarf")
+# Bearer-token auth against the `mcp_keys` table. Without a valid Bearer
+# header, FastMCP returns 401 before any tool runs. Issue keys with
+# `psc mcp-keys create <device>`; revoke with `psc mcp-keys revoke <id>`.
+# The /health route declared with `@mcp.custom_route` bypasses this
+# middleware.
+mcp = FastMCP("PearScarf", auth=PearscarfAuthProvider())
 
 
 # ---------------------------------------------------------------------------
