@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.40.2
+- Test maintenance. Align the MCP-server tests with the 1.40.1 single-transport shape (the dual `_sse_thread`/`_http_thread` asserts now check only the surviving `_http_thread`) and update `test_validate_mcp_key_returns_true_and_updates_last_used` to feed the constant-time verifier's `fetchall` path with a row whose `key_hash` matches `sha256(raw_key)`. No behavior change.
+
 ## 1.40.1
 - Retire the SSE transport. The MCP server now serves only streamable-HTTP on `MCP_PORT` (default 8091). `MCPServer._run_sse` and `MCPServer._sse_thread` removed; `run_foreground` runs the single transport blocking. `MCP_HTTP_PORT` env var removed (its old role is folded into `MCP_PORT`). The SSE endpoint at `/sse` was session-coupled to the streaming connection — when the connection blipped, the session ID became invalid and every subsequent tool call failed with "Could not find session". Streamable-HTTP at `/mcp` has no such coupling. Bearer-token auth (introduced in 1.40.0) keeps working unchanged on the surviving transport.
 
