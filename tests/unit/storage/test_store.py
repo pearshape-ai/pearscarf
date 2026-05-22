@@ -146,8 +146,17 @@ def test_validate_mcp_key_returns_false_when_unknown(patched_store_conn: MagicMo
 def test_validate_mcp_key_returns_true_and_updates_last_used(
     patched_store_conn: MagicMock,
 ) -> None:
-    _set_fetchone(patched_store_conn, {"id": "mck_001"})
-    assert store.validate_mcp_key("psk_anything") is True
+    # Since 1.40.0 the verifier pulls all non-revoked rows and compares
+    # hashes in constant time, so the mock needs to feed `fetchall` (not
+    # `fetchone`) a row whose `key_hash` matches `sha256(raw_key)`.
+    import hashlib
+
+    raw = "psk_anything"
+    matching_hash = hashlib.sha256(raw.encode()).hexdigest()
+    patched_store_conn.execute.return_value.fetchall.return_value = [
+        {"id": "mck_001", "name": "test", "key_hash": matching_hash}
+    ]
+    assert store.validate_mcp_key(raw) is True
     update_calls = [
         c for c in patched_store_conn.execute.call_args_list if "last_used_at" in c.args[0]
     ]
