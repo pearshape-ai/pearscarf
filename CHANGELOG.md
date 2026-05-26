@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.9
+- MCP server runs streamable-HTTP in **stateless** mode (`stateless_http=True`). Sessions are no longer pinned to the server process, so a container recreate (deploy) or a dropped stream no longer strands a client on a dead session-id — eliminating the "request expired / refresh to continue" hang after every deploy. PearScarf MCP is request-response only (no server-initiated sampling, elicitation, or notifications), so stateless mode costs nothing.
+
 ## 1.41.8
 - Record format spec (`pearscarf://format/record`, now format version 0.1.1) gains a canonical-naming rule: before submitting, resolve each fact's subject against the live graph (`get_entity_context` / `recall`) and use the exact `resolved_to` name — a `not_found` or ambiguous result means you're creating or forking an entity, so name facts deliberately rather than by phrasing. Closes the read→write loop so records merge into existing entities instead of spawning near-duplicates.
 

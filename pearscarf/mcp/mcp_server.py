@@ -1033,10 +1033,16 @@ class MCPServer:
 
     def _run_http(self) -> None:
         init_db()
+        # stateless_http=True: no per-session server state, so a container
+        # recreate (deploy) or a dropped stream never strands clients with a
+        # dead session-id. PearScarf MCP is request-response only (no
+        # server-initiated sampling / elicitation / notifications), so stateless
+        # costs nothing. See the read-layer docs.
         mcp.run(
             transport="streamable-http",
             host=MCP_HOST,
             port=MCP_PORT,
+            stateless_http=True,
         )
 
     def start(self) -> None:
