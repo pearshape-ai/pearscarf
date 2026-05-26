@@ -338,3 +338,38 @@ def test_get_facts_for_entity_direction_arrow(neo4j_session: MagicMock) -> None:
         graph.get_facts_for_entity("eid", direction=direction)
         cypher = neo4j_session.run.call_args.args[0]
         assert arrow in cypher
+
+
+# --- get_facts_by_ids (recall hydration) ---
+
+
+def test_get_facts_by_ids_empty_returns_empty() -> None:
+    assert graph.get_facts_by_ids([]) == []
+
+
+def test_get_facts_by_ids_shapes_subject_and_target(neo4j_session: MagicMock) -> None:
+    row = {
+        "id": "e1",
+        "edge_label": "ASSERTED",
+        "fact_type": "update",
+        "fact": "Linus sourced prospects",
+        "confidence": "stated",
+        "source_record": "rec_1",
+        "source_type": "record",
+        "source_at": "2026-05-22",
+        "stale": False,
+        "valid_until": None,
+        "subject_id": "S1",
+        "subject_name": "Linus",
+        "subject_labels": ["Person"],
+        "target_id": "T1",
+        "target_name": "h2a-recruiting",
+        "target_date": None,
+        "target_labels": ["Project"],
+    }
+    neo4j_session.run.return_value = [row]
+
+    facts = graph.get_facts_by_ids(["e1"])
+    assert facts[0]["id"] == "e1"
+    assert facts[0]["subject"] == {"id": "S1", "name": "Linus", "type": "person"}
+    assert facts[0]["target"] == {"id": "T1", "name": "h2a-recruiting", "type": "project"}

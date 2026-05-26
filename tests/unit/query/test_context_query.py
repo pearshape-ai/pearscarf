@@ -86,3 +86,51 @@ def test_vector_search_delegates_with_limit(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(context_query.vectorstore, "query", fake_query)
     assert context_query.vector_search("hello", n_results=3) == [{"id": "r1"}]
     assert captured == {"text": "hello", "n_results": 3}
+
+
+# ---- recall ----
+
+
+def test_recall_no_hits_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(context_query.vectorstore, "search_facts", lambda q, n_results=20: [])
+    assert context_query.recall("nothing") == {"facts": [], "records": [], "entities": []}
+
+
+def test_recall_ranks_by_score_drops_stale_and_rolls_up_handles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # e2 is a vector hit but absent from the graph result (staled) → dropped.
+    hits = [
+        {"fact_id": "e1", "score": 0.9},
+        {"fact_id": "e2", "score": 0.5},
+        {"fact_id": "e3", "score": 0.7},
+    ]
+    monkeypatch.setattr(context_query.vectorstore, "search_facts", lambda q, n_results=20: hits)
+
+    current = [
+        {
+            "id": "e3",
+            "source_record": "r1",
+            "subject": {"id": "S1", "name": "Linus", "type": "person"},
+            "target": {"id": "D1", "name": "2026-05-22", "type": "day"},
+        },
+        {
+            "id": "e1",
+            "source_record": "r1",
+            "subject": {"id": "S1", "name": "Linus", "type": "person"},
+            "target": {"id": "T1", "name": "h2a", "type": "project"},
+        },
+    ]
+    monkeypatch.setattr(
+        context_query.graph, "get_facts_by_ids", lambda ids, include_stale=False: current
+    )
+
+    out = context_query.recall("prospects", limit=10)
+
+    # ranked by vector score: e1 (0.9) before e3 (0.7); e2 dropped (staled)
+    assert [f["id"] for f in out["facts"]] == ["e1", "e3"]
+    assert out["facts"][0]["score"] == 0.9
+    # source_record rolled up with hit counts
+    assert out["records"] == [{"record_id": "r1", "hit_count": 2}]
+    # entities rolled up; the Day node (D1) is filtered out
+    assert {e["id"] for e in out["entities"]} == {"S1", "T1"}

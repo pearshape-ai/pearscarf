@@ -328,3 +328,36 @@ def test_mcp_server_start_launches_http_thread(monkeypatch: pytest.MonkeyPatch) 
     assert server._http_thread is not None
     assert server._http_thread.name == "mcp-server-http"
     assert server._http_thread.daemon is True
+
+
+# ---- recall ----
+
+
+def test_recall_enriches_records_and_shapes_response(
+    monkeypatch: pytest.MonkeyPatch, patched_conn: MagicMock
+) -> None:
+    monkeypatch.setattr(
+        "pearscarf.mcp.mcp_server.context_query.recall",
+        lambda q, limit=20: {
+            "facts": [{"id": "e1", "fact": "Linus sourced prospects", "score": 0.9}],
+            "records": [{"record_id": "rec_1", "hit_count": 1}],
+            "entities": [{"id": "S1", "name": "Linus", "type": "person", "hit_count": 1}],
+        },
+    )
+    patched_conn.execute.return_value.fetchall.return_value = [
+        {"id": "rec_1", "type": "record", "source": "sor", "snippet": "hi"}
+    ]
+
+    out = mcp_server.recall("prospects")
+
+    assert out["count"] == 1
+    assert out["facts"][0]["id"] == "e1"
+    # record handle enriched from Postgres
+    assert out["records"][0] == {
+        "record_id": "rec_1",
+        "hit_count": 1,
+        "type": "record",
+        "source": "sor",
+        "snippet": "hi",
+    }
+    assert out["entities"][0]["name"] == "Linus"

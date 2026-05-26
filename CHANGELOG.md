@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.4
+- New MCP **`recall`** tool — semantic fact retrieval. A natural-language query embeds against the Qdrant `facts` collection; hits are normalized against the graph (stale dropped, current entities attached) and ranked by relevance, and the response carries two expansion handles — `records` (where the facts live) and `entities` (the things involved). This is the fuzzy entry point into the graph that the read design centers on.
+
 ## 1.41.3
 - Add `scripts/backfill_fact_embeddings.py`, a one-time migration that embeds existing non-stale facts into the Qdrant `facts` collection (local model — no API cost) so facts predating the embed-on-extraction change become searchable. Idempotent; `--dry-run` previews the count without writing.
 

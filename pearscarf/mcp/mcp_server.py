@@ -206,6 +206,60 @@ def search(
 
 
 # ---------------------------------------------------------------------------
+# Tool — recall (semantic fact retrieval)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Semantic fact recall — the fuzzy door into the graph. Give it a "
+        "natural-language question or topic; it embeds the query, finds the most "
+        "similar facts, normalizes them against the graph (drops stale, attaches "
+        "current entities), and returns them ranked by relevance. Beyond the "
+        "matching `facts`, it returns two expansion handles: `records` (where the "
+        "facts live — roll up with query_records or query_facts(source_record=...)) "
+        "and `entities` (the things involved — go deeper with get_entity_context). "
+        "Use recall to ground on a task or topic; the first pass is precise but "
+        "narrow, so expand from the handles before concluding."
+    )
+)
+def recall(query: str, limit: int = 20) -> dict:
+    """Semantic fact recall: vector hits -> graph-normalized facts + handles."""
+    init_db()
+    result = context_query.recall(query, limit=limit)
+
+    record_ids = [r["record_id"] for r in result["records"] if r.get("record_id")]
+    meta: dict = {}
+    if record_ids:
+        with _get_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, type, source, LEFT(content, 200) AS snippet "
+                "FROM records WHERE id = ANY(%s)",
+                (record_ids,),
+            ).fetchall()
+        meta = {dict(r)["id"]: dict(r) for r in rows}
+
+    records = [
+        {
+            "record_id": r["record_id"],
+            "hit_count": r["hit_count"],
+            "type": (meta.get(r["record_id"]) or {}).get("type") or "",
+            "source": (meta.get(r["record_id"]) or {}).get("source") or "",
+            "snippet": (meta.get(r["record_id"]) or {}).get("snippet") or "",
+        }
+        for r in result["records"]
+    ]
+
+    return {
+        "query": query,
+        "facts": result["facts"],
+        "records": records,
+        "entities": result["entities"],
+        "count": len(result["facts"]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tool 3 — query_facts
 # ---------------------------------------------------------------------------
 

@@ -132,3 +132,33 @@ def query(
         }
         for hit in response.points
     ]
+
+
+def search_facts(query_text: str, n_results: int = 20) -> list[dict]:
+    """Semantic search over the facts collection.
+
+    Returns hits as `{fact_id, text, edge_label, fact_type, source_record, score}`.
+    `fact_id` is the graph edge's elementId — the recall path hydrates these
+    against Neo4j (dropping stale, attaching entities), so this is just the
+    fuzzy entry point, not the source of truth.
+    """
+    client = _get_client()
+    vector = _embed(query_text)
+
+    response = client.query_points(
+        collection_name=FACTS_COLLECTION,
+        query=vector,
+        limit=n_results,
+    )
+
+    return [
+        {
+            "fact_id": hit.payload.get("fact_id", ""),
+            "text": hit.payload.get("text", ""),
+            "edge_label": hit.payload.get("edge_label", ""),
+            "fact_type": hit.payload.get("fact_type", ""),
+            "source_record": hit.payload.get("source_record", ""),
+            "score": hit.score,
+        }
+        for hit in response.points
+    ]

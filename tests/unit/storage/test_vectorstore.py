@@ -102,3 +102,35 @@ def test_add_fact_point_id_matches_record_uuid_scheme(mock_qdrant_client: MagicM
         vectorstore.add_fact("5:abc:1", "x")
     point = mock_qdrant_client.upsert.call_args.kwargs["points"][0]
     assert point.id == vectorstore._record_id_to_uuid("5:abc:1")
+
+
+def test_search_facts_queries_facts_collection(mock_qdrant_client: MagicMock) -> None:
+    vectorstore._client = mock_qdrant_client
+    hit = SimpleNamespace(
+        payload={
+            "fact_id": "5:x:1",
+            "text": "Linus sourced prospects",
+            "edge_label": "ASSERTED",
+            "fact_type": "update",
+            "source_record": "rec_1",
+        },
+        score=0.88,
+    )
+    mock_qdrant_client.query_points.return_value = SimpleNamespace(points=[hit])
+
+    with _stub_embed():
+        results = vectorstore.search_facts("prospects", n_results=10)
+
+    qkwargs = mock_qdrant_client.query_points.call_args.kwargs
+    assert qkwargs["collection_name"] == vectorstore.FACTS_COLLECTION
+    assert qkwargs["limit"] == 10
+    assert results == [
+        {
+            "fact_id": "5:x:1",
+            "text": "Linus sourced prospects",
+            "edge_label": "ASSERTED",
+            "fact_type": "update",
+            "source_record": "rec_1",
+            "score": 0.88,
+        }
+    ]

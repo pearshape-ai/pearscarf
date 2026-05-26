@@ -752,6 +752,63 @@ def get_facts_for_entity(
         return facts
 
 
+def get_facts_by_ids(edge_ids: list[str], include_stale: bool = False) -> list[dict]:
+    """Hydrate fact-edges by their elementIds into current facts.
+
+    Used by recall to normalize vector hits against the graph: stale edges are
+    dropped (unless include_stale), and each fact carries its current subject /
+    target entity. The graph is the freshness authority — a fact embedded while
+    fresh but since staled won't come back here.
+    """
+    if not edge_ids:
+        return []
+    with get_session() as session:
+        where = "WHERE elementId(r) IN $ids AND r.fact IS NOT NULL"
+        if not include_stale:
+            where += " AND (r.stale IS NULL OR r.stale = false)"
+
+        result = session.run(
+            f"MATCH (a)-[r]->(b) {where} "
+            "RETURN elementId(r) AS id, type(r) AS edge_label, r.fact_type AS fact_type, "
+            "r.fact AS fact, r.confidence AS confidence, r.source_record AS source_record, "
+            "r.source_type AS source_type, r.source_at AS source_at, r.stale AS stale, "
+            "r.valid_until AS valid_until, "
+            "elementId(a) AS subject_id, a.name AS subject_name, labels(a) AS subject_labels, "
+            "elementId(b) AS target_id, b.name AS target_name, b.date AS target_date, "
+            "labels(b) AS target_labels",
+            ids=edge_ids,
+        )
+
+        facts = []
+        for r in result:
+            tl = r["target_labels"] or []
+            if "Day" in tl:
+                target_name, target_type = (r["target_date"] or "?"), "day"
+            else:
+                target_name, target_type = (r["target_name"] or "?"), _label_to_type(tl)
+            facts.append(
+                {
+                    "id": r["id"],
+                    "edge_label": r["edge_label"],
+                    "fact_type": r["fact_type"] or "",
+                    "fact": r["fact"],
+                    "confidence": r["confidence"] or "",
+                    "source_record": r["source_record"] or "",
+                    "source_type": r["source_type"] or "",
+                    "source_at": r["source_at"] or "",
+                    "stale": r["stale"] or False,
+                    "valid_until": r["valid_until"],
+                    "subject": {
+                        "id": r["subject_id"],
+                        "name": r["subject_name"] or "?",
+                        "type": _label_to_type(r["subject_labels"] or []),
+                    },
+                    "target": {"id": r["target_id"], "name": target_name, "type": target_type},
+                }
+            )
+        return facts
+
+
 def get_facts_for_day(date_str: str) -> list[dict]:
     """Get all fact-edges connected to a Day node.
 
