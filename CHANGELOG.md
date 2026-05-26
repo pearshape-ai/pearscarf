@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.3
+- Add `scripts/backfill_fact_embeddings.py`, a one-time migration that embeds existing non-stale facts into the Qdrant `facts` collection (local model — no API cost) so facts predating the embed-on-extraction change become searchable. Idempotent; `--dry-run` previews the count without writing.
+
 ## 1.41.2
 - Extraction now embeds each new fact into a dedicated Qdrant `facts` collection — the substrate for semantic fact recall. Embedding happens once per newly-created fact edge; re-asserted facts (which only append a source record) and the existing record-level embeddings are untouched. A Qdrant failure is logged and never blocks extraction.
 
