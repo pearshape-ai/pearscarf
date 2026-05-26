@@ -29,7 +29,7 @@ def resolve_entity(name: str, entity_type: str | None = None) -> dict:
     return graph.resolve_entity(name, entity_type=entity_type)
 
 
-def recall(query: str, limit: int = 20) -> dict:
+def recall(query: str, limit: int = 20, include_stale: bool = False) -> dict:
     """Semantic fact recall — the fuzzy door into the graph.
 
     Embed the query, hit the Qdrant facts collection, then normalize against the
@@ -42,14 +42,16 @@ def recall(query: str, limit: int = 20) -> dict:
     `facts` carry their current subject/target + score. `records` and `entities`
     are the handles the consumer expands from (slice / deep dive). Postgres
     record metadata is added by the caller (the MCP tool), not here.
+    `include_stale=True` keeps superseded facts in the result (default: current
+    only) — an explicit opt-in for evolutionary queries.
     """
     hits = vectorstore.search_facts(query, n_results=limit * 4)
     score_by_id = {h["fact_id"]: h["score"] for h in hits if h.get("fact_id")}
     if not score_by_id:
         return {"facts": [], "records": [], "entities": []}
 
-    # Graph is the freshness authority — stale hits drop out here.
-    current = graph.get_facts_by_ids(list(score_by_id.keys()))
+    # Graph is the freshness authority — stale hits drop out here unless asked for.
+    current = graph.get_facts_by_ids(list(score_by_id.keys()), include_stale=include_stale)
     current.sort(key=lambda f: score_by_id.get(f["id"], 0.0), reverse=True)
     current = current[:limit]
 
@@ -79,6 +81,16 @@ def recall(query: str, limit: int = 20) -> dict:
         "records": [{"record_id": rid, "hit_count": c} for rid, c in record_hits.items()],
         "entities": list(entity_hits.values()),
     }
+
+
+def get_fact_history(edge_id: str) -> list[dict]:
+    """The supersession timeline of a fact, oldest -> current.
+
+    Walks the `replaced_by` chain (see graph.get_fact_history) — how this slice of
+    truth evolved, with each revision's timing and source record. An explicit,
+    opt-in history view; normal grounding stays current-only.
+    """
+    return graph.get_fact_history(edge_id)
 
 
 def get_facts(

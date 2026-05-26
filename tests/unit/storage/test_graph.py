@@ -373,3 +373,52 @@ def test_get_facts_by_ids_shapes_subject_and_target(neo4j_session: MagicMock) ->
     assert facts[0]["id"] == "e1"
     assert facts[0]["subject"] == {"id": "S1", "name": "Linus", "type": "person"}
     assert facts[0]["target"] == {"id": "T1", "name": "h2a-recruiting", "type": "project"}
+
+
+# --- get_fact_history (supersession timeline) ---
+
+
+def _hist_row(eid: str, fact: str, source_at: str, replaced_by: str | None, stale: bool) -> dict:
+    return {
+        "id": eid,
+        "edge_label": "TRANSITIONED",
+        "fact_type": "status_change",
+        "fact": fact,
+        "confidence": "stated",
+        "source_record": "r1",
+        "source_at": source_at,
+        "recorded_at": source_at,
+        "stale": stale,
+        "replaced_by": replaced_by,
+        "valid_until": None,
+        "subject_name": "PearScarf",
+        "target_name": fact,
+        "target_date": None,
+        "target_labels": ["Project"],
+    }
+
+
+def test_get_fact_history_walks_chain_oldest_to_current(neo4j_session: MagicMock) -> None:
+    # A (alpha, staled, replaced_by=B) -> B (beta, current). Start the walk at A.
+    rows = {
+        "A": _hist_row("A", "alpha", "2026-01-01", replaced_by="B", stale=True),
+        "B": _hist_row("B", "beta", "2026-02-01", replaced_by=None, stale=False),
+    }
+
+    def run_side_effect(query: str, **params):
+        res = MagicMock()
+        if "elementId(r) = $eid" in query:
+            res.single.return_value = rows.get(params["eid"])
+        elif "r.replaced_by = $cur" in query:
+            # B's predecessor is A; A has none.
+            res.data.return_value = [{"id": "A"}] if params.get("cur") == "B" else []
+        return res
+
+    neo4j_session.run.side_effect = run_side_effect
+
+    history = graph.get_fact_history("A")
+    assert [h["id"] for h in history] == ["A", "B"]  # ordered by source_at
+    assert history[0]["fact"] == "alpha"
+    assert history[0]["stale"] is True
+    assert history[1]["fact"] == "beta"
+    assert history[1]["replaced_by"] is None

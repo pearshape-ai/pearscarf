@@ -164,13 +164,15 @@ def get_schema() -> dict:
         "facts live — roll up with query_records or query_facts(source_record=...)) "
         "and `entities` (the things involved — go deeper with get_entity_context). "
         "Use recall to ground on a task or topic; the first pass is precise but "
-        "narrow, so expand from the handles before concluding."
+        "narrow, so expand from the handles before concluding. Pass "
+        "include_stale=true to also surface superseded facts (history); default is "
+        "current truth only."
     )
 )
-def recall(query: str, limit: int = 20) -> dict:
+def recall(query: str, limit: int = 20, include_stale: bool = False) -> dict:
     """Semantic fact recall: vector hits -> graph-normalized facts + handles."""
     init_db()
-    result = context_query.recall(query, limit=limit)
+    result = context_query.recall(query, limit=limit, include_stale=include_stale)
 
     record_ids = [r["record_id"] for r in result["records"] if r.get("record_id")]
     meta: dict = {}
@@ -565,6 +567,29 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
         "direct_facts": result.get("direct_facts", []),
         "path": result.get("path", []),
     }
+
+
+# ---------------------------------------------------------------------------
+# Tool — get_fact_history (supersession timeline)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Evolutionary view: given a fact id (the `id` field on a fact from recall "
+        "or query_facts), return the full supersession timeline of that slice of "
+        "truth — every revision oldest -> current, with what it said, when "
+        "(source_at / recorded_at), the source record, and whether it's now stale. "
+        "Use for audit / 'how did this change' / 'what did we used to believe'. "
+        "Normal grounding doesn't need this — it's an explicit history query, not "
+        "the current-truth path."
+    )
+)
+def get_fact_history(fact_id: str) -> dict:
+    """Supersession timeline of a fact: how this slice of truth evolved."""
+    init_db()
+    history = context_query.get_fact_history(fact_id)
+    return {"fact_id": fact_id, "history": history, "count": len(history)}
 
 
 # ---------------------------------------------------------------------------

@@ -809,6 +809,69 @@ def get_facts_by_ids(edge_ids: list[str], include_stale: bool = False) -> list[d
         return facts
 
 
+_HISTORY_FETCH = (
+    "MATCH (a)-[r]->(b) WHERE elementId(r) = $eid "
+    "RETURN elementId(r) AS id, type(r) AS edge_label, r.fact_type AS fact_type, "
+    "r.fact AS fact, r.confidence AS confidence, r.source_record AS source_record, "
+    "r.source_at AS source_at, r.recorded_at AS recorded_at, r.stale AS stale, "
+    "r.replaced_by AS replaced_by, r.valid_until AS valid_until, "
+    "a.name AS subject_name, b.name AS target_name, b.date AS target_date, "
+    "labels(b) AS target_labels"
+)
+
+
+def get_fact_history(edge_id: str, max_chain: int = 50) -> list[dict]:
+    """Walk the supersession chain a fact belongs to, ordered oldest -> current.
+
+    `replaced_by` links each staled fact to its successor. This walks that chain
+    both ways — forward to the current fact, and backward through predecessors
+    (facts whose `replaced_by` points here) — and returns every revision with its
+    text, timing, and source record: the evolutionary timeline of one slot.
+    Supersession never deletes, so the chain is complete. `max_chain` bounds the
+    walk defensively. Returns `[]` if the edge doesn't exist.
+    """
+    nodes: dict[str, dict] = {}
+    with get_session() as session:
+        frontier = [edge_id]
+        while frontier and len(nodes) < max_chain:
+            cur = frontier.pop()
+            if cur in nodes:
+                continue
+            rec = session.run(_HISTORY_FETCH, eid=cur).single()
+            if rec is None:
+                continue
+            tl = rec["target_labels"] or []
+            target_name = (
+                (rec["target_date"] or "?") if "Day" in tl else (rec["target_name"] or "?")
+            )
+            nodes[cur] = {
+                "id": rec["id"],
+                "edge_label": rec["edge_label"],
+                "fact_type": rec["fact_type"] or "",
+                "fact": rec["fact"],
+                "confidence": rec["confidence"] or "",
+                "source_record": rec["source_record"] or "",
+                "source_at": rec["source_at"] or "",
+                "recorded_at": rec["recorded_at"] or "",
+                "stale": rec["stale"] or False,
+                "replaced_by": rec["replaced_by"],
+                "valid_until": rec["valid_until"],
+                "subject": {"name": rec["subject_name"] or "?"},
+                "target": {"name": target_name},
+            }
+            if rec["replaced_by"]:
+                frontier.append(rec["replaced_by"])  # forward: successor
+            preds = session.run(
+                "MATCH ()-[r]->() WHERE r.replaced_by = $cur RETURN elementId(r) AS id",
+                cur=cur,
+            ).data()
+            frontier.extend(p["id"] for p in preds)  # backward: predecessors
+
+    history = list(nodes.values())
+    history.sort(key=lambda f: f.get("source_at") or "")
+    return history
+
+
 def get_facts_for_day(date_str: str) -> list[dict]:
     """Get all fact-edges connected to a Day node.
 

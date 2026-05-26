@@ -134,3 +134,25 @@ def test_recall_ranks_by_score_drops_stale_and_rolls_up_handles(
     assert out["records"] == [{"record_id": "r1", "hit_count": 2}]
     # entities rolled up; the Day node (D1) is filtered out
     assert {e["id"] for e in out["entities"]} == {"S1", "T1"}
+
+
+def test_recall_threads_include_stale(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        context_query.vectorstore,
+        "search_facts",
+        lambda q, n_results=20: [{"fact_id": "e1", "score": 0.9}],
+    )
+    captured: dict = {}
+
+    def fake_get(ids, include_stale=False):
+        captured["include_stale"] = include_stale
+        return []
+
+    monkeypatch.setattr(context_query.graph, "get_facts_by_ids", fake_get)
+    context_query.recall("q", include_stale=True)
+    assert captured["include_stale"] is True
+
+
+def test_get_fact_history_delegates_to_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(context_query.graph, "get_fact_history", lambda eid: [{"id": eid}])
+    assert context_query.get_fact_history("e9") == [{"id": "e9"}]

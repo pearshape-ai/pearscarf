@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.7
+- Add evolutionary / stale-fact retrieval. `recall` gains `include_stale` (default false — current truth only) to also surface superseded facts. New `get_fact_history` MCP tool returns the supersession timeline of a fact — every revision oldest→current with timing, source record, and stale flag — by walking the `replaced_by` chain. The read-discipline guide stays current-only; history is an explicit opt-in door.
+
 ## 1.41.6
 - Serve the read-discipline guide to clients two ways: a `pearscarf://guide/consumer` MCP resource (full text) and a condensed version in the MCP server `instructions`, which is handed to every connected client automatically — so an agent (Claude Desktop included) has the discipline in context before its first query, no fetch step required.
 

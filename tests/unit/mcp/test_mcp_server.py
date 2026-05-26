@@ -292,7 +292,7 @@ def test_recall_enriches_records_and_shapes_response(
 ) -> None:
     monkeypatch.setattr(
         "pearscarf.mcp.mcp_server.context_query.recall",
-        lambda q, limit=20: {
+        lambda q, limit=20, include_stale=False: {
             "facts": [{"id": "e1", "fact": "Linus sourced prospects", "score": 0.9}],
             "records": [{"record_id": "rec_1", "hit_count": 1}],
             "entities": [{"id": "S1", "name": "Linus", "type": "person", "hit_count": 1}],
@@ -331,3 +331,19 @@ def test_read_discipline_is_condensed_and_points_to_full_guide() -> None:
     discipline = mcp_server._READ_DISCIPLINE
     assert "recall(" in discipline
     assert "pearscarf://guide/consumer" in discipline
+
+
+# ---- get_fact_history ----
+
+
+def test_get_fact_history_shapes_response(
+    monkeypatch: pytest.MonkeyPatch, patched_conn: MagicMock
+) -> None:
+    monkeypatch.setattr(
+        "pearscarf.mcp.mcp_server.context_query.get_fact_history",
+        lambda fid: [{"id": "A", "fact": "alpha"}, {"id": "B", "fact": "beta"}],
+    )
+    out = mcp_server.get_fact_history("A")
+    assert out["fact_id"] == "A"
+    assert out["count"] == 2
+    assert out["history"][1]["fact"] == "beta"

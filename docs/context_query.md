@@ -30,11 +30,19 @@ Resolve a name to its best entity, exact-first: exact name → `IDENTIFIED_AS` a
 
 ---
 
-### `recall(query, limit=20) -> dict`
+### `recall(query, limit=20, include_stale=False) -> dict`
 
-Semantic fact retrieval — the fuzzy door into the graph. Embeds the query, hits the Qdrant facts collection, hydrates the hits against the graph (drops stale, attaches current entities), ranks by vector score, and rolls up expansion handles. Returns `{facts, records: [{record_id, hit_count}], entities: [{id, name, type, hit_count}]}`.
+Semantic fact retrieval — the fuzzy door into the graph. Embeds the query, hits the Qdrant facts collection, hydrates the hits against the graph (drops stale, attaches current entities), ranks by vector score, and rolls up expansion handles. Returns `{facts, records: [{record_id, hit_count}], entities: [{id, name, type, hit_count}]}`. `include_stale=True` keeps superseded facts (default: current only).
 
 **Storage:** Qdrant (entry) + Neo4j (normalize)
+
+---
+
+### `get_fact_history(edge_id) -> list[dict]`
+
+The supersession timeline of a fact, oldest → current. Walks the `replaced_by` chain both ways (forward to the current fact, backward through predecessors) and returns each revision with its text, timing (`source_at` / `recorded_at`), source record, and `stale` flag. An explicit, opt-in evolutionary view — normal grounding stays current-only.
+
+**Storage:** Neo4j
 
 ---
 
