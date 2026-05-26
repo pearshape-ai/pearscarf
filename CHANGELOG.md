@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.6
+- Serve the read-discipline guide to clients two ways: a `pearscarf://guide/consumer` MCP resource (full text) and a condensed version in the MCP server `instructions`, which is handed to every connected client automatically — so an agent (Claude Desktop included) has the discipline in context before its first query, no fetch step required.
+
 ## 1.41.5
 - Retire the record-level `search` MCP tool — `recall` (semantic fact retrieval) supersedes it now that facts are the retrieval currency. Docs updated (architecture, context-query read layer) to the final read surface. The Assistant's own internal record vector-search is unaffected.
 

@@ -315,3 +315,19 @@ def test_recall_enriches_records_and_shapes_response(
         "snippet": "hi",
     }
     assert out["entities"][0]["name"] == "Linus"
+
+
+# ---- consumer guide (read discipline) ----
+
+
+def test_consumer_guide_resource_serves_the_guide() -> None:
+    text = mcp_server.consumer_guide()
+    assert "Reading PearScarf" in text
+    assert "recall(" in text
+    assert "Never fabricate" in text
+
+
+def test_read_discipline_is_condensed_and_points_to_full_guide() -> None:
+    discipline = mcp_server._READ_DISCIPLINE
+    assert "recall(" in discipline
+    assert "pearscarf://guide/consumer" in discipline

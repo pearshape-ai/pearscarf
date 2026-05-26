@@ -37,12 +37,29 @@ from pearscarf.query import context_query
 from pearscarf.storage import graph
 from pearscarf.storage.db import _get_conn, init_db
 
+# Condensed read discipline, handed to every connected client via the server's
+# `instructions` (so any agent — Desktop included — has it in context before its
+# first query, no fetch step required). The full guide is the
+# `pearscarf://guide/consumer` resource.
+_READ_DISCIPLINE = (
+    "PearScarf is the shared operational graph — read it before you act. Everything "
+    "you get back is a current fact (the graph is the authority on 'now'; stale facts "
+    'are excluded unless you ask). To ground on a task: `recall("<your task>")` '
+    "returns matching facts plus entity + record handles — expand from those "
+    "(get_entity_context on the entities), and loop until you can cite the specific "
+    "facts that answer your task. For 'where do we stand', sweep query_facts (recent "
+    "TRANSITIONED, open ASSERTED) + query_intents. Never fabricate: if the graph "
+    "doesn't have it, omit it or say so — never fill gaps with training-data patterns "
+    "(`pip install …`, `contact sales`). Verify the entity you resolved is the one you "
+    "meant. Full guide: fetch the `pearscarf://guide/consumer` resource."
+)
+
 # Bearer-token auth against the `mcp_keys` table. Without a valid Bearer
 # header, FastMCP returns 401 before any tool runs. Issue keys with
 # `psc mcp-keys create <device>`; revoke with `psc mcp-keys revoke <id>`.
 # The /health route declared with `@mcp.custom_route` bypasses this
 # middleware.
-mcp = FastMCP("PearScarf", auth=PearscarfAuthProvider())
+mcp = FastMCP("PearScarf", auth=PearscarfAuthProvider(), instructions=_READ_DISCIPLINE)
 
 
 # ---------------------------------------------------------------------------
@@ -952,6 +969,29 @@ def intent_format_spec() -> str:
     import pearscarf
 
     path = Path(pearscarf.__file__).parent / "knowledge" / "intents" / "format.md"
+    return path.read_text()
+
+
+@mcp.resource(
+    uri="pearscarf://guide/consumer",
+    name="consumer read guide",
+    description=(
+        "How to interrogate PearScarf well — the read discipline. Model (facts are "
+        "the currency, the graph is the freshness authority, absence != nonexistence), "
+        "method (recall to ground a task; structured sweep for state; the "
+        "recall -> expand loop; when to stop), and guardrails (never fabricate, verify "
+        "resolution, stay in scope). The condensed form is in the server instructions; "
+        "fetch this for the full guide."
+    ),
+    mime_type="text/markdown",
+)
+def consumer_guide() -> str:
+    """Serve the consumer read guide from pearscarf/knowledge/consumer.md."""
+    from pathlib import Path
+
+    import pearscarf
+
+    path = Path(pearscarf.__file__).parent / "knowledge" / "consumer.md"
     return path.read_text()
 
 
