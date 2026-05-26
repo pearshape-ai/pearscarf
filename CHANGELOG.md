@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.5
+- Retire the record-level `search` MCP tool — `recall` (semantic fact retrieval) supersedes it now that facts are the retrieval currency. Docs updated (architecture, context-query read layer) to the final read surface. The Assistant's own internal record vector-search is unaffected.
+
 ## 1.41.4
 - New MCP **`recall`** tool — semantic fact retrieval. A natural-language query embeds against the Qdrant `facts` collection; hits are normalized against the graph (stale dropped, current entities attached) and ranked by relevance, and the response carries two expansion handles — `records` (where the facts live) and `entities` (the things involved). This is the fuzzy entry point into the graph that the read design centers on.
 

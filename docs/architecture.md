@@ -20,7 +20,7 @@
    │      │      │      │               │
 ┌──▼──┐┌──▼──┐┌──▼───┐┌─▼────┐  ┌──────▼──────┐
 │Gmail││Linear││GitHub││Retrvr│  │ MCP Server  │
-│scarf││scarf ││scarf ││      │  │ (10 tools)  │
+│scarf││scarf ││scarf ││      │  │ (read+write)│
 └──┬──┘└──┬──┘└──┬───┘└──┬───┘  └──────┬──────┘
    │      │      │       │             │
    │writes│writes│writes │reads        │reads
@@ -147,7 +147,7 @@ pearscarf/
 ├── query/
 │   └── context_query.py     # Read-only data access layer for graph_query_tools + MCP
 ├── mcp/
-│   └── mcp_server.py        # FastMCP over HTTP/SSE, 10 tools
+│   └── mcp_server.py        # FastMCP over streamable HTTP — read + submit tools
 ├── session_consumer.py      # SessionConsumer — poll bus target, cache per-session agents
 ├── assistant.py             # Assistant(SessionConsumer) + AssistantAgent + SendMessageTool
 ├── expert_bot.py            # ExpertBot(SessionConsumer) — one instance per enabled expert
@@ -298,7 +298,7 @@ Consumer subscribed to `records WHERE indexed = FALSE AND classification = 'rele
 
 ## MCP Server
 
-Read-only query surface via FastMCP over HTTP/SSE. 10 tools: 5 primitive + 5 convenience. API key auth. Starts as daemon thread in `psc run`/`psc dev` (monolith paths) or standalone via `psc mcp start` (decomposed).
+Read-only query surface via FastMCP over streamable HTTP, Bearer-token auth. Read tools: `get_schema`, `recall` (semantic fact retrieval — the fuzzy door into the graph), `query_facts`, `query_records`, `get_entity_context`, `get_relationship`; plus record/intent submission + status tools. Record-level `search` was retired in favor of `recall` (facts are the retrieval currency, not records). Starts as daemon thread in `psc run`/`psc dev` (monolith paths) or standalone via `psc mcp start` (decomposed).
 
 ## Interfaces
 

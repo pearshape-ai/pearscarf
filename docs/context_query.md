@@ -16,19 +16,36 @@ A single source of truth for "how do I get context from PearScarf." Internal too
 
 ### `find_entity(name, entity_type=None) -> list[dict]`
 
-Search for entities by name, email, or domain. Returns `[{id, name, type, metadata}]`.
+Search for entities by name, email, or domain (substring match, unranked). Returns `[{id, name, type, metadata}]`. For a single best match prefer `resolve_entity`.
 
 **Storage:** Neo4j
 
 ---
 
-### `get_facts(entity_id, edge_label=None, fact_type=None, include_stale=False, since=None) -> list[dict]`
+### `resolve_entity(name, entity_type=None) -> dict`
+
+Resolve a name to its best entity, exact-first: exact name → `IDENTIFIED_AS` alias → fuzzy substring. Exact/alias matches outrank substring (so `PearScarf` doesn't snap to `pearscarf-site`). Returns `{match: definitive|candidates|none, via, best, candidates}`.
+
+**Storage:** Neo4j
+
+---
+
+### `recall(query, limit=20) -> dict`
+
+Semantic fact retrieval — the fuzzy door into the graph. Embeds the query, hits the Qdrant facts collection, hydrates the hits against the graph (drops stale, attaches current entities), ranks by vector score, and rolls up expansion handles. Returns `{facts, records: [{record_id, hit_count}], entities: [{id, name, type, hit_count}]}`.
+
+**Storage:** Qdrant (entry) + Neo4j (normalize)
+
+---
+
+### `get_facts(entity_id, edge_label=None, fact_type=None, include_stale=False, since=None, direction="both") -> list[dict]`
 
 Get fact-edges for an entity with optional filters.
 
 - `edge_label`: AFFILIATED, ASSERTED, or TRANSITIONED
 - `fact_type`: any valid sub-type (employee, commitment, status_change, etc.)
 - `since`: ISO datetime, only facts where `source_at >= since`
+- `direction`: `out` | `in` | `both` (default) — orientation relative to the entity
 
 **Storage:** Neo4j
 

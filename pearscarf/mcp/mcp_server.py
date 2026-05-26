@@ -1,25 +1,26 @@
-"""MCP server — exposes PearScarf context queries via FastMCP over HTTP/SSE.
+"""MCP server — exposes PearScarf context queries via FastMCP over streamable HTTP.
 
-Tool surface (6 tools, dynamic primitives + bundles):
+Read tool surface (dynamic primitives + bundles):
 
 - get_schema: vocabulary introspection — entity_types, edge_labels, fact_types,
   source_types. Call once at task start to know the vocabulary.
-- search: semantic similarity search across records (Qdrant + records join),
-  with optional record_type / source / since filters.
+- recall: semantic fact retrieval — a natural-language query returns
+  graph-normalized facts ranked by relevance, plus record + entity expansion
+  handles. The fuzzy door into the graph.
 - query_facts: parameterized graph query — subject / target / edge_label /
-  fact_type / source_type / since / until / include_stale.
+  fact_type / source_type / source_record / direction / since / until /
+  include_stale.
 - query_records: parameterized records query — type / source / expert /
   classification / since / until / metadata field matchers.
 - get_entity_context: high-value bundle — facts + connections + recent records
-  for an entity. The "tell me everything about X" tool.
+  for an entity, with resolution made visible (resolved_to / alternatives).
 - get_relationship: high-value bundle — direct facts + shortest path between
   two entities.
 
-Earlier narrow tools (find_entity, get_facts, get_current_state,
-get_open_blockers, get_open_commitments, get_recent_activity, get_conflicts,
-get_connections) are expressible via the dynamic primitives plus schema
-knowledge — agents call get_schema once and then compose query_facts /
-query_records calls.
+Record-level `search` was retired in favor of `recall` (facts are the currency,
+not records). Earlier narrow tools (find_entity, get_facts, get_current_state,
+get_conflicts, get_connections, …) remain expressible via the primitives plus
+schema knowledge — call get_schema once, then compose.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ from fastmcp import FastMCP
 from pearscarf.config import MCP_HOST, MCP_PORT
 from pearscarf.mcp.auth import PearscarfAuthProvider
 from pearscarf.query import context_query
-from pearscarf.storage import graph, vectorstore
+from pearscarf.storage import graph
 from pearscarf.storage.db import _get_conn, init_db
 
 # Bearer-token auth against the `mcp_keys` table. Without a valid Bearer
@@ -129,80 +130,6 @@ def get_schema() -> dict:
         "fact_types": fact_types,
         "source_types": source_types,
     }
-
-
-# ---------------------------------------------------------------------------
-# Tool 2 — search
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool(
-    description=(
-        "Semantic search over records (Qdrant embedding similarity + Postgres join). "
-        "Takes a natural-language query plus optional filters (record_type, source, since). "
-        "Returns top-N records with relevance scores and key metadata. "
-        "Use to find records about a topic when you don't know the exact entity names — "
-        "e.g. 'records about anchored extensibility' or 'past messaging on deployment vocab'."
-    )
-)
-def search(
-    query: str,
-    record_type: str | None = None,
-    source: str | None = None,
-    since: str | None = None,
-    n: int = 10,
-) -> dict:
-    """Semantic search across records."""
-    init_db()
-
-    fetch_n = n * 4 if (record_type or source or since) else n
-    hits = vectorstore.query(query, n_results=fetch_n)
-    if not hits:
-        return {"query": query, "results": [], "count": 0}
-
-    record_ids = [h["id"] for h in hits if h.get("id")]
-    if not record_ids:
-        return {"query": query, "results": [], "count": 0}
-
-    with _get_conn() as conn:
-        rows = conn.execute(
-            "SELECT id, type, source, classification, created_at, expert_name, metadata "
-            "FROM records WHERE id = ANY(%s)",
-            (record_ids,),
-        ).fetchall()
-    record_map = {dict(r)["id"]: dict(r) for r in rows}
-
-    results = []
-    for hit in hits:
-        rid = hit.get("id")
-        rec = record_map.get(rid)
-        if not rec:
-            continue
-
-        if record_type and rec.get("type") != record_type:
-            continue
-        if source and source.lower() not in (rec.get("source") or "").lower():
-            continue
-        if since and _iso(rec.get("created_at")) < since:
-            continue
-
-        results.append(
-            {
-                "record_id": rid,
-                "type": rec.get("type") or "",
-                "source": rec.get("source") or "",
-                "expert": rec.get("expert_name") or "",
-                "classification": rec.get("classification") or "",
-                "created_at": _iso(rec.get("created_at")),
-                "metadata": rec.get("metadata") or {},
-                "snippet": (hit.get("content") or "")[:300],
-                "score": hit.get("score") or 0.0,
-            }
-        )
-        if len(results) >= n:
-            break
-
-    return {"query": query, "results": results, "count": len(results)}
 
 
 # ---------------------------------------------------------------------------

@@ -45,52 +45,6 @@ def test_get_schema_returns_vocabulary(patched_conn: MagicMock) -> None:
     assert "op_areas" not in schema
 
 
-# ---- search ----
-
-
-def test_search_returns_empty_when_qdrant_empty(
-    monkeypatch: pytest.MonkeyPatch, patched_conn: MagicMock
-) -> None:
-    monkeypatch.setattr("pearscarf.mcp.mcp_server.vectorstore.query", lambda q, n_results=10: [])
-    out = mcp_server.search("hello")
-    assert out == {"query": "hello", "results": [], "count": 0}
-
-
-def test_search_joins_records_and_filters_by_type(
-    monkeypatch: pytest.MonkeyPatch, patched_conn: MagicMock
-) -> None:
-    monkeypatch.setattr(
-        "pearscarf.mcp.mcp_server.vectorstore.query",
-        lambda q, n_results=10: [
-            {"id": "r1", "content": "match", "score": 0.9},
-            {"id": "r2", "content": "no", "score": 0.5},
-        ],
-    )
-    patched_conn.execute.return_value.fetchall.return_value = [
-        {
-            "id": "r1",
-            "type": "email",
-            "source": "gm",
-            "classification": "relevant",
-            "created_at": None,
-            "expert_name": "gm",
-            "metadata": {},
-        },
-        {
-            "id": "r2",
-            "type": "issue",
-            "source": "ls",
-            "classification": "relevant",
-            "created_at": None,
-            "expert_name": "ls",
-            "metadata": {},
-        },
-    ]
-    out = mcp_server.search("hello", record_type="email")
-    assert out["count"] == 1
-    assert out["results"][0]["record_id"] == "r1"
-
-
 # ---- query_facts ----
 
 
