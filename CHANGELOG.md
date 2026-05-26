@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.2
+- Extraction now embeds each new fact into a dedicated Qdrant `facts` collection — the substrate for semantic fact recall. Embedding happens once per newly-created fact edge; re-asserted facts (which only append a source record) and the existing record-level embeddings are untouched. A Qdrant failure is logged and never blocks extraction.
+
 ## 1.41.1
 - `query_facts` gains a `direction` filter (`out` | `in` | `both`, default `out`) so callers can pull facts asserted *about* an entity (incoming edges), not only facts it asserts, plus a `source_record` filter that returns every fact a single record produced. `get_entity_context` accepts the same `direction` (default `both`, unchanged). Resolves the prior directed/undirected mismatch between the structured and entity-bundle reads.
 

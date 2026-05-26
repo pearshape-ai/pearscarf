@@ -14,6 +14,7 @@ _client = None
 _model = None
 
 COLLECTION_NAME = "records"
+FACTS_COLLECTION = "facts"
 VECTOR_SIZE = 384  # all-MiniLM-L6-v2 output dimension
 
 
@@ -23,13 +24,14 @@ def _record_id_to_uuid(record_id: str) -> str:
 
 
 def _get_client():
-    """Lazy-init Qdrant client and ensure collection exists."""
+    """Lazy-init Qdrant client and ensure collections exist."""
     global _client
     if _client is None:
         from qdrant_client import QdrantClient
 
         _client = QdrantClient(url=QDRANT_URL)
-        _ensure_collection()
+        _ensure_collection(COLLECTION_NAME)
+        _ensure_collection(FACTS_COLLECTION)
     return _client
 
 
@@ -43,15 +45,15 @@ def _get_model():
     return _model
 
 
-def _ensure_collection() -> None:
-    """Create the records collection if it doesn't exist."""
+def _ensure_collection(name: str) -> None:
+    """Create the given collection if it doesn't exist."""
     from qdrant_client.models import Distance, VectorParams
 
     assert _client is not None  # caller (`_get_client`) initializes before calling
     collections = [c.name for c in _client.get_collections().collections]
-    if COLLECTION_NAME not in collections:
+    if name not in collections:
         _client.create_collection(
-            collection_name=COLLECTION_NAME,
+            collection_name=name,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
         )
 
@@ -79,6 +81,30 @@ def add_record(record_id: str, content: str, metadata: dict) -> None:
     client.upsert(
         collection_name=COLLECTION_NAME,
         points=[PointStruct(id=point_id, vector=vector, payload=payload)],
+    )
+
+
+def add_fact(fact_id: str, text: str, payload: dict | None = None) -> None:
+    """Add or update a fact's embedding in the facts collection.
+
+    `fact_id` is the graph edge's elementId. The Qdrant point id is a
+    deterministic UUID of it, so re-adds upsert in place and the recall path can
+    map a vector hit back to its edge. Written once per new fact edge at
+    extraction time; stale facts are left in place (filtered at the recall hop).
+    """
+    from qdrant_client.models import PointStruct
+
+    client = _get_client()
+    vector = _embed(text)
+
+    body = {
+        "fact_id": fact_id,
+        "text": text[:1000],
+        **{k: v for k, v in (payload or {}).items() if v},
+    }
+    client.upsert(
+        collection_name=FACTS_COLLECTION,
+        points=[PointStruct(id=_record_id_to_uuid(fact_id), vector=vector, payload=body)],
     )
 
 

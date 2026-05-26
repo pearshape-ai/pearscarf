@@ -26,6 +26,13 @@ def patched_conn(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     return conn
 
 
+@pytest.fixture(autouse=True)
+def _stub_add_fact(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep extraction tests off real Qdrant — fact embedding is a no-op by
+    default. Tests that exercise embedding override this with their own stub."""
+    monkeypatch.setattr("pearscarf.extraction.vectorstore.add_fact", lambda *a, **k: None)
+
+
 # ---- SaveExtractionTool ----
 
 
@@ -307,3 +314,82 @@ def test_commit_extraction_falls_back_to_created_at_when_metadata_absent(
 
     # Assert: source_at should fall back to record.created_at
     assert captured_source_at["value"] == "2026-05-14T12:00:00Z"
+
+
+# ---- fact embedding (commit 3) ----
+
+
+def test_write_fact_edge_embeds_new_edge(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pearscarf.extraction.graph.find_exact_dup_edge", lambda *a, **k: None)
+    monkeypatch.setattr("pearscarf.extraction.graph.create_fact_edge", lambda *a, **k: "edge_42")
+    captured: dict = {}
+    monkeypatch.setattr(
+        "pearscarf.extraction.vectorstore.add_fact",
+        lambda fid, text, payload=None: captured.update(fid=fid, text=text, payload=payload),
+    )
+
+    Extraction()._write_fact_edge(
+        "from",
+        "to",
+        "ASSERTED",
+        "update",
+        "Linus sourced prospects",
+        "stated",
+        "rec_1",
+        "record",
+        "2026-05-22T00:00:00Z",
+        None,
+    )
+    assert captured["fid"] == "edge_42"
+    assert captured["text"] == "Linus sourced prospects"
+    assert captured["payload"]["source_record"] == "rec_1"
+
+
+def test_write_fact_edge_skips_embed_on_reassert(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "pearscarf.extraction.graph.find_exact_dup_edge", lambda *a, **k: "existing_edge"
+    )
+    monkeypatch.setattr("pearscarf.extraction.graph.append_source_record", lambda *a, **k: None)
+    called = {"add_fact": False}
+    monkeypatch.setattr(
+        "pearscarf.extraction.vectorstore.add_fact",
+        lambda *a, **k: called.update(add_fact=True),
+    )
+
+    Extraction()._write_fact_edge(
+        "from",
+        "to",
+        "ASSERTED",
+        "update",
+        "dup",
+        "stated",
+        "rec_2",
+        "record",
+        "2026-05-22T00:00:00Z",
+        None,
+    )
+    assert called["add_fact"] is False
+
+
+def test_write_fact_edge_swallows_embed_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pearscarf.extraction.graph.find_exact_dup_edge", lambda *a, **k: None)
+    monkeypatch.setattr("pearscarf.extraction.graph.create_fact_edge", lambda *a, **k: "edge_9")
+
+    def boom(*a, **k):
+        raise RuntimeError("qdrant down")
+
+    monkeypatch.setattr("pearscarf.extraction.vectorstore.add_fact", boom)
+
+    # Must not raise — embed failures are logged and swallowed.
+    Extraction()._write_fact_edge(
+        "from",
+        "to",
+        "ASSERTED",
+        "update",
+        "x",
+        "stated",
+        "rec_3",
+        "record",
+        "2026-05-22T00:00:00Z",
+        None,
+    )

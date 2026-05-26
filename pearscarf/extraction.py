@@ -275,7 +275,7 @@ class Extraction(Consumer):
             )
             return
 
-        graph.create_fact_edge(
+        edge_id = graph.create_fact_edge(
             from_id,
             to_id,
             edge_label,
@@ -287,6 +287,20 @@ class Extraction(Consumer):
             source_at=source_at,
             valid_until=valid_until,
         )
+
+        # Embed the new fact for semantic recall. Only on a genuinely new edge —
+        # the re-assert branch above appends a source_record without creating one.
+        # A Qdrant failure must never break extraction.
+        try:
+            vectorstore.add_fact(
+                edge_id,
+                fact_text,
+                {"edge_label": edge_label, "fact_type": fact_type, "source_record": record_id},
+            )
+        except Exception as exc:
+            log.write(
+                self.name, "--", "error", f"Qdrant fact embed failed for edge {edge_id}: {exc}"
+            )
 
     def _embed_record(self, record: dict, content: str) -> None:
         """Embed record content into Qdrant.

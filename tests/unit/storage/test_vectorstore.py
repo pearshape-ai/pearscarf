@@ -75,3 +75,30 @@ def test_query_uses_query_points_and_shapes_response(mock_qdrant_client: MagicMo
             "score": 0.91,
         }
     ]
+
+
+def test_add_fact_upserts_to_facts_collection(mock_qdrant_client: MagicMock) -> None:
+    vectorstore._client = mock_qdrant_client
+    with _stub_embed():
+        vectorstore.add_fact(
+            "5:abc:1",
+            "Linus sourced 5 prospects",
+            {"edge_label": "ASSERTED", "empty": ""},
+        )
+
+    mock_qdrant_client.upsert.assert_called_once()
+    call = mock_qdrant_client.upsert.call_args
+    assert call.kwargs["collection_name"] == vectorstore.FACTS_COLLECTION
+    payload = call.kwargs["points"][0].payload
+    assert payload["fact_id"] == "5:abc:1"
+    assert payload["text"] == "Linus sourced 5 prospects"
+    assert payload["edge_label"] == "ASSERTED"
+    assert "empty" not in payload  # falsy-stripped
+
+
+def test_add_fact_point_id_matches_record_uuid_scheme(mock_qdrant_client: MagicMock) -> None:
+    vectorstore._client = mock_qdrant_client
+    with _stub_embed():
+        vectorstore.add_fact("5:abc:1", "x")
+    point = mock_qdrant_client.upsert.call_args.kwargs["points"][0]
+    assert point.id == vectorstore._record_id_to_uuid("5:abc:1")
