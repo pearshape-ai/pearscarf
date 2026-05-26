@@ -251,3 +251,76 @@ def test_fact_categories_contains_expected_edge_labels() -> None:
 
 def test_fact_categories_affiliated_has_employee_type() -> None:
     assert "employee" in graph.FACT_CATEGORIES["AFFILIATED"]
+
+
+# --- resolve_entity cascade (exact -> alias -> fuzzy) ---
+
+
+def _ent(eid: str = "n1", name: str = "PearScarf", entity_type: str = "project") -> dict:
+    return {"id": eid, "type": entity_type, "name": name, "metadata": {}}
+
+
+def test_resolve_entity_exact_single_is_definitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(graph, "_exact_name_matches", lambda *a, **k: [_ent(eid="EX")])
+    monkeypatch.setattr(graph, "_alias_matches", lambda *a, **k: [])
+    monkeypatch.setattr(graph, "search_entities", lambda *a, **k: [_ent(eid="FUZZ")])
+    out = graph.resolve_entity("PearScarf")
+    assert out["match"] == "definitive"
+    assert out["via"] == "exact"
+    assert out["best"]["id"] == "EX"
+
+
+def test_resolve_entity_exact_beats_substring(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The bug this fixes: 'PearScarf' must resolve to the exact node, never the
+    # substring hit 'pearscarf-site' — so the fuzzy tier is never reached.
+    monkeypatch.setattr(
+        graph, "_exact_name_matches", lambda *a, **k: [_ent(eid="EXACT", name="PearScarf")]
+    )
+    monkeypatch.setattr(graph, "_alias_matches", lambda *a, **k: [])
+    monkeypatch.setattr(
+        graph, "search_entities", lambda *a, **k: [_ent(eid="SITE", name="pearscarf-site")]
+    )
+    out = graph.resolve_entity("PearScarf")
+    assert out["via"] == "exact"
+    assert out["best"]["id"] == "EXACT"
+
+
+def test_resolve_entity_exact_multiple_is_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        graph, "_exact_name_matches", lambda *a, **k: [_ent(eid="A"), _ent(eid="B")]
+    )
+    monkeypatch.setattr(graph, "_alias_matches", lambda *a, **k: [])
+    out = graph.resolve_entity("Acme")
+    assert out["match"] == "candidates"
+    assert out["via"] == "exact"
+    assert {c["id"] for c in out["candidates"]} == {"A", "B"}
+
+
+def test_resolve_entity_alias_when_no_exact(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(graph, "_exact_name_matches", lambda *a, **k: [])
+    monkeypatch.setattr(graph, "_alias_matches", lambda *a, **k: [_ent(eid="AL")])
+    monkeypatch.setattr(graph, "search_entities", lambda *a, **k: [_ent(eid="FUZZ")])
+    out = graph.resolve_entity("psc")
+    assert out["match"] == "definitive"
+    assert out["via"] == "alias"
+    assert out["best"]["id"] == "AL"
+
+
+def test_resolve_entity_fuzzy_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(graph, "_exact_name_matches", lambda *a, **k: [])
+    monkeypatch.setattr(graph, "_alias_matches", lambda *a, **k: [])
+    monkeypatch.setattr(graph, "search_entities", lambda *a, **k: [_ent(eid="F1"), _ent(eid="F2")])
+    out = graph.resolve_entity("pear")
+    assert out["match"] == "candidates"
+    assert out["via"] == "fuzzy"
+    assert out["best"]["id"] == "F1"
+
+
+def test_resolve_entity_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(graph, "_exact_name_matches", lambda *a, **k: [])
+    monkeypatch.setattr(graph, "_alias_matches", lambda *a, **k: [])
+    monkeypatch.setattr(graph, "search_entities", lambda *a, **k: [])
+    out = graph.resolve_entity("nope")
+    assert out["match"] == "none"
+    assert out["best"] is None
+    assert out["candidates"] == []

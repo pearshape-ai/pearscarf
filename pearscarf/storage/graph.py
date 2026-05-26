@@ -7,6 +7,7 @@ agents read from it.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from pearscarf.config import TIMEZONE
@@ -382,6 +383,85 @@ def search_entities(
                 }
             )
         return entities
+
+
+def _entity_row(record: Any) -> dict:
+    """Shape a Neo4j (n, eid, lbls) row into the standard entity dict."""
+    node = record["n"]
+    return {
+        "id": record["eid"],
+        "type": _label_to_type(record["lbls"]),
+        "name": node.get("name", ""),
+        "metadata": {k: v for k, v in dict(node).items() if k not in ("name", "created_at")},
+    }
+
+
+def _exact_name_matches(name: str, entity_type: str | None = None, limit: int = 5) -> list[dict]:
+    """Exact name matches (case-insensitive), optionally scoped to one type."""
+    label = _LABELS.get(entity_type, entity_type.capitalize()) if entity_type else None
+    match = f"MATCH (n:{label}) " if label else "MATCH (n) "
+    with get_session() as session:
+        result = session.run(
+            match + "WHERE n.name IS NOT NULL AND toLower(n.name) = toLower($name) "
+            "RETURN n, elementId(n) AS eid, labels(n) AS lbls LIMIT $limit",
+            name=name,
+            limit=limit,
+        )
+        return [_entity_row(r) for r in result]
+
+
+def _alias_matches(name: str, entity_type: str | None = None, limit: int = 5) -> list[dict]:
+    """Entities whose IDENTIFIED_AS self-loop carries this surface form."""
+    label = _LABELS.get(entity_type, entity_type.capitalize()) if entity_type else None
+    match = (
+        f"MATCH (n:{label})-[r:IDENTIFIED_AS]->(n) "
+        if label
+        else "MATCH (n)-[r:IDENTIFIED_AS]->(n) "
+    )
+    with get_session() as session:
+        result = session.run(
+            match + "WHERE toLower(r.surface_form) = toLower($sf) "
+            "RETURN n, elementId(n) AS eid, labels(n) AS lbls LIMIT $limit",
+            sf=name,
+            limit=limit,
+        )
+        return [_entity_row(r) for r in result]
+
+
+def resolve_entity(name: str, entity_type: str | None = None, limit: int = 5) -> dict:
+    """Resolve a name to graph entities, exact-first.
+
+    Cascade: exact name -> IDENTIFIED_AS alias surface-form -> fuzzy substring
+    (`search_entities`). Exact and alias matches outrank substring, so a query
+    like 'PearScarf' resolves to the PearScarf node rather than an arbitrary
+    substring hit such as 'pearscarf-site'. Type-agnostic when entity_type is None.
+
+    Returns {match, via, best, candidates}:
+      - match: 'definitive' (one clear hit) | 'candidates' (ambiguous) | 'none'
+      - via:   'exact' | 'alias' | 'fuzzy' | None
+      - best:  the top entity dict, or None
+      - candidates: all hits at the resolving tier
+    """
+    exact = _exact_name_matches(name, entity_type, limit)
+    if exact:
+        return {
+            "match": "definitive" if len(exact) == 1 else "candidates",
+            "via": "exact",
+            "best": exact[0],
+            "candidates": exact,
+        }
+    alias = _alias_matches(name, entity_type, limit)
+    if alias:
+        return {
+            "match": "definitive" if len(alias) == 1 else "candidates",
+            "via": "alias",
+            "best": alias[0],
+            "candidates": alias,
+        }
+    fuzzy = search_entities(name, entity_type=entity_type, limit=limit)
+    if fuzzy:
+        return {"match": "candidates", "via": "fuzzy", "best": fuzzy[0], "candidates": fuzzy}
+    return {"match": "none", "via": None, "best": None, "candidates": []}
 
 
 # --- Fact Edges ---

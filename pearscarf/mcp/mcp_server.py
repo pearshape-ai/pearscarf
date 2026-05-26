@@ -64,12 +64,27 @@ async def health(request):
 # ---------------------------------------------------------------------------
 
 
-def _resolve_entity(entity_name: str) -> tuple[dict | None, dict | None]:
-    """Resolve a name to an entity. Returns (entity_dict, error_dict)."""
-    matches = context_query.find_entity(entity_name)
-    if not matches:
-        return None, {"error": "not_found", "name": entity_name}
-    return matches[0], None
+def _resolve_entity(entity_name: str) -> tuple[dict | None, list[dict], dict | None]:
+    """Resolve a name to an entity via the exact -> alias -> fuzzy cascade.
+
+    Returns (best, alternatives, error). `best` is the resolved entity;
+    `alternatives` lists the other candidates whenever the match is ambiguous —
+    more than one exact/alias hit, or a substring fallback — surfaced so a wrong
+    snap (e.g. PearScarf -> pearscarf-site) is visible to the caller rather than
+    silent. Empty on a clean definitive match.
+    """
+    result = context_query.resolve_entity(entity_name)
+    best = result.get("best")
+    if best is None:
+        return None, [], {"error": "not_found", "name": entity_name}
+    alternatives: list[dict] = []
+    if result.get("match") == "candidates":
+        alternatives = [
+            {"id": c["id"], "name": c["name"], "type": c["type"]}
+            for c in result.get("candidates", [])
+            if c["id"] != best["id"]
+        ][:4]
+    return best, alternatives, None
 
 
 _VALID_KEY = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -418,7 +433,9 @@ def query_records(
         "+ recent source records that produced those facts. The 'tell me everything "
         "about X' tool. Use when starting work on an entity and want a single shot of "
         "context. Format 'chronological' returns facts sorted by source_at; "
-        "'clustered' groups them by edge_label."
+        "'clustered' groups them by edge_label. Returns `resolved_to` (the entity "
+        "the name matched) and `alternatives` (other candidates) — when the name "
+        "was ambiguous, check these so you don't act on the wrong entity."
     )
 )
 def get_entity_context(
@@ -430,7 +447,7 @@ def get_entity_context(
     if format not in ("chronological", "clustered"):
         return {"error": "invalid_format", "valid_values": ["chronological", "clustered"]}
 
-    entity, err = _resolve_entity(entity_name)
+    entity, alternatives, err = _resolve_entity(entity_name)
     if err:
         return err
     assert entity is not None
@@ -473,6 +490,8 @@ def get_entity_context(
         facts.sort(key=lambda f: f.get("source_at", ""))
         return {
             "entity": entity_info,
+            "resolved_to": entity_info,
+            "alternatives": alternatives,
             "facts": facts,
             "connections": connections,
             "related_records": related_records,
@@ -485,6 +504,8 @@ def get_entity_context(
         clustered.setdefault(label, []).append(f)
     return {
         "entity": entity_info,
+        "resolved_to": entity_info,
+        "alternatives": alternatives,
         "facts": clustered,
         "connections": connections,
         "related_records": related_records,
@@ -507,10 +528,10 @@ def get_entity_context(
 )
 def get_relationship(entity_a: str, entity_b: str) -> dict:
     """Find how two entities connect."""
-    ent_a, err_a = _resolve_entity(entity_a)
+    ent_a, alts_a, err_a = _resolve_entity(entity_a)
     if err_a:
         return err_a
-    ent_b, err_b = _resolve_entity(entity_b)
+    ent_b, alts_b, err_b = _resolve_entity(entity_b)
     if err_b:
         return err_b
     assert ent_a is not None and ent_b is not None
@@ -519,6 +540,8 @@ def get_relationship(entity_a: str, entity_b: str) -> dict:
     return {
         "entity_a": {"id": ent_a["id"], "name": ent_a["name"], "type": ent_a["type"]},
         "entity_b": {"id": ent_b["id"], "name": ent_b["name"], "type": ent_b["type"]},
+        "alternatives_a": alts_a,
+        "alternatives_b": alts_b,
         "direct_facts": result.get("direct_facts", []),
         "path": result.get("path", []),
     }

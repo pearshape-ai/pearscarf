@@ -19,6 +19,16 @@ def find_entity(name: str, entity_type: str | None = None) -> list[dict]:
     return graph.search_entities(name, entity_type=entity_type, limit=10)
 
 
+def resolve_entity(name: str, entity_type: str | None = None) -> dict:
+    """Resolve a name to an entity, exact-first (exact -> alias -> fuzzy).
+
+    Returns {match, via, best, candidates} — see graph.resolve_entity. Prefer
+    this over find_entity when you need the single best match (it ranks exact
+    names and IDENTIFIED_AS aliases above substring hits).
+    """
+    return graph.resolve_entity(name, entity_type=entity_type)
+
+
 def get_facts(
     entity_id: str,
     edge_label: str | None = None,

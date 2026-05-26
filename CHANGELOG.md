@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.0
+- Entity-name resolution behind the MCP `get_entity_context` and `get_relationship` tools now matches exact names (and `IDENTIFIED_AS` aliases) before falling back to substring search, so a query like `PearScarf` no longer silently resolves to a substring hit such as `pearscarf-site`. Both tools also return `resolved_to` and `alternatives`, so an ambiguous match is visible to the caller instead of an arbitrary pick.
+
 ## 1.40.2
 - Test maintenance. Align the MCP-server tests with the 1.40.1 single-transport shape (the dual `_sse_thread`/`_http_thread` asserts now check only the surviving `_http_thread`) and update `test_validate_mcp_key_returns_true_and_updates_last_used` to feed the constant-time verifier's `fetchall` path with a row whose `key_hash` matches `sha256(raw_key)`. No behavior change.
 
