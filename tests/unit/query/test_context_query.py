@@ -30,7 +30,7 @@ def test_get_facts_filters_by_edge_label(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(
         context_query.graph,
         "get_facts_for_entity",
-        lambda eid, include_stale=False: facts,
+        lambda eid, include_stale=False, direction="both": facts,
     )
     result = context_query.get_facts("n1", edge_label="AFFILIATED")
     assert len(result) == 1
@@ -45,7 +45,7 @@ def test_get_facts_filters_by_since(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         context_query.graph,
         "get_facts_for_entity",
-        lambda eid, include_stale=False: facts,
+        lambda eid, include_stale=False, direction="both": facts,
     )
     result = context_query.get_facts("n1", since="2026-02-01")
     assert len(result) == 1

@@ -214,8 +214,12 @@ def search(
     description=(
         "Parameterized graph query. Filter facts by subject (entity name), target "
         "(entity name or the literal '(Day)'), edge_label, fact_type, source_type, "
-        "time range (since/until on source_at), and stale flag. Use after get_schema "
-        "to know the vocabulary. Returns matching facts ordered by source_at descending. "
+        "source_record, time range (since/until on source_at), and stale flag. "
+        "`direction` sets edge orientation relative to `subject`: 'out' (default — "
+        "facts the subject asserts), 'in' (facts asserted about the subject — e.g. "
+        "what depends on it), or 'both'. `source_record` returns every fact a given "
+        "record produced (the slice of one record). Use after get_schema to know the "
+        "vocabulary. Returns matching facts ordered by source_at descending. "
         "Examples: open blockers on PearScarf → subject='PearScarf', edge_label='ASSERTED', "
         "fact_type='blocker'. Recent shipping events → edge_label='TRANSITIONED', "
         "fact_type='feature_shipped', since='2026-04-01T00:00:00Z'."
@@ -227,13 +231,18 @@ def query_facts(
     edge_label: str | None = None,
     fact_type: str | None = None,
     source_type: str | None = None,
+    source_record: str | None = None,
     since: str | None = None,
     until: str | None = None,
     include_stale: bool = False,
+    direction: str = "out",
     limit: int = 50,
 ) -> dict:
     """Parameterized graph query. Returns facts matching all provided filters."""
     init_db()
+
+    if direction not in ("out", "in", "both"):
+        return {"error": "invalid_direction", "valid_values": ["out", "in", "both"]}
 
     where_parts = ["r.fact IS NOT NULL"]
     params: dict = {}
@@ -261,6 +270,10 @@ def query_facts(
         where_parts.append("r.source_type = $source_type")
         params["source_type"] = source_type
 
+    if source_record:
+        where_parts.append("r.source_record = $source_record")
+        params["source_record"] = source_record
+
     if since:
         where_parts.append("r.source_at >= $since")
         params["since"] = since
@@ -275,16 +288,20 @@ def query_facts(
     where_clause = " AND ".join(where_parts)
     params["limit"] = limit
 
+    arrow = {"out": "(a)-[r]->(b)", "in": "(a)<-[r]-(b)", "both": "(a)-[r]-(b)"}[direction]
+    # Display subject/target by the edge's true direction (startNode -> endNode),
+    # so a fact always reads source -> target regardless of which way we matched.
     cypher = (
-        f"MATCH (a)-[r]->(b) WHERE {where_clause} "
+        f"MATCH {arrow} WHERE {where_clause} "
         "RETURN elementId(r) AS rid, type(r) AS edge_label, "
         "r.fact_type AS fact_type, r.fact AS fact, "
         "r.confidence AS confidence, r.source_record AS source_record, "
         "r.source_type AS source_type, r.source_at AS source_at, "
         "r.stale AS stale, r.valid_until AS valid_until, "
-        "elementId(a) AS subject_id, a.name AS subject_name, labels(a) AS subject_labels, "
-        "elementId(b) AS target_id, b.name AS target_name, b.date AS target_date, "
-        "labels(b) AS target_labels "
+        "elementId(startNode(r)) AS subject_id, startNode(r).name AS subject_name, "
+        "labels(startNode(r)) AS subject_labels, "
+        "elementId(endNode(r)) AS target_id, endNode(r).name AS target_name, "
+        "endNode(r).date AS target_date, labels(endNode(r)) AS target_labels "
         "ORDER BY r.source_at DESC LIMIT $limit"
     )
 
@@ -323,6 +340,8 @@ def query_facts(
             "edge_label": edge_label,
             "fact_type": fact_type,
             "source_type": source_type,
+            "source_record": source_record,
+            "direction": direction if direction != "out" else None,
             "since": since,
             "until": until,
             "include_stale": include_stale or None,
@@ -442,17 +461,20 @@ def get_entity_context(
     entity_name: str,
     format: str = "chronological",
     include_stale: bool = False,
+    direction: str = "both",
 ) -> dict:
     """Full entity context: facts + connections + recent records."""
     if format not in ("chronological", "clustered"):
         return {"error": "invalid_format", "valid_values": ["chronological", "clustered"]}
+    if direction not in ("out", "in", "both"):
+        return {"error": "invalid_direction", "valid_values": ["out", "in", "both"]}
 
     entity, alternatives, err = _resolve_entity(entity_name)
     if err:
         return err
     assert entity is not None
 
-    facts = context_query.get_facts(entity["id"], include_stale=include_stale)
+    facts = context_query.get_facts(entity["id"], include_stale=include_stale, direction=direction)
     conns_result = context_query.get_connections(
         entity["id"], max_depth=1, include_stale=include_stale
     )

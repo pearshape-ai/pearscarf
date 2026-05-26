@@ -1,4 +1,4 @@
-__version__ = "1.41.0"
+__version__ = "1.41.1"
 __url__ = "https://github.com/pearshape-ai/pearscarf"
 
 __all__ = ["__version__", "__url__"]

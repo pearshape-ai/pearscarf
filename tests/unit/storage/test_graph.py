@@ -324,3 +324,17 @@ def test_resolve_entity_none(monkeypatch: pytest.MonkeyPatch) -> None:
     assert out["match"] == "none"
     assert out["best"] is None
     assert out["candidates"] == []
+
+
+# --- get_facts_for_entity directionality ---
+
+
+def test_get_facts_for_entity_direction_arrow(neo4j_session: MagicMock) -> None:
+    for direction, arrow in (
+        ("out", "(n)-[r]->(other)"),
+        ("in", "(n)<-[r]-(other)"),
+        ("both", "(n)-[r]-(other)"),
+    ):
+        graph.get_facts_for_entity("eid", direction=direction)
+        cypher = neo4j_session.run.call_args.args[0]
+        assert arrow in cypher

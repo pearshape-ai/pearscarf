@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.1
+- `query_facts` gains a `direction` filter (`out` | `in` | `both`, default `out`) so callers can pull facts asserted *about* an entity (incoming edges), not only facts it asserts, plus a `source_record` filter that returns every fact a single record produced. `get_entity_context` accepts the same `direction` (default `both`, unchanged). Resolves the prior directed/undirected mismatch between the structured and entity-bundle reads.
+
 ## 1.41.0
 - Entity-name resolution behind the MCP `get_entity_context` and `get_relationship` tools now matches exact names (and `IDENTIFIED_AS` aliases) before falling back to substring search, so a query like `PearScarf` no longer silently resolves to a substring hit such as `pearscarf-site`. Both tools also return `resolved_to` and `alternatives`, so an ambiguous match is visible to the caller instead of an arbitrary pick.
 

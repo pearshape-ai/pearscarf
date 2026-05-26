@@ -693,18 +693,24 @@ def mark_fact_stale(edge_id: str, replaced_by_id: str | None = None) -> None:
 def get_facts_for_entity(
     entity_id: str,
     include_stale: bool = False,
+    direction: str = "both",
 ) -> list[dict]:
-    """Get all fact-edges connected to an entity (as source or target).
+    """Get fact-edges connected to an entity.
 
+    `direction` picks orientation relative to the entity: 'out' (facts it
+    asserts), 'in' (facts asserted about it), or 'both' (default — either side).
     By default only current facts (stale = false).
     """
+    arrow = {"out": "(n)-[r]->(other)", "in": "(n)<-[r]-(other)", "both": "(n)-[r]-(other)"}.get(
+        direction, "(n)-[r]-(other)"
+    )
     with get_session() as session:
         where = "WHERE elementId(n) = $eid AND r.fact IS NOT NULL"
         if not include_stale:
             where += " AND (r.stale IS NULL OR r.stale = false)"
 
         result = session.run(
-            f"MATCH (n)-[r]-(other) {where} "
+            f"MATCH {arrow} {where} "
             "RETURN elementId(r) AS rid, type(r) AS edge_label, "
             "r.fact_type AS fact_type, "
             "r.fact AS fact, r.confidence AS confidence, "

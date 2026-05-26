@@ -35,12 +35,14 @@ def get_facts(
     fact_type: str | None = None,
     include_stale: bool = False,
     since: str | None = None,
+    direction: str = "both",
 ) -> list[dict]:
     """Get fact-edges for an entity with optional filters.
 
-    Wraps graph.get_facts_for_entity with post-filtering.
+    Wraps graph.get_facts_for_entity with post-filtering. `direction` picks edge
+    orientation relative to the entity ('out' | 'in' | 'both', default 'both').
     """
-    facts = graph.get_facts_for_entity(entity_id, include_stale=include_stale)
+    facts = graph.get_facts_for_entity(entity_id, include_stale=include_stale, direction=direction)
 
     if edge_label:
         facts = [f for f in facts if f.get("edge_label") == edge_label]

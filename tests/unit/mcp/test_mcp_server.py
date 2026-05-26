@@ -139,7 +139,37 @@ def test_query_facts_constructs_cypher_and_normalizes(
     assert captured["params"]["subject_name"] == "Alice"
     assert captured["params"]["edge_label"] == "AFFILIATED"
     assert "stale IS NULL" in captured["cypher"]
+    assert "(a)-[r]->(b)" in captured["cypher"]  # default direction = out
     assert out["facts"][0]["target"]["name"] == "Acme"
+
+
+def test_query_facts_direction_and_source_record(
+    monkeypatch: pytest.MonkeyPatch, patched_conn: MagicMock
+) -> None:
+    captured: dict = {}
+
+    class FakeSession:
+        def run(self, cypher, **params):
+            captured["cypher"] = cypher
+            captured["params"] = params
+            result = MagicMock()
+            result.data.return_value = []
+            return result
+
+    @contextmanager
+    def _fake_session():
+        yield FakeSession()
+
+    monkeypatch.setattr("pearscarf.mcp.mcp_server.graph.get_session", _fake_session)
+
+    mcp_server.query_facts(subject="Linus", direction="in", source_record="rec_9")
+    assert "(a)<-[r]-(b)" in captured["cypher"]
+    assert captured["params"]["source_record"] == "rec_9"
+
+
+def test_query_facts_invalid_direction_returns_error() -> None:
+    out = mcp_server.query_facts(direction="sideways")
+    assert out["error"] == "invalid_direction"
 
 
 # ---- query_records ----
@@ -192,7 +222,10 @@ def test_get_entity_context_invalid_format_returns_error() -> None:
 def test_get_entity_context_not_found_returns_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("pearscarf.mcp.mcp_server.context_query.find_entity", lambda n, **k: [])
+    monkeypatch.setattr(
+        "pearscarf.mcp.mcp_server.context_query.resolve_entity",
+        lambda n, **k: {"match": "none", "via": None, "best": None, "candidates": []},
+    )
     out = mcp_server.get_entity_context("Ghost")
     assert out["error"] == "not_found"
 
