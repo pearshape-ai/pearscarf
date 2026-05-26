@@ -1,6 +1,6 @@
 # PearScarf record format
 
-**Format version:** 0.1.0
+**Format version:** 0.1.1
 
 This spec describes the body shape of a record submitted to PearScarf via the MCP `submit_record` tool. Authors (humans or agents) write records following this shape; PearScarf parses each record, labels its facts, entity-resolves the subjects, and writes them to the graph. Authors capture *what reality is*; PearScarf decides *how the graph represents it*.
 
@@ -95,6 +95,7 @@ facts:
 - **One fact = one graph fact.** Each sentence states *one* event, decision, observation, or affiliation. Don't fragment a single concept across multiple sentences; don't merge two unrelated assertions into one sentence.
 - **Distinct facts within a record.** Two facts in the same record must not share both subject and underlying claim. If they do — e.g. *"X decided to create the AI coworkers category"* and *"X chose 'AI coworkers' as the headline term"* — they are either one fact (merge — pack the nuance into a single contextual sentence) or you need to make their claims structurally distinct (different subjects, different aspects, different anchored targets). The curator treats a record's facts as an atomic coherent set and won't adjudicate between them; downstream readers will struggle with overlapping claims regardless.
 - **Subject-first prose.** Start each fact with the subject entity by name (`PearScarf`, `Linda`, `Acme Corp`). The first concrete entity in the sentence is the most reliably resolved by PearScarf's entity resolver.
+- **Use the graph's canonical names — resolve before you submit.** Before finalizing a fact, look up its subject (and any key target) in the live graph (`get_entity_context` or `recall`) and use the *exact* name the graph already knows the entity by — the `resolved_to` value it returns. If the lookup comes back `not_found`, or returns `alternatives` (ambiguous), you are creating or forking an entity — make that an intentional choice, not an accident of phrasing. Writing "the dogfood deployment" when the graph knows it as `psc-dogfood-vm` either spawns a duplicate node or silently fails to merge into the real one.
 - **Plain language; no graph terminology.** Never use words like `edge_label`, `fact_type`, `TRANSITIONED`, `ASSERTED`, `target`, etc. PearScarf decides those. Author writes natural sentences.
 - **Pack contextual nuance into the sentence.** A claim that bundles what shipped, the values it accepts, the default, and that it's purely additive into one rich sentence is one fact. Don't decompose into five sentence-fragments.
 - **Typically 1–2 facts per record.** If you find yourself writing 5+, the granularity is too fine — fold related fragments back into single contextual sentences.

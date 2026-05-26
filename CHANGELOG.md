@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.41.8
+- Record format spec (`pearscarf://format/record`, now format version 0.1.1) gains a canonical-naming rule: before submitting, resolve each fact's subject against the live graph (`get_entity_context` / `recall`) and use the exact `resolved_to` name — a `not_found` or ambiguous result means you're creating or forking an entity, so name facts deliberately rather than by phrasing. Closes the read→write loop so records merge into existing entities instead of spawning near-duplicates.
+
 ## 1.41.7
 - Add evolutionary / stale-fact retrieval. `recall` gains `include_stale` (default false — current truth only) to also surface superseded facts. New `get_fact_history` MCP tool returns the supersession timeline of a fact — every revision oldest→current with timing, source record, and stale flag — by walking the `replaced_by` chain. The read-discipline guide stays current-only; history is an explicit opt-in door.
 
