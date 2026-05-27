@@ -448,3 +448,18 @@ def test_to_utc_iso_same_instant_across_zones_is_equal() -> None:
     pdt = graph.to_utc_iso("2026-05-26T17:50:00-07:00")
     utc = graph.to_utc_iso("2026-05-27T00:50:00+00:00")
     assert pdt == utc == "2026-05-27T00:50:00+00:00"
+
+
+def test_to_utc_iso_aware_datetime_converted_to_utc() -> None:
+    # Aware datetime object with non-UTC offset → converted to UTC
+    from datetime import timedelta, timezone
+
+    pdt = timezone(timedelta(hours=-7))
+    dt = datetime(2026, 5, 26, 17, 50, 0, tzinfo=pdt)
+    assert graph.to_utc_iso(dt) == "2026-05-27T00:50:00+00:00"
+
+
+def test_to_utc_iso_naive_datetime_assumed_utc() -> None:
+    # Naive datetime object → assumed UTC
+    dt = datetime(2026, 5, 27, 0, 50, 0)
+    assert graph.to_utc_iso(dt) == "2026-05-27T00:50:00+00:00"

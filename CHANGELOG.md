@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.42.1
+- Add unit tests for `to_utc_iso` covering aware/naive `datetime` objects to lock in the UTC normalizer's behavior for supersession ordering.
+
 ## 1.42.0
 - Normalize `source_at` to UTC everywhere it's stored, compared, or judged. A record dated in a local offset (e.g. `-07:00`) was kept verbatim, so the supersession judge and ordering compared mixed zones as raw strings — a fact could look a full day older than one written at the same instant in UTC, causing wrong supersession. `source_at` is now converted to UTC at ingest (and at the storage boundary), and the curation judge, its tiebreak, and the `query_facts` time filters compare in UTC via a shared `to_utc_iso` helper.
 
