@@ -126,12 +126,13 @@ def test_date_with_utc_z_is_parsed_with_time() -> None:
     assert metadata["source_at"] == "2026-05-12T14:33:51+00:00"
 
 
-def test_date_with_offset_is_preserved() -> None:
+def test_date_with_offset_is_normalized_to_utc() -> None:
     expert, save_record = _expert_with_mock_storage()
     expert.ingest(_body_with_date("2026-05-12T07:33:51-07:00"), "https://x", "reality")
     metadata = save_record.call_args.kwargs["metadata"]
-    # The offset stays — Postgres will canonicalize at insert.
-    assert metadata["source_at"] == "2026-05-12T07:33:51-07:00"
+    # Offsets are converted to UTC at ingest so every stored source_at shares
+    # one zone — 07:33:51-07:00 is the same instant as 14:33:51Z.
+    assert metadata["source_at"] == "2026-05-12T14:33:51+00:00"
 
 
 def test_date_only_becomes_midnight_utc() -> None:

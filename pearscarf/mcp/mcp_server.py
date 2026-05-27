@@ -276,11 +276,11 @@ def query_facts(
 
     if since:
         where_parts.append("r.source_at >= $since")
-        params["since"] = since
+        params["since"] = graph.to_utc_iso(since)
 
     if until:
         where_parts.append("r.source_at <= $until")
-        params["until"] = until
+        params["until"] = graph.to_utc_iso(until)
 
     if not include_stale:
         where_parts.append("(r.stale IS NULL OR r.stale = false)")

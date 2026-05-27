@@ -96,6 +96,32 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def to_utc_iso(value: str | datetime | None) -> str:
+    """Normalize an ISO 8601 timestamp to UTC isoformat.
+
+    Timezone-aware inputs are converted to UTC; naive inputs are assumed to
+    already be UTC. Returns "" for empty input, and falls back to the original
+    string if it can't be parsed (callers sort/compare on the string — a
+    best-effort passthrough beats raising mid-curation).
+
+    This is the single normalizer used wherever `source_at` is stored,
+    compared, or shown to a judge — so the same instant written as `-07:00`
+    and as `Z` compares identically instead of looking a day apart.
+    """
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    else:
+        dt = value
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).isoformat()
+
+
 def utc_to_local_date(utc_dt: str | datetime) -> str:
     """Convert a UTC datetime to a local date string (e.g. '2026-03-21').
 
@@ -495,7 +521,7 @@ def create_fact_edge(
         "source_record_ids": [source_record],
         "source_confidences": [confidence],
         "source_type": source_type,
-        "source_at": source_at or ts,
+        "source_at": to_utc_iso(source_at) or ts,
         "recorded_at": ts,
         "stale": False,
         "replaced_by": None,

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.42.0
+- Normalize `source_at` to UTC everywhere it's stored, compared, or judged. A record dated in a local offset (e.g. `-07:00`) was kept verbatim, so the supersession judge and ordering compared mixed zones as raw strings — a fact could look a full day older than one written at the same instant in UTC, causing wrong supersession. `source_at` is now converted to UTC at ingest (and at the storage boundary), and the curation judge, its tiebreak, and the `query_facts` time filters compare in UTC via a shared `to_utc_iso` helper.
+
 ## 1.41.9
 - MCP server runs streamable-HTTP in **stateless** mode (`stateless_http=True`). Sessions are no longer pinned to the server process, so a container recreate (deploy) or a dropped stream no longer strands a client on a dead session-id — eliminating the "request expired / refresh to continue" hang after every deploy. PearScarf MCP is request-response only (no server-initiated sampling, elicitation, or notifications), so stateless mode costs nothing.
 

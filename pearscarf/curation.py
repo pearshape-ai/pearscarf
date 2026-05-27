@@ -259,7 +259,7 @@ class Curation(Consumer):
 
             if trigger_supersedors:
                 trigger_supersedors.sort(
-                    key=lambda x: x["sibling"].get("source_at") or "",
+                    key=lambda x: graph.to_utc_iso(x["sibling"].get("source_at")),
                     reverse=True,
                 )
                 winner = trigger_supersedors[0]
@@ -383,7 +383,7 @@ class Curation(Consumer):
             "TRIGGER edge (just written by this record):",
             f"- edge_id: {trigger['edge_id']}",
             f"- fact: {trigger['fact']!r}",
-            f"- source_at: {trigger.get('source_at') or 'unknown'}",
+            f"- source_at: {graph.to_utc_iso(trigger.get('source_at')) or 'unknown'}",
             f"- edge_label: {trigger.get('edge_label') or 'unknown'}",
             f"- fact_type: {trigger.get('fact_type') or 'unknown'}",
             f"- from: {trigger.get('from_name') or 'unknown'}",
@@ -396,7 +396,7 @@ class Curation(Consumer):
                 [
                     f"{i}. edge_id: {sib['edge_id']}",
                     f"   fact: {sib['fact']!r}",
-                    f"   source_at: {sib.get('source_at') or 'unknown'}",
+                    f"   source_at: {graph.to_utc_iso(sib.get('source_at')) or 'unknown'}",
                     f"   fact_type: {sib.get('fact_type') or 'unknown'}",
                     f"   from: {sib.get('from_name') or 'unknown'}",
                     f"   to: {_to_label(sib)}",

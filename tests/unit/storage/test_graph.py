@@ -422,3 +422,29 @@ def test_get_fact_history_walks_chain_oldest_to_current(neo4j_session: MagicMock
     assert history[0]["stale"] is True
     assert history[1]["fact"] == "beta"
     assert history[1]["replaced_by"] is None
+
+
+# ---- to_utc_iso ----
+
+
+def test_to_utc_iso_normalizes_offsets_naive_and_empty() -> None:
+    # Offset → UTC (same instant, recomputed)
+    assert graph.to_utc_iso("2026-05-12T07:33:51-07:00") == "2026-05-12T14:33:51+00:00"
+    # Z and explicit +00:00 → canonical +00:00
+    assert graph.to_utc_iso("2026-05-12T14:33:51Z") == "2026-05-12T14:33:51+00:00"
+    assert graph.to_utc_iso("2026-05-12T14:33:51+00:00") == "2026-05-12T14:33:51+00:00"
+    # Naive → assumed UTC
+    assert graph.to_utc_iso("2026-05-12T14:33:51") == "2026-05-12T14:33:51+00:00"
+    # Empty / None → ""; unparseable → best-effort passthrough (never raises)
+    assert graph.to_utc_iso("") == ""
+    assert graph.to_utc_iso(None) == ""
+    assert graph.to_utc_iso("not a date") == "not a date"
+
+
+def test_to_utc_iso_same_instant_across_zones_is_equal() -> None:
+    # The exact Linus regression: a PDT-stamped fact and a UTC-stamped fact at
+    # the same instant must normalize identically (they used to sort a day apart
+    # because '2026-05-26…' < '2026-05-27…' as raw strings).
+    pdt = graph.to_utc_iso("2026-05-26T17:50:00-07:00")
+    utc = graph.to_utc_iso("2026-05-27T00:50:00+00:00")
+    assert pdt == utc == "2026-05-27T00:50:00+00:00"

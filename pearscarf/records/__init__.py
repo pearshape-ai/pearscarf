@@ -51,7 +51,10 @@ def _parse_record_date(raw: str) -> datetime:
         raise RecordSubmissionError(
             f"`Date:` must include a timezone (e.g. trailing 'Z' or '+00:00'): {raw!r}"
         )
-    return parsed
+    # Normalize to UTC so every stored source_at shares one zone — a record
+    # dated `-07:00` and one dated `Z` must compare by true instant, not by
+    # the calendar day their local offset happens to render.
+    return parsed.astimezone(UTC)
 
 
 class RecordsExpert:
