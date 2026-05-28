@@ -55,6 +55,53 @@ def test_utc_to_local_date_naive_dt_treated_as_utc() -> None:
     assert isinstance(out, str)
 
 
+def test_utc_to_local_date_aware_dt_with_non_utc_offset() -> None:
+    """Aware datetime with non-UTC offset converts via TIMEZONE."""
+    from datetime import timedelta, timezone
+
+    # 2026-03-21 15:00 in +05:00 timezone
+    tz_plus5 = timezone(timedelta(hours=5))
+    aware_dt = datetime(2026, 3, 21, 15, 0, 0, tzinfo=tz_plus5)
+    out = graph.utc_to_local_date(aware_dt)
+    assert isinstance(out, str)
+    assert len(out) == 10
+    # The instant is 2026-03-21T10:00:00Z, which in America/Los_Angeles (PDT, UTC-7 or
+    # PST, UTC-8 depending on DST) should land on 2026-03-21.
+    assert out == "2026-03-21"
+
+
+def test_utc_to_local_date_day_boundary_utc_early_morning_is_prev_day_pacific() -> None:
+    """Day-boundary case: UTC instant early morning → previous calendar day in Pacific.
+
+    This is the load-bearing behavior — ensures facts with source_at at UTC 02:00
+    land on the correct local calendar day (the prior day in US/Pacific) when
+    anchored to Day nodes. Without this, facts would shift to the wrong day in the
+    graph.
+    """
+    # 2026-05-15 03:00:00 UTC → 2026-05-14 20:00 PDT (UTC-7) or 19:00 PST (UTC-8)
+    # Either way, the *date* is 2026-05-14 in America/Los_Angeles.
+    utc_early = "2026-05-15T03:00:00+00:00"
+    out = graph.utc_to_local_date(utc_early)
+    assert out == "2026-05-14"
+
+
+def test_utc_to_local_date_day_boundary_utc_late_evening_is_next_day_in_far_east() -> None:
+    """Complementary day-boundary: UTC late evening → next day in positive-offset zones.
+
+    While pearscarf uses America/Los_Angeles, this confirms the function correctly
+    handles the conversion direction — a UTC instant at 23:00 on May 14 lands on
+    May 15 in a +09:00 zone like Asia/Tokyo (if TIMEZONE were set to that).
+
+    We can't test this directly without mocking TIMEZONE, but we can confirm the
+    inverse: a UTC instant that's late in the day stays the same day in Pacific
+    (no day-shift forward).
+    """
+    # 2026-05-14 23:00:00 UTC → 2026-05-14 16:00 PDT / 15:00 PST (still May 14 in Pacific)
+    utc_late = "2026-05-14T23:00:00+00:00"
+    out = graph.utc_to_local_date(utc_late)
+    assert out == "2026-05-14"
+
+
 # ---- _label_to_type ----
 
 

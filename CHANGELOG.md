@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.42.2
+- Add unit tests for `utc_to_local_date` covering aware datetime with non-UTC offset and day-boundary cases to lock in the local-date conversion behavior for Day node anchoring.
+
 ## 1.42.1
 - Add unit tests for `to_utc_iso` covering aware/naive `datetime` objects to lock in the UTC normalizer's behavior for supersession ordering.
 
