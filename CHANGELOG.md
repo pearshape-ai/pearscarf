@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.43.0
+- Add `AGENTS.md` — the entrypoint for AI coworkers connecting to a PearScarf graph. Positions PearScarf as the horizontal context for multi-agent coordination + collaboration.
+
 ## 1.42.2
 - Add unit tests for `utc_to_local_date` covering aware datetime with non-UTC offset and day-boundary cases to lock in the local-date conversion behavior for Day node anchoring.
 
