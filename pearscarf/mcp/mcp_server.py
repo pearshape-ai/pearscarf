@@ -1020,6 +1020,24 @@ def consumer_guide() -> str:
     return path.read_text()
 
 
+@mcp.resource(
+    uri="pearscarf://meta/version",
+    name="platform version",
+    description=(
+        "PearScarf platform version — introspect what version of the platform "
+        "you're connected to before claiming capabilities or naming features."
+    ),
+    mime_type="application/json",
+)
+def platform_version() -> str:
+    """Serve the platform version as JSON."""
+    import json
+
+    from pearscarf import __version__
+
+    return json.dumps({"version": __version__})
+
+
 # ---------------------------------------------------------------------------
 # Server runner
 # ---------------------------------------------------------------------------

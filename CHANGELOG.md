@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.44.0
+- Add `pearscarf://meta/version` MCP resource that returns the platform version as JSON (`{"version": "<x.y.z>"}`). Lets connected agents introspect what version of PearScarf they're talking to before claiming capabilities or naming features.
+
 ## 1.43.0
 - Add `AGENTS.md` — the entrypoint for AI coworkers connecting to a PearScarf graph. Positions PearScarf as the horizontal context for multi-agent coordination + collaboration.
 
