@@ -181,6 +181,10 @@ Each run captures stdout/stderr to `<BENCHMARK_DEBUG_DIR>/<timestamp>.log`. In d
 - [Eval Metrics](docs/eval-metrics.md) — extraction precision, recall, entity resolution accuracy
 - [Changelog](CHANGELOG.md)
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the current direction and milestones.
+
 ## License
 
 Released under the [MIT License](LICENSE).

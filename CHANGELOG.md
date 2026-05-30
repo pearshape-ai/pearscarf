@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.45.0
+- Add `ROADMAP.md` at repo root — PearScarf positioned as horizontal coordination layer for AI workforces. Replaces `docs/roadmap.md` and `docs/roadmap-eng.md`.
+
 ## 1.44.0
 - Add `pearscarf://meta/version` MCP resource that returns the platform version as JSON (`{"version": "<x.y.z>"}`). Lets connected agents introspect what version of PearScarf they're talking to before claiming capabilities or naming features.
 
