@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.46.0
+- PearScarf ships with a web UI. The Next.js app under `ui/` is now part of the product — `docker compose up` brings up Postgres, Neo4j, Qdrant, the MCP server, and the UI together. Default port `3000` (override with `UI_PORT`). One install, full product.
+
 ## 1.45.0
 - Add `ROADMAP.md` at repo root — PearScarf positioned as horizontal coordination layer for AI workforces. Replaces `docs/roadmap.md` and `docs/roadmap-eng.md`.
 

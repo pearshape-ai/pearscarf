@@ -72,3 +72,20 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env}
     volumes:
       - ./env:/app/env
+
+  ui:
+    build:
+      context: ./ui
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - neo4j
+    ports:
+      - "${UI_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-pearscarf}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-pearscarf}
+      NEO4J_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password}
+      PORT: 3000
+      HOSTNAME: 0.0.0.0

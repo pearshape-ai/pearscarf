@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+/* Linear-vibe palette — light theme is the default. Toggle via the nav
+   button (sets `data-theme="dark"` on <html>). A small pre-paint script
+   in <head> reads localStorage (or `prefers-color-scheme`) and applies
+   `data-theme` before React hydrates so we don't flash the wrong theme. */
+
+:root {
+  /* Background matches pearscarf-site for a consistent family palette;
+     surface is bumped to white so sidebar/tables/cards stand out crisply
+     against the tinted page background — Linear-style hierarchy. */
+  --color-bg: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f4f4f5;
+  --color-surface-active: #e4e4e7;
+  --color-border: #d4d4d8;
+  --color-border-strong: #a1a1aa;
+  --color-fg: #09090b;
+  --color-fg-muted: #52525b;
+  --color-fg-subtle: #71717a;
+  --color-accent: #5e6ad2;
+  --color-accent-fg: #ffffff;
+
+  --color-status-todo: #71717a;
+  --color-status-in-progress: #b45309;
+  --color-status-done: #15803d;
+  --color-status-cancelled: #b91c1c;
+
+  --color-type-executor: #4f46e5;
+  --color-type-coordinator: #9333ea;
+}
+
+[data-theme="dark"] {
+  /* Dark bg aligned with pearscarf-site's #0a0a0a. */
+  --color-bg: #0a0a0a;
+  --color-surface: #111114;
+  --color-surface-hover: #18181d;
+  --color-surface-active: #25252e;
+  --color-border: #26262e;
+  --color-border-strong: #34343f;
+  --color-fg: #f7f7f8;
+  --color-fg-muted: #a1a1aa;
+  --color-fg-subtle: #6b6b75;
+  --color-accent: #5e6ad2;
+  --color-accent-fg: #ffffff;
+
+  --color-status-todo: #6b6b75;
+  --color-status-in-progress: #d4a72c;
+  --color-status-done: #4ade80;
+  --color-status-cancelled: #ef4444;
+
+  --color-type-executor: #818cf8;
+  --color-type-coordinator: #c084fc;
+}
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Nav width responds to `data-nav-collapsed` on <html>. The pre-paint
+   script in <head> sets this attribute from localStorage before React
+   hydrates, so we never flash the wrong width. */
+.pearscarf-nav {
+  width: 14rem;
+  transition: width 150ms ease;
+}
+html[data-nav-collapsed="true"] .pearscarf-nav {
+  width: 3.25rem;
+}
+html[data-nav-collapsed="true"] .pearscarf-nav-label,
+html[data-nav-collapsed="true"] .pearscarf-nav-brand-full {
+  display: none;
+}
+html:not([data-nav-collapsed="true"]) .pearscarf-nav-brand-compact {
+  display: none;
+}
+
+/* Subtle fade-in for newly-revealed elements (e.g. nested-intent child rows
+   when their parent expands). Avoids a jarring snap-in. */
+@keyframes pearscarf-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.pearscarf-fade-in {
+  animation: pearscarf-fade-in 140ms ease-out;
+}
+
+/* Fact log — a newly-landed fact slides in at the top, then a brief accent
+   flash fades back to the surface colour so the eye catches what just arrived. */
+@keyframes pearscarf-fact-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pearscarf-fact-flash {
+  from {
+    background-color: color-mix(in srgb, var(--color-accent) 24%, var(--color-surface));
+  }
+  to {
+    background-color: var(--color-surface);
+  }
+}
+.pearscarf-fact-enter {
+  animation:
+    pearscarf-fact-slide 300ms ease-out,
+    pearscarf-fact-flash 1800ms ease-out;
+}
+
+/* Live-poll indicator — an expanding, fading ring (à la Tailwind's ping). */
+@keyframes pearscarf-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  75%,
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+.pearscarf-ping {
+  animation: pearscarf-ping 1600ms cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Scrollbars — thin, theme-aware. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-subtle);
+}

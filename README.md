@@ -65,6 +65,10 @@ You'll be asked for an Anthropic API key (for extraction) and an OpenAI API key 
 
 **To uninstall:** `cd` into the install directory and `bash uninstall.sh` (or run the same curl one-liner pattern with `uninstall.sh`). Destructive — stops containers, wipes data + the install directory entirely.
 
+## Web UI
+
+After install, the UI is at **`http://localhost:3000`** — a view of the operational graph: reality records, intent tree, fact log, self-improvement traces. Ships with PearScarf, comes up with `docker compose up`. Override the port via `UI_PORT` in `.env` if 3000 is taken.
+
 ## Run via Docker (manual)
 
 For finer control — full stack in containers, you author the `.env` yourself:
