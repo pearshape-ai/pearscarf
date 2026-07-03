@@ -26,7 +26,7 @@ Most agent-memory tools learn from conversations — a noisy log of one assistan
 
 PearScarf watches your operational systems — Linear, Gmail, GitHub — and extracts structured facts with full provenance. Nothing silently overwritten, history always preserved. When a coworker needs context, it asks PearScarf. One call returns everything known about an entity: current state, recent activity, open commitments, blockers — sourced and dated.
 
-PearScarf is itself multi-agent, self-evolving system with conversational, mcp interfaces. It captures and maintains the state of your operation so your other coworkers don't have to.
+PearScarf is itself a multi-agent, self-evolving system with conversational, mcp interfaces. It captures and maintains the state of your operation so your other coworkers don't have to.
 
 > **For MCP-compatible frameworks**
 >
